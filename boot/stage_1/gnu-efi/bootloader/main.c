@@ -72,13 +72,20 @@ UINTN strcmp(CHAR8* a, CHAR8* b, UINTN length)
 	return 1;
 }
 
+void _memset(void* dst, int v, size_t n)
+{
+	for(UINTN i = 0; i < n; i++)
+	{
+		((uint8_t*)dst)[i] = (uint8_t)v;
+	}
+}
+
 Framebuffer framebuffer;
 Framebuffer* InitializeGOP()
 {
 	EFI_GUID gopGuid = EFI_GRAPHICS_OUTPUT_PROTOCOL_GUID;
 	EFI_GRAPHICS_OUTPUT_PROTOCOL* gop;
 	EFI_STATUS status;
-	//Print(L"Locating the GOP\n");
 
 	status = uefi_call_wrapper(BS->LocateProtocol, 3, &gopGuid, NULL, (void**)&gop);
 	if(EFI_ERROR(status))
@@ -216,6 +223,7 @@ EFI_STATUS efi_main(EFI_HANDLE ImageHandle, EFI_SYSTEM_TABLE *SystemTable)
 				int pages = (phdr->p_memsz + 0x1000 - 1) / 0x1000;
 				Elf64_Addr segment = phdr->p_paddr;
 				SystemTable->BootServices->AllocatePages(AllocateAddress, EfiLoaderData, pages, &segment);
+				_memset((void*)segment, 0, phdr->p_filesz);
 
 				Kernel->SetPosition(Kernel, phdr->p_offset);
 				UINTN size = phdr->p_filesz;

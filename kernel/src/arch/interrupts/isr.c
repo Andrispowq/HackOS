@@ -7,6 +7,8 @@
 
 #include "arch/timer/pit.h"
 #include "drivers/keyboard/keyboard.h"
+#include "drivers/mouse/mouse.h"
+#include "drivers/screen/screen.h"
 
 isr_t interrupt_handlers[256];
 
@@ -56,8 +58,8 @@ void InstallISR()
     __outb(0xA1, 0x02);
     __outb(0x21, 0x01);
     __outb(0xA1, 0x01);
-    __outb(0x21, 0b11111100);
-    __outb(0xA1, 0x11111111); 
+    __outb(0x21, 0b11111000);
+    __outb(0xA1, 0b11101111); 
 
     // Install the IRQs
     SetIDTGate(IRQ0, IDT_TA_InterruptGate, (uint64_t)irq0);
@@ -156,6 +158,8 @@ void IRQHandler(registers_t* regs)
 void InstallIRQ()
 {
     InitTimer(1000);
+    InitialiseMouse(1.0, GetCurrentDisplay()->framebuffer.width, 
+        GetCurrentDisplay()->framebuffer.height);
     InitKeyboard();
 
     asm("sti");
