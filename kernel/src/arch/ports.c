@@ -48,3 +48,9 @@ void __outl(uint32_t port, uint32_t value)
 {
 	asm volatile("outl %%eax, %%dx" :: "d" (port), "a" (value));
 }
+
+void io_wait()
+{
+    asm volatile("outb %%al, $0x80" :: "a"(0));
+    //__outb(0x80, 0);
+}

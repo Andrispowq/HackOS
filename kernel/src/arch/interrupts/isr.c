@@ -49,18 +49,6 @@ void InstallISR()
     SetIDTGate(30, IDT_TA_InterruptGate, (uint64_t)isr30);
     SetIDTGate(31, IDT_TA_InterruptGate, (uint64_t)isr31);
 
-    // Remap the PIC
-    __outb(0x20, 0x11);
-    __outb(0xA0, 0x11);
-    __outb(0x21, 0x20);
-    __outb(0xA1, 0x28);
-    __outb(0x21, 0x04);
-    __outb(0xA1, 0x02);
-    __outb(0x21, 0x01);
-    __outb(0xA1, 0x01);
-    __outb(0x21, 0b11111000);
-    __outb(0xA1, 0b11101111); 
-
     // Install the IRQs
     SetIDTGate(IRQ0, IDT_TA_InterruptGate, (uint64_t)irq0);
     SetIDTGate(IRQ1, IDT_TA_InterruptGate, (uint64_t)irq1);
@@ -81,6 +69,38 @@ void InstallISR()
 
     //Load the IDT in assembly
     SetIDT();
+
+    // Remap the PIC
+    uint8_t a1, a2;
+    a1 = __inb(PIC1_DATA);
+    io_wait();
+    a2 = __inb(PIC2_DATA);
+    io_wait();
+
+    __outb(PIC1_COMMAND, ICW1_INIT | ICW1_ICW4);
+    io_wait();
+    __outb(PIC2_COMMAND, ICW1_INIT | ICW1_ICW4);
+    io_wait();
+
+    __outb(PIC1_DATA, 0x20);
+    io_wait();
+    __outb(PIC2_DATA, 0x28);
+    io_wait();
+
+    __outb(PIC1_DATA, 4);
+    io_wait();
+    __outb(PIC2_DATA, 2);
+    io_wait();
+
+    __outb(PIC1_DATA, ICW4_8086);
+    io_wait();
+    __outb(PIC2_DATA, ICW4_8086);
+    io_wait();
+
+    __outb(PIC1_DATA, a1);
+    io_wait();
+    __outb(PIC2_DATA, a2); 
+    io_wait();
 }
 
 /* To print the message which defines every exception */
@@ -158,9 +178,12 @@ void IRQHandler(registers_t* regs)
 void InstallIRQ()
 {
     InitTimer(1000);
-    InitialiseMouse(1.0, GetCurrentDisplay()->framebuffer.width, 
+    InitialiseMouse(GetCurrentDisplay()->framebuffer.width, 
         GetCurrentDisplay()->framebuffer.height);
     InitKeyboard();
+
+    __outb(PIC1_DATA, 0b11111000);
+    __outb(PIC2_DATA, 0b11101111);
 
     asm("sti");
 }

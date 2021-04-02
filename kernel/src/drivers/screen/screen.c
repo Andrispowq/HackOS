@@ -24,7 +24,7 @@ void InitDisplay(FRAMEBUFFER framebuffer, PSF1_FONT* font)
 {
     curr_display = (DISPLAY*) kmalloc(sizeof(DISPLAY));
 
-    uint64_t fb_addr = framebuffer.address;
+    uint64_t fb_addr = (uint64_t)framebuffer.address;
     uint64_t fb_size = framebuffer.width * framebuffer.height * 4;
     for(uint64_t i = fb_addr; i < fb_addr + fb_size + 0x1000; i += 0x1000)
     {
@@ -66,6 +66,11 @@ void PutPixel(uint32_t x, uint32_t y, uint32_t colour)
     curr_display->framebuffer.address[y * curr_display->framebuffer.width + x] = colour;
 }
 
+uint32_t GetPixel(uint32_t x, uint32_t y)
+{
+    return curr_display->framebuffer.address[y * curr_display->framebuffer.width + x];
+}
+
 void DrawRect(uint32_t x, uint32_t y, uint32_t width, uint32_t height, uint32_t colour)
 {
     uint64_t address = (uint64_t)curr_display->framebuffer.address;
@@ -76,6 +81,76 @@ void DrawRect(uint32_t x, uint32_t y, uint32_t width, uint32_t height, uint32_t 
         for(uint32_t _x = x; _x < (x + width); _x++)
         {
             _address[_x] = colour;
+        }
+    }
+}
+
+uint8_t MouseDrawn = 0;
+uint32_t MouseCursorBuffer[16 * 16];
+uint32_t MouseCursorBufferAfter[16 * 16];
+void DrawMouseCursor(uint8_t* cursor, uint32_t x, uint32_t y, uint32_t colour)
+{
+    uint32_t width = curr_display->framebuffer.width;
+    uint32_t height = curr_display->framebuffer.height;
+
+    int xMax = 16;
+    int yMax = 16;
+    int differenceX = width - x;
+    int differenceY = height - y;
+
+    if (differenceX < 16) xMax = differenceX;
+    if (differenceY < 16) yMax = differenceY;
+
+    for (int _y = 0; _y < yMax; _y++)
+    {
+        for (int _x = 0; _x < xMax; _x++)
+        {
+            int bit = _y * 16 + _x;
+            int byte = bit / 8;
+            if ((cursor[byte] & (0b10000000 >> (_x % 8))))
+            {
+                MouseCursorBuffer[_x + _y * 16] = GetPixel(x + _x, y + _y);
+                PutPixel(x + _x, y + _y, colour);
+                MouseCursorBufferAfter[_x + _y * 16] = GetPixel(x + _x, y + _y);
+
+            }
+        }
+    }
+
+    MouseDrawn = 1;
+}
+
+void ClearMouseCursor(uint8_t* cursor, uint32_t x, uint32_t y)
+{
+    if (!MouseDrawn) 
+    {
+        return;
+    }
+
+    uint32_t width = curr_display->framebuffer.width;
+    uint32_t height = curr_display->framebuffer.height;
+
+    int xMax = 16;
+    int yMax = 16;
+    int differenceX = width - x;
+    int differenceY = height - y;
+
+    if (differenceX < 16) xMax = differenceX;
+    if (differenceY < 16) yMax = differenceY;
+
+    for (int _y = 0; _y < yMax; _y++)
+    {
+        for (int _x = 0; _x < xMax; _x++)
+        {
+            int bit = _y * 16 + _x;
+            int byte = bit / 8;
+            if ((cursor[byte] & (0b10000000 >> (_x % 8))))
+            {
+                if (GetPixel(x + _x, y + _y) == MouseCursorBufferAfter[_x + _y *16])
+                {
+                    PutPixel(x + _x, y + _y, MouseCursorBuffer[_x + _y * 16]);
+                }
+            }
         }
     }
 }

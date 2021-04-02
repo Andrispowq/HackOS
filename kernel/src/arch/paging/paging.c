@@ -184,15 +184,7 @@ void InitPaging(MemoryMapEntry* memMap, uint64_t entryCount)
     kernel_directory = RequestPage();
     memset(kernel_directory, 0, 0x1000);
 
-    //Map the memory from the beggining to the kernel's end
-    //The + 0x10000 ensures that the bitmap which should be placed right after the kernel
-    //gets mapped as well 
     uint64_t mappedSize = memorySize;
-    if(!fromUEFI)
-    {
-        mappedSize = kernelEnd + 0x10000;
-    }
-
     for(uint64_t i = 0; i < mappedSize; i += 0x1000)
     {
         MapMemory(i, i);
