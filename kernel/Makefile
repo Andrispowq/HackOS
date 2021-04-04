@@ -13,9 +13,9 @@ OBJ_DIR := bin-int
 
 rwildcard=$(foreach d,$(wildcard $(1:=/*)),$(call rwildcard,$d,$2) $(filter $(subst *,%,$2),$d))
 
-SRC = $(call rwildcard,$(SRC_DIR),*.c)  
+SRC = $(call rwildcard,$(SRC_DIR),*.cpp)  
 ASM_SRC = $(call rwildcard,$(SRC_DIR),*.asm)  
-OBJS = $(patsubst $(SRC_DIR)/%.c, $(OBJ_DIR)/%.o, $(SRC))
+OBJS = $(patsubst $(SRC_DIR)/%.cpp, $(OBJ_DIR)/%.o, $(SRC))
 OBJS += $(patsubst $(SRC_DIR)/%.asm, $(OBJ_DIR)/%.o, $(ASM_SRC))
 DIRS = $(wildcard $(SRC_DIR)/*)
 
@@ -24,13 +24,13 @@ ASM = nasm
 LD = ld
 
 LDS = link_BIOS.ld
-CFLAGS = -m64 -ffreestanding -fno-pic -c -g -I src
+CFLAGS = -m64 -ffreestanding -fno-pic -fshort-wchar -fno-builtin -mno-red-zone -fno-rtti -fno-exceptions -c -g -I src
 ASM_FLAGS = -f elf64
-LDFLAGS = -T $(LDS)
+LDFLAGS = -T $(LDS) -static -Bsymbolic -nostdlib
 
 kernel: $(OBJS) link
 
-$(OBJ_DIR)/%.o: $(SRC_DIR)/%.c
+$(OBJ_DIR)/%.o: $(SRC_DIR)/%.cpp
 	@ echo !==== COMPILING $^
 	@ mkdir -p $(@D)
 	$(CC) $(CFLAGS) -c $^ -o $@

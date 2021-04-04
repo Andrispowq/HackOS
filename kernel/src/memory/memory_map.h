@@ -3,18 +3,32 @@
 
 #include "lib/stdint.h"
 
-typedef struct memory_map_entry
+struct MemoryMapEntry
 {
     uint64_t address;
     uint64_t size;
     uint32_t type;
     uint32_t attributes;
-} MemoryMapEntry;
+};
 
-uint8_t IsUsuableMemory(MemoryMapEntry* entry);
-MemoryMapEntry** GetUsuableMemory(MemoryMapEntry* firstEntry, uint64_t entryCount);
+class MemoryMap
+{
+public:
+    MemoryMap(MemoryMapEntry* firstEntry, uint64_t entryCount)
+        : firstEntry(firstEntry), entryCount(entryCount) {}
 
-uint64_t GetTotalSystemMemory(MemoryMapEntry* firstEntry, uint64_t entryCount);
-uint64_t GetUsuableSystemMemory(MemoryMapEntry* firstEntry, uint64_t entryCount);
+    bool IsUsuableMemory(size_t entry);
+    MemoryMapEntry** GetUsuableMemory();
+
+    uint64_t GetTotalSystemMemory();
+    uint64_t GetUsuableSystemMemory();
+
+    uint64_t GetEntryCount() const { return entryCount; }
+    MemoryMapEntry* GetEntry(size_t index) const { return firstEntry + index; }
+
+public:
+    MemoryMapEntry* firstEntry;
+    uint64_t entryCount;
+};
 
 #endif

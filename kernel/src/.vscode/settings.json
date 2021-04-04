@@ -1,0 +1,13 @@
+{
+    "files.associations": {
+        "paging.h": "c",
+        "memory_map.h": "c",
+        "string.h": "c",
+        "page_table_manager.h": "c",
+        "screen.h": "c",
+        "stdio.h": "c",
+        "ports.h": "c",
+        "framebuffer.h": "c",
+        "idt.h": "c"
+    }
+}

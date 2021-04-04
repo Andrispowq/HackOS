@@ -3,12 +3,11 @@
 
 #include "drivers/screen/screen.h"
 
-#include "arch/interrupts/idt.h"
-#include "arch/interrupts/isr.h"
-#include "arch/gdt/gdt.h"
-#include "arch/timer/pit.h"
-#include "arch/paging/paging.h"
-#include "arch/ports.h"
+#include "arch/x86_64/interrupts/idt.h"
+#include "arch/x86_64/gdt/gdt.h"
+#include "arch/x86_64/timer/pit.h"
+#include "arch/x86_64/paging/paging.h"
+#include "arch/x86_64/ports.h"
 
 #include "memory/memory_map.h"
 #include "memory/heap.h"
@@ -21,7 +20,7 @@
 
 struct KernelInfo
 {
-    FRAMEBUFFER framebuffer;
+    Framebuffer framebuffer;
     PSF1_FONT* font;
     MemoryMapEntry* memMap;
     uint64_t memMapEntrySize;

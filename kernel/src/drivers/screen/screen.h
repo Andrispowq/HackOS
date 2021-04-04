@@ -8,40 +8,34 @@
 
 #define COLOUR(r, g, b, a) ((a << 24) | (r << 16) | (g << 8) | b)
 
-typedef struct _console 
+struct Console 
 {
 	uint32_t bgColour, fontColour;
 	uint32_t current_x, current_y;
     uint32_t con_width, con_height;
     uint32_t char_width, char_height;
-} CONSOLE;
+};
 
-typedef struct 
+class Display 
 {
-	CONSOLE console;
-    FRAMEBUFFER framebuffer;
-    PSF1_FONT* font;
+public:
+    int puts(const char* string);
+    int putc(char ch);
+    void put_backspace();
+    void clear();
 
-    int(*puts)(const char* string);
-    int(*putc)(char character);
-    void(*put_backspace)();
-    void(*clear)();
-} DISPLAY;
+    static Display* SharedDisplay();
+
+    static Display* s_Display;
+	Console console;
+    Framebuffer framebuffer;
+    PSF1_FONT* font;
+};
 
 /* Public kernel API */
 void clrscr();
 void printf_backspace();
 
-void InitDisplay(FRAMEBUFFER fb, PSF1_FONT* font);
-DISPLAY* GetCurrentDisplay();
-void SetCurrentDisplay(DISPLAY* display);
-
-/* Special functions, might be put somewhere else in the future */
-void PutPixel(uint32_t x, uint32_t y, uint32_t colour);
-uint32_t GetPixel(uint32_t x, uint32_t y);
-void DrawRect(uint32_t x, uint32_t y, uint32_t width, uint32_t height, uint32_t colour);
-
-void DrawMouseCursor(uint8_t* cursor, uint32_t x, uint32_t y, uint32_t colour);
-void ClearMouseCursor(uint8_t* cursor, uint32_t x, uint32_t y);
+void InitialiseDisplay(Framebuffer fb, PSF1_FONT* font);
 
 #endif

@@ -15,10 +15,4 @@ typedef uint64_t size_t;
 typedef uint64_t paddr_t;
 typedef uint64_t vaddr_t;
 
-#define NULL 0
-#define false 0
-#define true 1
-
-typedef uint8_t bool;
-
 #endif
