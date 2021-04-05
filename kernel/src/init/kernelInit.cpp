@@ -1,5 +1,7 @@
 #include "kernelInit.h"
 
+#include "lib/memory.h"
+
 bool fromUEFI = 0;
 
 void PrintRSDPAndMemoryInfo(struct KernelInfo* info)
@@ -73,7 +75,7 @@ void PrintRSDPAndMemoryInfo(struct KernelInfo* info)
 
 MemoryMap _map(nullptr, 0);
 MemoryMap* map = &_map;
-void InitialiseDisplay(struct KernelInfo* info)
+void InitialiseDisplay(KernelInfo* info)
 {
     fromUEFI = 1 - info->booted_from_BIOS;
 
@@ -97,6 +99,11 @@ void InitialiseKernel(struct KernelInfo* info)
     PrintRSDPAndMemoryInfo(info);
 
     kprintf("Initialising the kernel heap!\n");
-    InitialiseHeap((void*)0x0000100000000000, 0x10);
+    InitialiseHeap((void*)0x0000100000000000, 0x1000);
+
+    Display* display = Display::SharedDisplay();
+    uint64_t size = display->backbuffer.width * display->backbuffer.height * 4;
+    display->backbuffer.address = (uint32_t*)kmalloc(size);    
+
     InitialiseIRQ();
 }

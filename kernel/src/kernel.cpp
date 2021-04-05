@@ -11,7 +11,7 @@ extern uint32_t kernel_start, end;
 uint64_t kernelStart = (uint64_t)&kernel_start;
 uint64_t kernelEnd = (uint64_t)&end;
 
-extern "C" int kernel_main(struct KernelInfo* info)
+extern "C" int kernel_main(KernelInfo* info)
 {
     InitialiseDisplay(info);
 

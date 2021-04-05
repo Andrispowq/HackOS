@@ -70,6 +70,12 @@ void command_mode(char* input)
 
         state = CALCULATOR_MODE;
     }
+    else if(check_command(input, "swapbuffers"))
+    {
+        Display::SharedDisplay()->PresentBackbuffer();
+
+        state = COMMAND_MODE;
+    }
     else
     {
         if(check_short_command(input, "print", 5))

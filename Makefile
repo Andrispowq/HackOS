@@ -44,7 +44,6 @@ run:
 	-m 256M \
 	-cpu qemu64 \
 	-machine q35 \
-	-smp cores=4,threads=1,sockets=1 \
 	-drive if=pflash,format=raw,unit=0,file="$(OVMF_DIR)/OVMF_CODE-pure-efi.fd",readonly=on \
 	-drive if=pflash,format=raw,unit=1,file="$(OVMF_DIR)/OVMF_VARS-pure-efi.fd" \
 	-net none \
@@ -56,7 +55,6 @@ debug:
 	-m 256M \
 	-cpu qemu64 \
 	-machine q35 \
-	-smp cores=4,threads=1,sockets=1 \
 	-drive if=pflash,format=raw,unit=0,file="$(OVMF_DIR)/OVMF_CODE-pure-efi.fd",readonly=on \
 	-drive if=pflash,format=raw,unit=1,file="$(OVMF_DIR)/OVMF_VARS-pure-efi.fd" \
 	-net none \

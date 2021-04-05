@@ -30,19 +30,19 @@ uint8_t MousePointer[] =
     0b00000000, 0b00000000, 
 };
 
-static void MouseWait()
+void MouseWait()
 {
     uint64_t timeout = 100000;
-    while(timeout--)
+    while (timeout--)
     {
-        if((__inb(0x64) & 0b10) == 0)
+        if ((__inb(0x64) & 0b10) == 0)
         {
             return;
         }
     }
 }
 
-static void MouseWaitInput()
+void MouseWaitInput()
 {
     uint64_t timeout = 100000;
     while (timeout--)
@@ -54,7 +54,7 @@ static void MouseWaitInput()
     }
 }
 
-static void MouseWrite(uint8_t value)
+void MouseWrite(uint8_t value)
 {
     MouseWait();
     __outb(0x64, 0xD4);
@@ -62,7 +62,7 @@ static void MouseWrite(uint8_t value)
     __outb(0x60, value);
 }
 
-static uint8_t MouseRead()
+uint8_t MouseRead()
 {
     MouseWaitInput();
     return __inb(0x60);
@@ -171,7 +171,7 @@ static void ProcessMousePacket()
 
 static void mouse_callback(Registers* regs)
 {
-    uint8_t status = __inb(0x64);    
+    uint8_t status = __inb(0x64);
 
     ProcessMousePacket();
 
@@ -209,16 +209,17 @@ void InitialiseMouse(uint32_t width, uint32_t height)
 
     buttons = 0;
 
-    __outb(0x64, 0xA8);
+    __outb(0x64, 0xA8); //enabling the auxiliary device - mouse
 
     MouseWait();
-    __outb(0x64, 0x20);
+    __outb(0x64, 0x20); //tells the keyboard controller that we want to send a command to the mouse
     MouseWaitInput();
-    uint8_t status = __inb(0x60) | 0b10;
+    uint8_t status = __inb(0x60);
+    status |= 0b10;
     MouseWait();
     __outb(0x64, 0x60);
     MouseWait();
-    __outb(0x60, status);
+    __outb(0x60, status); // setting the correct bit is the "compaq" status byte
 
     MouseWrite(0xF6);
     MouseRead();

@@ -115,7 +115,6 @@ void InitialiseIDT()
     __outb(PIC1_DATA, a1);
     io_wait();
     __outb(PIC2_DATA, a2); 
-    io_wait();
 }
 
 void InitialiseIRQ()
@@ -146,6 +145,7 @@ extern "C"
         else
         {
             kprintf("Recieved interrupt without a handler: %d\n", r->int_no);
+            while(1) asm("hlt");
         }
     }
     
@@ -157,8 +157,10 @@ extern "C"
             handler(regs);
         }
     
-        if (regs->int_no >= 40) 
+        if (regs->int_no >= 40)
+        {
             __outb(PIC2_COMMAND, PIC_EOI);
+        }
         
         __outb(PIC1_COMMAND, PIC_EOI);
     }
