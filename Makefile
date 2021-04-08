@@ -6,7 +6,7 @@ BOOTLOADER_DIR = boot/stage_1
 KERNEL_DIR = kernel
 BUILD_DIR := bin
 
-TARGET_BIOS = false
+TARGET_BIOS = true
 
 ifneq ($(TARGET_BIOS), true)
 
@@ -41,7 +41,7 @@ buildimg:
 run:
 	qemu-system-x86_64 \
 	-drive file=$(BUILD_DIR)/$(OS_NAME).img \
-	-m 256M \
+	-m 512M \
 	-cpu qemu64 \
 	-machine q35 \
 	-drive if=pflash,format=raw,unit=0,file="$(OVMF_DIR)/OVMF_CODE-pure-efi.fd",readonly=on \
@@ -52,7 +52,7 @@ debug:
 	qemu-system-x86_64 \
 	-s \
 	-drive file=$(BUILD_DIR)/$(OS_NAME).img \
-	-m 256M \
+	-m 512M \
 	-cpu qemu64 \
 	-machine q35 \
 	-drive if=pflash,format=raw,unit=0,file="$(OVMF_DIR)/OVMF_CODE-pure-efi.fd",readonly=on \
@@ -95,9 +95,8 @@ buildimg:
 run:
 	qemu-system-x86_64 \
 	-drive file=$(BUILD_DIR)/$(OS_NAME).bin \
-	-machine type=pc \
 	-cpu qemu64 \
-	-m 256M \
+	-m 512M \
 	-net none \
 	-rtc clock=host,base=localtime \
 
@@ -106,7 +105,7 @@ debug:
 	-s \
 	-drive file=$(BUILD_DIR)/$(OS_NAME).bin,format=raw \
 	-cpu qemu64 \
-	-m 256M \
+	-m 512M \
 	-net none \
 	-d guest_errors,cpu_reset & \
 	gdb -ex "target remote localhost:1234" -ex "symbol-file kernel/bin/kernel.elf" \

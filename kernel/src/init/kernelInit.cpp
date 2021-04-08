@@ -3,10 +3,18 @@
 #include "lib/memory.h"
 
 bool fromUEFI = 0;
+extern PageTableManager KernelDirectory;
 
 void PrintRSDPAndMemoryInfo(struct KernelInfo* info)
 {
     RSDP* rsdp = (RSDP*)info->rsdp;
+
+    if(!rsdp->is_valid())
+    {
+        kprintf("ERROR: RSDP not valid!\n");
+        while(true) asm("hlt");
+    }
+
     kprintf("RSDP information: \n");
     kprintf("\tLocation: 0x%x\n", rsdp);
     kprintf("\tSigniture: ");
@@ -24,6 +32,9 @@ void PrintRSDPAndMemoryInfo(struct KernelInfo* info)
     kprintf("\tXSDT Address: 0x%x\n", rsdp->XSDTAddress);
     kprintf("\tExtended checksum: %d\n\n", rsdp->ExtendedChecksum);
 
+    //Only UEFI now
+    if(fromUEFI)
+    {
     ACPI::SDTHeader* xsdt = rsdp->GetRootSystemTable();
     uint64_t entries = (xsdt->Length - sizeof(ACPI::SDTHeader)) / 8;
 
@@ -48,6 +59,7 @@ void PrintRSDPAndMemoryInfo(struct KernelInfo* info)
     kprintf("\tHPET Table: 0x%x\n", hpet);
     ACPI::SDTHeader* fadt = rsdp->GetSystemTable("FACP");
     kprintf("\tFADT Table: 0x%x\n\n", fadt);
+    }
 
     uint64_t usedMemory = PageFrameAllocator::SharedAllocator()->GetUsedRAM();
     uint64_t freeMemory = PageFrameAllocator::SharedAllocator()->GetFreeRAM();

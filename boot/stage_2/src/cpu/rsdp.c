@@ -3,36 +3,25 @@
 
 static int DoChecksum(void* rsdp)
 {
-    int i;
-    uint8_t check = 0;
-    uint8_t* RSDP_ptr = (uint8_t*)rsdp;
-    int v2 = 0;
+    uint8_t* ptr = (uint8_t*)rsdp;    
+    uint64_t size;
 
-    if (((RSDP1*)RSDP_ptr)->revision == 0)     // Checksum ACPI v1
+    if(((RSDP2*)rsdp)->revision > 0)
     {
-        for (i = 0; i < (int)sizeof(RSDP1); i++)
-        {
-            check += RSDP_ptr[i];
-        }
-
-        v2 = 0;
+        size = sizeof(RSDP2);
     }
-    else if (((RSDP2*)RSDP_ptr)->revision > 0)  // Checksum ACPI v2+
+    else
     {
-        for (i = 0; i < (int)sizeof(RSDP2); i++)
-        {
-            check += RSDP_ptr[i];
-        }
-
-        v2 = 1;
+        size = 20;
     }
 
-    if (check != 0)
+    uint8_t sum = 0;
+    for(uint64_t i = 0; i < size; i++)
     {
-        return -1;
+        sum += ptr[i];
     }
 
-    return v2;
+    return sum == 0;
 }
 
 void* FindRSDP(uint8_t* version)
@@ -59,12 +48,6 @@ void* FindRSDP(uint8_t* version)
             if(checksum == 1)
             {
                 ptr = possible_RSDP;
-                v2 = 1;
-                break;
-            }
-            else if(checksum == 0)
-            {
-                ptr = possible_RSDP;
                 v2 = 0;
             }
         }
@@ -88,12 +71,6 @@ void* FindRSDP(uint8_t* version)
                 {
                     ptr = possible_RSDP;
                     v2 = 1;
-                    break;
-                }
-                else if(checksum == 0)
-                {
-                    ptr = possible_RSDP;
-                    v2 = 0;
                 }
             }
         }
