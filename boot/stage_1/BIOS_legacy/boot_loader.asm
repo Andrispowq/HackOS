@@ -32,5 +32,5 @@ BOOT_DRIVE:     db 0
 REAL_MODE:      db "Started in real mode!", 0x00
 VIDEO_ERROR:    db "ERROR while setting the video mode!", 0x00
 
-times 510 - ($ - $$) db nop
+times 510 - ($ - $$) nop
 dw 0xAA55
