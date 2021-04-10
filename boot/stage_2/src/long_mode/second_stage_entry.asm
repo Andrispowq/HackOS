@@ -86,7 +86,7 @@ ActivateSSE:
 
 PROT_MODE: db "Landed in protected mode!", 0x00
 LONG_MODE: db "Landed in long mode!", 0x00
-VIDEO_ERROR: db "ERROR: video mode not supported", 0x00
+VIDEO_ERROR: db "ERROR: video mode not supported!", 0x00
 
 MemoryRegionCount: db 0
 

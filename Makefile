@@ -103,6 +103,9 @@ run:
 	-net none \
 	-rtc clock=host,base=localtime \
 
+install:
+	sudo dd if=bin/HackOS.bin of=/dev/sdb
+
 debug:
 	qemu-system-x86_64 \
 	-s \

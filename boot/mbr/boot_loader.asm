@@ -24,8 +24,9 @@ safe_start:
 	mov     [boot_drive], dl ; Remember that the BIOS sets us the boot drive in 'dl' on boot
     mov     bp, sp
 
-    mov     bx, REAL_MODE
+    mov     bx, WelcomeString
     call    Print
+    call    PrintLn
 
     mov     bx, partition_1
     mov     cx, 4 ; there are 4 partitions
@@ -37,7 +38,7 @@ loop:
     add     bx, 0x10
     dec     cx
     jnz     loop
-    jmp     error
+    jmp     no_active_part
 
 found:
     mov     word [partition_off], bx 
@@ -49,21 +50,27 @@ found:
     call    ReadDisk
 
     cmp     word [0x7DFE], 0xAA55 ; Check Boot Signature
-    jne     error
+    jne     not_bootable
     mov     si, word [partition_off] 
     mov     dl, byte [boot_drive]
     jmp     0x7C00 ; Jump To VBR
 
-error:
-    mov     bx, ERROR
+no_active_part:    
+    mov     bx, NoActivePartitionString
+    call    Print
+    jmp     $
+
+not_bootable:
+    mov     bx, NotBootablePartitionString
     call    Print
     jmp     $
 
 %include "print.asm"
 %include "disk_reader.asm"
 
-REAL_MODE:      db "Started in real mode!", 0x00
-ERROR:          db "ERROR!", 0x00
+WelcomeString: db "Welcome to the Master Boot Record!", 0x00
+NoActivePartitionString: db "No active partition found!", 0x00
+NotBootablePartitionString: db "The active partition is not bootable!", 0x00
 
 boot_drive:     db 0
 partition_off:  db 0

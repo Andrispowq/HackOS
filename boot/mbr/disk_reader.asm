@@ -35,14 +35,14 @@ ReadDisk:
     ret
 
 ext_not_supp:
-    mov     bx, EXT_NOT_SUPPORTED
+    mov     bx, ExtNotSupportedString
     call    Print
     call    PrintLn
 
     jmp     $
 
 disk_error:
-    mov     bx, DISK_ERROR
+    mov     bx, DiskErrorString
     call    Print
     call    PrintLn
 
@@ -51,5 +51,5 @@ disk_error:
 
     jmp     $
 
-EXT_NOT_SUPPORTED: db "INT 13 LBA ext not supported!", 0
-DISK_ERROR: db "Disk read error!", 0
+ExtNotSupportedString: db "INT 13H LBA mode not supported!", 0
+DiskErrorString: db "Disk read error!", 0
