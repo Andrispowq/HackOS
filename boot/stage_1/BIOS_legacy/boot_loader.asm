@@ -13,7 +13,7 @@ _start:
     mov     bx, REAL_MODE
     call    Print
 
-    mov     bx, 0x01
+    mov     bx, 0x02
     mov     di, KERNEL_OFFSET
     mov     cx, 64
     mov     dl, [BOOT_DRIVE]
@@ -32,5 +32,5 @@ BOOT_DRIVE:     db 0
 REAL_MODE:      db "Started in real mode!", 0x00
 VIDEO_ERROR:    db "ERROR while setting the video mode!", 0x00
 
-times 510 - ($ - $$) db 0
+times 510 - ($ - $$) db nop
 dw 0xAA55

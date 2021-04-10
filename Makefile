@@ -69,6 +69,7 @@ clean:
 
 else
 
+MBR_DIR = boot/mbr
 BIOS_DIR = $(BOOTLOADER_DIR)/BIOS_legacy
 SECOND_STAGE_DIR = boot/stage_2
 
@@ -81,16 +82,18 @@ debug_all:
 	make debug
 
 build_bios:
+	make -C $(MBR_DIR) mbr
 	make -C $(BIOS_DIR) bootloader
 	make -C $(SECOND_STAGE_DIR) second_stage
 	make -C $(KERNEL_DIR) kernel
 	make buildimg
 
 buildimg:
-	dd if=$(BUILD_DIR)/bootloader.bin of=$(BUILD_DIR)/$(OS_NAME).bin bs=512 seek=0 count=1
-	dd if=$(BUILD_DIR)/second_stage.bin of=$(BUILD_DIR)/$(OS_NAME).bin bs=512 seek=1 count=128
-	dd if=$(BUILD_DIR)/kernel.elf of=$(BUILD_DIR)/$(OS_NAME).bin bs=512 seek=129 count=128	
-	dd if=util/fonts/zap-light16.psf of=$(BUILD_DIR)/$(OS_NAME).bin bs=512 seek=257 count=12
+	dd if=$(BUILD_DIR)/mbr.bin of=$(BUILD_DIR)/$(OS_NAME).bin bs=512 seek=0 count=1
+	dd if=$(BUILD_DIR)/bootloader.bin of=$(BUILD_DIR)/$(OS_NAME).bin bs=512 seek=1 count=1
+	dd if=$(BUILD_DIR)/second_stage.bin of=$(BUILD_DIR)/$(OS_NAME).bin bs=512 seek=2 count=128
+	dd if=$(BUILD_DIR)/kernel.elf of=$(BUILD_DIR)/$(OS_NAME).bin bs=512 seek=130 count=128	
+	dd if=util/fonts/zap-light16.psf of=$(BUILD_DIR)/$(OS_NAME).bin bs=512 seek=258 count=12
 	
 run:
 	qemu-system-x86_64 \

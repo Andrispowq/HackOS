@@ -36,9 +36,9 @@ void loader_main(struct FramebufferInfo* info)
     InstallISR();
     InitPaging();
 
-    //Load in our basic font file from the disc, which is located at sector number 257
+    //Load in our basic font file from the disc, which is located at sector number 258
     //This is a hardcoded value, but it is acceptable in this early stage
-    uint32_t font_off = 257;
+    uint32_t font_off = 258;
     uint32_t font_size = 12;
     PSF1_FONT* font = LoadFont(font_off, font_size);
     
@@ -51,8 +51,8 @@ void loader_main(struct FramebufferInfo* info)
     kprintf("[%x:%x:%x]: Starting the initialisation!\n", 
         start_time.hour, start_time.minute, start_time.second);
 
-    //Read the kernel, which is 128 sectors long (now), and starts at the 129th sector
-    uint32_t kernelLBA = 129;
+    //Read the kernel, which is 128 sectors long (now), and starts at the 130th sector
+    uint32_t kernelLBA = 130;
     uint32_t kernelSize = 128;
     uint64_t kernelMemory;
     Elf64_Ehdr* header = LoadProgram(kernelLBA, kernelSize, &kernelMemory);

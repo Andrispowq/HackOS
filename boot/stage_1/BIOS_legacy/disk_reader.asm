@@ -8,19 +8,24 @@ db_add:	dw	0x8000
 d_lba:	dd	0x1
 	    dd	0
 
+switch_endian_word:
+    mov     bh, al
+    mov     bl, ah
+    ret
+
 ; cx -> read size, ebx -> LBA addr, es:di -> buffer
 ReadDisk:
     pusha
-    
+
+    mov     word [blkcnt], cx
+    mov     word [db_add], di
+    mov     dword [d_lba], ebx
+
     mov     ah, 0x41 ; LBA extensions
     mov     bx, 0x55AA
     or      dl, 0x80
     int     0x13 
     jc      ext_not_supp
-
-    ;mov     word [blkcnt], cx
-    ;mov     word [db_add], di
-    ;mov     dword [d_lba], ebx
 
 	mov     si, DAPACK		; address of "disk address packet"
 	mov     ah, 0x42		; AL is unused
