@@ -13,8 +13,9 @@ _start:
     mov     bx, REAL_MODE
     call    Print
 
-    mov     bx, KERNEL_OFFSET ; Read from disk and store in 0x8000
-    mov     dh, 64 ; The kernel may be bigger later!
+    mov     bx, 0x01
+    mov     di, KERNEL_OFFSET
+    mov     cx, 64
     mov     dl, [BOOT_DRIVE]
     call    ReadDisk
 

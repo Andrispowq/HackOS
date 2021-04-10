@@ -8,9 +8,12 @@ class RSDP
 {
 public:
     ACPI::SDTHeader* GetRootSystemTable();
-    ACPI::SDTHeader* GetSystemTable(const char* signature);
     bool is_valid();
 
+    uint64_t GetTableCount();
+    ACPI::SDTHeader* Get(uint64_t index);
+    ACPI::SDTHeader* GetSystemTable(const char* signature);
+    
 public:
     char Signature[8];
     uint8_t Checksum;

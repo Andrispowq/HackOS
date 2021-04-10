@@ -36,12 +36,11 @@ void PrintRSDPAndMemoryInfo(struct KernelInfo* info)
     if(fromUEFI)
     {
     ACPI::SDTHeader* xsdt = rsdp->GetRootSystemTable();
-    uint64_t entries = (xsdt->Length - sizeof(ACPI::SDTHeader)) / 8;
 
     kprintf("System tables: ");
-    for (uint64_t t = 0; t < entries; t++)
+    for (uint64_t t = 0; t < rsdp->GetTableCount(); t++)
     {
-        ACPI::SDTHeader* newSDTHeader = (ACPI::SDTHeader*)*(uint64_t*)((uint64_t)xsdt + sizeof(ACPI::SDTHeader) + (t * 8));
+        ACPI::SDTHeader* newSDTHeader = rsdp->Get(t);
         for (int i = 0; i < 4; i++)
         {
             kprintf("%c", newSDTHeader->Signature[i]);

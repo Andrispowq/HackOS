@@ -15,32 +15,6 @@ ACPI::SDTHeader* RSDP::GetRootSystemTable()
     return sdtHeader;
 }
 
-ACPI::SDTHeader* RSDP::GetSystemTable(const char* signature)
-{
-    ACPI::SDTHeader* sdtHeader = GetRootSystemTable();
-
-    uint64_t entries = (sdtHeader->Length - sizeof(ACPI::SDTHeader)) / 8;
-
-    for (uint64_t t = 0; t < entries; t++)
-    {
-        ACPI::SDTHeader* newSDTHeader = (ACPI::SDTHeader*)*(uint64_t*)((uint64_t)sdtHeader + sizeof(ACPI::SDTHeader) + (t * 8));
-        for (int i = 0; i < 4; i++)
-        {
-            if (newSDTHeader->Signature[i] != signature[i])
-            {
-                break;
-            }
-
-            if (i == 3) 
-            {
-                return newSDTHeader;
-            }
-        }
-    }
-    
-    return 0;
-}
-
 bool RSDP::is_valid()
 {
     uint8_t* ptr = (uint8_t*)this;    
@@ -62,4 +36,57 @@ bool RSDP::is_valid()
     }
 
     return sum == 0;
+}
+
+uint64_t RSDP::GetTableCount()
+{
+    ACPI::SDTHeader* hdr = GetRootSystemTable();
+
+    return (hdr->Length - sizeof(ACPI::SDTHeader)) / 8;
+}
+
+ACPI::SDTHeader* RSDP::Get(uint64_t index)
+{
+    uint64_t entries = GetTableCount();
+    if(entries <= index)
+    {
+        return nullptr;
+    }
+
+    ACPI::SDTHeader* hdr = GetRootSystemTable();
+    uint64_t ptr = (uint64_t)hdr;
+    ptr += sizeof(ACPI::SDTHeader);
+    ptr += index * 8;
+    uint64_t* _ptr = (uint64_t*)ptr;
+    return (ACPI::SDTHeader*)*_ptr;
+}
+
+ACPI::SDTHeader* RSDP::GetSystemTable(const char* signature)
+{
+    ACPI::SDTHeader* hdr = GetRootSystemTable();
+    uint64_t entries = GetTableCount();
+
+    for (uint64_t t = 0; t < entries; t++)
+    {
+        uint64_t ptr = (uint64_t)hdr;
+        ptr += sizeof(ACPI::SDTHeader);
+        ptr += t * 8;
+        uint64_t* _ptr = (uint64_t*)ptr;
+        ACPI::SDTHeader* newSDTHeader = (ACPI::SDTHeader*)*_ptr;
+        
+        for (int i = 0; i < 4; i++)
+        {
+            if (newSDTHeader->Signature[i] != signature[i])
+            {
+                break;
+            }
+
+            if (i == 3) 
+            {
+                return newSDTHeader;
+            }
+        }
+    }
+    
+    return 0;
 }
