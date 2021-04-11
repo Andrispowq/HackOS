@@ -51,5 +51,5 @@ disk_error:
 
     jmp     $
 
-ExtNotSupportedString: db "INT 13H LBA mode not supported!", 0
+ExtNotSupportedString: db "LBA mode not supported!", 0
 DiskErrorString: db "Disk read error!", 0

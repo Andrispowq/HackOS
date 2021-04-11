@@ -12,6 +12,8 @@ _start:
 
     mov     bx, BootLoaderString
     call    Print
+    call    PrintHex
+    call    PrintLn    
 
     mov     bx, 0x02
     mov     di, KernelOffset
@@ -29,7 +31,7 @@ _start:
 KernelOffset:   equ 0x8000
 BootDrive:     db 0
 
-BootLoaderString: db "HackOS bootloader loaded!", 0x00
+BootLoaderString: db "HackOS bootloader loaded! Disk: ", 0x00
 
 times 510 - ($ - $$) nop
 dw 0xAA55

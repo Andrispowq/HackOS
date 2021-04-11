@@ -1,17 +1,16 @@
-[org 0x7C00]
+[org 0x0600]
 [bits 16]
 
 global _start
 
 _start:
-    mov     sp, 0x7C00
+    cli
 
     xor     ax, ax
     mov     ss, ax
+    mov     sp, ax
     mov     ds, ax
     mov     es, ax
-    mov     fs, ax
-    mov     gs, ax
 
     mov     cx, 0x0100            ; 256 WORDs in MBR
     mov     si, 0x7C00            ; Current MBR Address
@@ -26,6 +25,8 @@ safe_start:
 
     mov     bx, WelcomeString
     call    Print
+    call    PrintHex
+    
     call    PrintLn
 
     mov     bx, partition_1
@@ -53,7 +54,7 @@ found:
     jne     not_bootable
     mov     si, word [partition_off] 
     mov     dl, byte [boot_drive]
-    jmp     0x7C00 ; Jump To VBR
+    jmp     0x0:0x7C00 ; Jump To VBR
 
 no_active_part:    
     mov     bx, NoActivePartitionString
@@ -68,9 +69,9 @@ not_bootable:
 %include "print.asm"
 %include "disk_reader.asm"
 
-WelcomeString: db "Welcome to the Master Boot Record!", 0x00
-NoActivePartitionString: db "No active partition found!", 0x00
-NotBootablePartitionString: db "The active partition is not bootable!", 0x00
+WelcomeString: db "MBR loaded! Active disk: ", 0x00
+NoActivePartitionString: db "No active partition!", 0x00
+NotBootablePartitionString: db "Active partition is not bootable!", 0x00
 
 boot_drive:     db 0
 partition_off:  db 0

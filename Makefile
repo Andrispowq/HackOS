@@ -122,5 +122,6 @@ clean:
 	make -C $(KERNEL_DIR) clean
 	make -C $(SECOND_STAGE_DIR) clean
 	make -C $(BIOS_DIR) clean
+	make -C $(MBR_DIR) clean
 
 endif
