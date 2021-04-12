@@ -1,7 +1,7 @@
 
 OS_NAME = HackOS
 
-BOOTLOADER_DIR = boot/stage_1
+BOOTLOADER_DIR = boot
 
 KERNEL_DIR = kernel
 BUILD_DIR := bin
@@ -10,8 +10,8 @@ TARGET_BIOS = true
 
 ifneq ($(TARGET_BIOS), true)
 
-GNU_EFI = $(BOOTLOADER_DIR)/gnu-efi
-OVMF_DIR = $(BOOTLOADER_DIR)/OVMFbin
+GNU_EFI = $(BOOTLOADER_DIR)/UEFI/gnu-efi
+OVMF_DIR = $(BOOTLOADER_DIR)/UEFI/OVMFbin
 
 BOOT_EFI := $(GNU_EFI)/x86_64/bootloader/main.efi
 
@@ -69,9 +69,9 @@ clean:
 
 else
 
-MBR_DIR = boot/mbr
-BIOS_DIR = $(BOOTLOADER_DIR)/BIOS_legacy
-SECOND_STAGE_DIR = boot/stage_2
+MBR_DIR = $(BOOTLOADER_DIR)/BIOS/mbr
+FIRST_STAGE_DIR = $(BOOTLOADER_DIR)/BIOS/stage_1
+SECOND_STAGE_DIR = $(BOOTLOADER_DIR)/BIOS/stage_2
 
 all:
 	make build_bios
@@ -83,7 +83,7 @@ debug_all:
 
 build_bios:
 	make -C $(MBR_DIR) mbr
-	make -C $(BIOS_DIR) bootloader
+	make -C $(FIRST_STAGE_DIR) bootloader
 	make -C $(SECOND_STAGE_DIR) second_stage
 	make -C $(KERNEL_DIR) kernel
 	make buildimg
@@ -121,7 +121,7 @@ clean:
 	mkdir $(BUILD_DIR)
 	make -C $(KERNEL_DIR) clean
 	make -C $(SECOND_STAGE_DIR) clean
-	make -C $(BIOS_DIR) clean
+	make -C $(FIRST_STAGE_DIR) clean
 	make -C $(MBR_DIR) clean
 
 endif

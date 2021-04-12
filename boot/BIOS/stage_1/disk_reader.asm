@@ -8,18 +8,13 @@ db_add:	dw	0x8000
 d_lba:	dd	0x1
 	    dd	0
 
-switch_endian_word:
-    mov     bh, al
-    mov     bl, ah
-    ret
-
-; cx -> read size, ebx -> LBA addr, es:di -> buffer
+; cx -> read size, eax -> LBA addr, es:bx -> buffer
 ReadDisk:
     pusha
 
     mov     word [blkcnt], cx
-    mov     word [db_add], di
-    mov     dword [d_lba], ebx
+    mov     word [db_add], bx
+    mov     dword [d_lba], eax
 
     mov     ah, 0x41 ; LBA extensions
     mov     bx, 0x55AA

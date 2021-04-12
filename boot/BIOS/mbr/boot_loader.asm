@@ -22,6 +22,8 @@ _start:
 safe_start:
 	mov     [boot_drive], dl ; Remember that the BIOS sets us the boot drive in 'dl' on boot
     mov     bp, sp
+    
+    sti 
 
     mov     bx, WelcomeString
     call    Print

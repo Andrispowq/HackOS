@@ -1,6 +1,6 @@
 SRC_DIR := src
 BIN_DIR := bin
-BUILD_DIR := ../../bin
+BUILD_DIR := ../../../bin
 OBJ_DIR := bin-int
 
 rwildcard=$(foreach d,$(wildcard $(1:=/*)),$(call rwildcard,$d,$2) $(filter $(subst *,%,$2),$d))

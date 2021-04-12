@@ -1,5 +1,5 @@
 
-BUILD_DIR = ../../bin
+BUILD_DIR = ../../../bin
 
 ASM = nasm
 ASM_FLAGS = -f bin
