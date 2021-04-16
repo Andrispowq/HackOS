@@ -24,7 +24,7 @@ struct KernelInfo
     PSF1_FONT* font;
     MemoryMapEntry* memMap;
     uint64_t memMapEntrySize;
-    RSDP* rsdp;
+    ACPI::RSDP* rsdp;
     uint8_t memMapEntries;
     uint8_t rsdp_version;
     uint8_t booted_from_BIOS;

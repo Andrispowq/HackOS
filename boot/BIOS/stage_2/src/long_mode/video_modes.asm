@@ -9,7 +9,7 @@
 ; Out\	FLAGS = Carry clear on success
 
 %include "src/long_mode/print_rm.asm"
- 
+
 vbe_set_mode:
 	mov 	dword [vbe_info_block], VBE2_SIGN
 
@@ -57,7 +57,7 @@ find_mode:
  
 	cmp     ax, 0x4F
 	jne     VBEGetError
- 
+
 	mov     ax, [width]
 	cmp     ax, [mode_info_block + 18]
 	jne     next_mode
@@ -94,7 +94,7 @@ find_mode:
 	shr     ax, 4
 	dec     ax
 	mov     word[vbe_final_info_block + 17], ax
- 
+
 	; Set the mode
 	push    es
 	mov     ax, 0x4F02

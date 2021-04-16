@@ -2,12 +2,14 @@
 
 #include "lib/memory.h"
 
+#include "acpi/fadt.h"
+
 bool fromUEFI = 0;
 extern PageTableManager KernelDirectory;
 
 void PrintRSDPAndMemoryInfo(struct KernelInfo* info)
 {
-    RSDP* rsdp = (RSDP*)info->rsdp;
+    ACPI::RSDP* rsdp = (ACPI::RSDP*)info->rsdp;
 
     if(!rsdp->is_valid())
     {
@@ -33,12 +35,12 @@ void PrintRSDPAndMemoryInfo(struct KernelInfo* info)
     kprintf("\tExtended checksum: %d\n\n", rsdp->ExtendedChecksum);
 
     //Only UEFI now
-    if(fromUEFI)
-    {
     ACPI::SDTHeader* xsdt = rsdp->GetRootSystemTable();
+    uint64_t count = rsdp->GetTableCount();
+    kprintf("Count: %d\n", count);
 
     kprintf("System tables: ");
-    for (uint64_t t = 0; t < rsdp->GetTableCount(); t++)
+    for (uint64_t t = 0; t < count; t++)
     {
         ACPI::SDTHeader* newSDTHeader = rsdp->Get(t);
         for (int i = 0; i < 4; i++)
@@ -56,8 +58,15 @@ void PrintRSDPAndMemoryInfo(struct KernelInfo* info)
     kprintf("\tAPIC Table: 0x%x\n", apic);
     ACPI::SDTHeader* hpet = rsdp->GetSystemTable("HPET");
     kprintf("\tHPET Table: 0x%x\n", hpet);
-    ACPI::SDTHeader* fadt = rsdp->GetSystemTable("FACP");
+    ACPI::FADT* fadt = (ACPI::FADT*)rsdp->GetSystemTable("FACP");
     kprintf("\tFADT Table: 0x%x\n\n", fadt);
+
+    kprintf("FADT contents: \n");
+    if(fadt)
+    {
+        kprintf("\tCentury register: %x\n", fadt->GetFADT().Century);
+        kprintf("\tFirmware control: 0x%x\n", fadt->GetFADT().FirmwareCtrl);
+        kprintf("\tDSDT pointer: 0x%x\n\n", fadt->GetFADT().Dsdt);
     }
 
     uint64_t usedMemory = PageFrameAllocator::SharedAllocator()->GetUsedRAM();
@@ -103,14 +112,23 @@ void InitialiseDisplay(KernelInfo* info)
     
     InitialiseDisplay(info->framebuffer, info->font);
     clrscr();
+
+    kprintf("Initialising the kernel heap!\n");
+    InitialiseHeap((void*)0x0000100000000000, 0x1000);
 }
 
 void InitialiseKernel(struct KernelInfo* info)
 {
     PrintRSDPAndMemoryInfo(info);
 
-    kprintf("Initialising the kernel heap!\n");
-    InitialiseHeap((void*)0x0000100000000000, 0x1000);
+    uint64_t count = _map.entryCount;
+    MemoryMapEntry* entry = _map.firstEntry;
+    for(uint64_t i = 0; i < count; i++)
+    {
+        kprintf("\tFrom 0x%x, size: 0x%x, type: %d, attributes: %x\n", entry->address, entry->size, entry->type, entry->attributes);
+
+        entry++;
+    }
 
     Display* display = Display::SharedDisplay();
     uint64_t size = display->backbuffer.width * display->backbuffer.height * 4;
