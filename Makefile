@@ -89,15 +89,15 @@ build_bios:
 	make buildimg
 
 buildimg:
-	dd if=$(BUILD_DIR)/mbr.bin of=$(BUILD_DIR)/$(OS_NAME).bin bs=512 seek=0 count=1
-	dd if=$(BUILD_DIR)/bootloader.bin of=$(BUILD_DIR)/$(OS_NAME).bin bs=512 seek=1 count=1
-	dd if=$(BUILD_DIR)/second_stage.bin of=$(BUILD_DIR)/$(OS_NAME).bin bs=512 seek=2 count=128
-	dd if=$(BUILD_DIR)/kernel.elf of=$(BUILD_DIR)/$(OS_NAME).bin bs=512 seek=130 count=128	
-	dd if=util/fonts/zap-light16.psf of=$(BUILD_DIR)/$(OS_NAME).bin bs=512 seek=258 count=12
+	dd if=$(BUILD_DIR)/mbr.bin of=$(BUILD_DIR)/$(OS_NAME).img bs=512 seek=0 count=1
+	dd if=$(BUILD_DIR)/bootloader.bin of=$(BUILD_DIR)/$(OS_NAME).img bs=512 seek=1 count=1
+	dd if=$(BUILD_DIR)/second_stage.bin of=$(BUILD_DIR)/$(OS_NAME).img bs=512 seek=2 count=128
+	dd if=$(BUILD_DIR)/kernel.elf of=$(BUILD_DIR)/$(OS_NAME).img bs=512 seek=130 count=128	
+	dd if=util/fonts/zap-light16.psf of=$(BUILD_DIR)/$(OS_NAME).img bs=512 seek=258 count=12
 	
 run:
 	qemu-system-x86_64 \
-	-drive file=$(BUILD_DIR)/$(OS_NAME).bin \
+	-drive file=$(BUILD_DIR)/$(OS_NAME).img,format=raw \
 	-cpu qemu64 \
 	-m 512M \
 	-net none \
@@ -109,7 +109,7 @@ install:
 debug:
 	qemu-system-x86_64 \
 	-s \
-	-drive file=$(BUILD_DIR)/$(OS_NAME).bin,format=raw \
+	-drive file=$(BUILD_DIR)/$(OS_NAME).img,format=raw \
 	-cpu qemu64 \
 	-m 512M \
 	-net none \

@@ -69,6 +69,11 @@ safe_start:
 	mov 	bx, 0x7E00
 	call 	ReadDisk
 
+	; We are now running
+	mov 	bx, BootLoaderString
+	call 	Print
+	call 	PrintHex
+
     ; Step 1. Calculate FAT32 Data Sector
 	xor		eax, eax
 	mov 	al, byte [FAT32_NumFATs]
