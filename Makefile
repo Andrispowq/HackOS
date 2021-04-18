@@ -89,11 +89,17 @@ build_bios:
 	make buildimg
 
 buildimg:
+	dd if=/dev/zero of=$(BUILD_DIR)/HackOS_FAT.img bs=512 count=93750
+	mformat -i $(BUILD_DIR)/HackOS_FAT.img -F -R 64 -K 63 -B bin/bootloader.bin ::
+	mmd -i $(BUILD_DIR)/HackOS_FAT.img ::/BOOT
+	mmd -i $(BUILD_DIR)/HackOS_FAT.img ::/BOOT/SYSTEM
+	mcopy -i $(BUILD_DIR)/HackOS_FAT.img $(KERNEL_DIR)/bin/kernel.elf ::/BOOT
+	mcopy -i $(BUILD_DIR)/HackOS_FAT.img util/fonts/zap-light16.psf ::/BOOT/SYSTEM
+
 	dd if=$(BUILD_DIR)/mbr.bin of=$(BUILD_DIR)/$(OS_NAME).img bs=512 seek=0 count=1
-	dd if=$(BUILD_DIR)/bootloader.bin of=$(BUILD_DIR)/$(OS_NAME).img bs=512 seek=1 count=1
-	dd if=$(BUILD_DIR)/second_stage.bin of=$(BUILD_DIR)/$(OS_NAME).img bs=512 seek=2 count=128
-	dd if=$(BUILD_DIR)/kernel.elf of=$(BUILD_DIR)/$(OS_NAME).img bs=512 seek=130 count=128	
-	dd if=util/fonts/zap-light16.psf of=$(BUILD_DIR)/$(OS_NAME).img bs=512 seek=258 count=12
+	dd if=$(BUILD_DIR)/HackOS_FAT.img of=$(BUILD_DIR)/$(OS_NAME).img bs=512 seek=1 count=1
+	dd if=$(BUILD_DIR)/second_stage.bin of=$(BUILD_DIR)/$(OS_NAME).img bs=512 seek=2 count=62
+	dd if=$(BUILD_DIR)/HackOS_FAT.img of=$(BUILD_DIR)/$(OS_NAME).img bs=512 seek=64 count=93684
 	
 run:
 	qemu-system-x86_64 \
@@ -114,7 +120,7 @@ debug:
 	-m 512M \
 	-net none \
 	-d guest_errors,cpu_reset & \
-	gdb -ex "target remote localhost:1234" -ex "symbol-file kernel/bin/kernel.elf" \
+	gdb -ex "target remote localhost:1234" -ex "symbol-file boot/BIOS/stage_2/bin/second_stage.elf" \
 
 clean:
 	rm -rf $(BUILD_DIR)
