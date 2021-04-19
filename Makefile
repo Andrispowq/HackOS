@@ -97,9 +97,9 @@ buildimg:
 	mcopy -i $(BUILD_DIR)/HackOS_FAT.img util/fonts/zap-light16.psf ::/BOOT/SYSTEM
 
 	dd if=$(BUILD_DIR)/mbr.bin of=$(BUILD_DIR)/$(OS_NAME).img bs=512 seek=0 count=1
-	dd if=$(BUILD_DIR)/HackOS_FAT.img of=$(BUILD_DIR)/$(OS_NAME).img bs=512 seek=1 count=1
-	dd if=$(BUILD_DIR)/second_stage.bin of=$(BUILD_DIR)/$(OS_NAME).img bs=512 seek=2 count=62
-	dd if=$(BUILD_DIR)/HackOS_FAT.img of=$(BUILD_DIR)/$(OS_NAME).img bs=512 seek=64 count=93684
+	dd if=$(BUILD_DIR)/HackOS_FAT.img of=$(BUILD_DIR)/$(OS_NAME).img bs=512 seek=1 count=2
+	dd if=$(BUILD_DIR)/second_stage.bin of=$(BUILD_DIR)/$(OS_NAME).img bs=512 seek=3 count=61
+	dd if=$(BUILD_DIR)/HackOS_FAT.img of=$(BUILD_DIR)/$(OS_NAME).img bs=512 seek=64 skip=63 count=93684
 	
 run:
 	qemu-system-x86_64 \

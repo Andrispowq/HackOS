@@ -1,7 +1,8 @@
 #include "elf.h"
+
 #include "libc/memory.h"
 #include "cpu/paging/paging.h"
-#include "drivers/ata/ata.h"
+#include "fat32/fat32.h"
 
 static uint8_t elf_check_file(Elf64_Ehdr* hdr)
 {
@@ -21,30 +22,17 @@ static uint8_t elf_check_file(Elf64_Ehdr* hdr)
 	return 1;
 }
 
-Elf64_Ehdr* LoadProgram(uint32_t LBA, uint32_t size, uint64_t* mem)
+Elf64_Ehdr* LoadProgram(const char* name, uint64_t* mem)
 {
-	uint64_t memory = kmalloc(size * 128);
+	uint64_t memory;
+    DirectoryEntry entry;
+    int ret = GetFile(name, &memory, &entry);
+    if(ret != 0)
+    {
+        asm("hlt");
+    }
+	
 	*mem = memory;
-
-	uint32_t count = size / 128;
-	if(count == 0) count = 1;
-
-	uint32_t remaining = size;
-	for(uint32_t i = 0; i < count; i++)
-	{
-		uint32_t sz = 0;
-		if(remaining < 128)
-		{
-			sz = remaining;
-		}
-		else
-		{
-			sz = 128;
-		}
-
-    	ReadSectorsATA(memory + 128 * i, LBA + (i *  128), sz);
-		remaining -= sz;
-	}
 
 	Elf64_Ehdr* header = (Elf64_Ehdr*)memory;
 	if(elf_check_file(header) != 0)

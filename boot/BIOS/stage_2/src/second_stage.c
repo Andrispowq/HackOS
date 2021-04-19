@@ -16,6 +16,8 @@
 
 #include "elf_loader/elf.h"
 
+#include "fat32/fat32.h"
+
 struct tm start_time;
 
 struct KernelInfo
@@ -30,17 +32,22 @@ struct KernelInfo
     uint8_t booted_from_BIOS;
 };
 
+extern uint64_t end;
+uint64_t free_mem_addr;
+
 void loader_main(struct FramebufferInfo* info)
 {
+    free_mem_addr = &end;
+
     //Initialise the Interrupt Descriptor Table, and paging
     InstallISR();
     InitPaging();
 
-    //Load in our basic font file from the disc, which is located at sector number 258
-    //This is a hardcoded value, but it is acceptable in this early stage
-    uint32_t font_off = 258;
-    uint32_t font_size = 12;
-    PSF1_FONT* font = LoadFont(font_off, font_size);
+    //Initialise the filesystem
+    InitialiseFAT();
+
+    //Load in the font file
+    PSF1_FONT* font = LoadFont();
     
     //Initialise the display
     init_display(info, font);
@@ -52,10 +59,8 @@ void loader_main(struct FramebufferInfo* info)
         start_time.hour, start_time.minute, start_time.second);
 
     //Read the kernel, which is 128 sectors long (now), and starts at the 130th sector
-    uint32_t kernelLBA = 130;
-    uint32_t kernelSize = 128;
     uint64_t kernelMemory;
-    Elf64_Ehdr* header = LoadProgram(kernelLBA, kernelSize, &kernelMemory);
+    Elf64_Ehdr* header = LoadProgram("C:\\BOOT\\KERNEL.ELF", &kernelMemory);
     if(!header)
     {
         kprintf("ELF header not supported!\n");

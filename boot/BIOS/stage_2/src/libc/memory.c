@@ -131,7 +131,7 @@ int memcmp(void* a, void* b, uint64_t n)
 }
 
 extern uint64_t end;
-uint64_t free_mem_addr = (uint64_t)&end;
+extern uint64_t free_mem_addr;
 
 uint64_t kmalloc_int(uint64_t size, int align, uint64_t* phys_addr)
 {

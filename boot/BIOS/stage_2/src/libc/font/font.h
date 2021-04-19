@@ -19,6 +19,6 @@ typedef struct psf1_font
 	void* glyphBuffer;
 } PSF1_FONT;
 
-PSF1_FONT* LoadFont(uint32_t LBA, uint32_t size);
+PSF1_FONT* LoadFont();
 
 #endif 

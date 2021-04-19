@@ -68,9 +68,9 @@ safe_start:
     call    PrintLn    
 
     ; Our FAT32 filesystem has 64 reserved sectors: bootsector, 2nd stage, backup bootsector
-    mov     ax, 0x02
+    mov     ax, 0x03
     mov     bx, KernelOffset
-    mov     cx, 61
+    mov     cx, 60
     mov     dl, [BootDrive]
     call    ReadDisk
 

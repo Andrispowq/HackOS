@@ -1,11 +1,16 @@
 #include "font.h"
-#include "drivers/ata/ata.h"
-#include "libc/memory.h"
 
-PSF1_FONT* LoadFont(uint32_t LBA, uint32_t size)
+#include "fat32/fat32.h"
+
+PSF1_FONT* LoadFont()
 {
-    uint64_t ptr = kmalloc(size * 512);
-    ReadSectorsATA((uint32_t)ptr, LBA, size);
+    uint64_t ptr;
+    DirectoryEntry entry;
+    int ret = GetFile("C:\\BOOT\\SYSTEM\\ZAP-LI~1.PSF", &ptr, &entry);
+    if(ret != 0)
+    {
+        asm("hlt");
+    }
 
     //Check if this is indeed our font file
     PSF1_HEADER* font_hdr = (PSF1_HEADER*)ptr;
