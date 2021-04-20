@@ -3,3 +3,5 @@
 **.bin
 **.tmp
 **.elf
+
+!util/usertest/usertest.elf
