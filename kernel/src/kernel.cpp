@@ -18,6 +18,7 @@ extern "C" int kernel_main(KernelInfo* info)
     kprintf("Welcome to the HackOS kernel!\n\n");
 
     InitialiseKernel(info);
+    InitialiseFilesystem();
 
     kprintf("Finished the initialisation!\n");
     kprintf("Type 'help' for help!\n> ");

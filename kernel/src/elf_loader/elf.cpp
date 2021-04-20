@@ -1,6 +1,7 @@
 #include "elf.h"
 
 #include "lib/memory.h"
+#include "lib/stdio.h"
 
 #include "arch/x86_64/paging/paging.h"
 #include "drivers/ata/ata.h"
@@ -10,7 +11,7 @@ static uint8_t elf_check_file(Elf64_Ehdr* hdr)
     if(!hdr) 
         return 0;
 
-	if(memcmp(&hdr->e_ident[EI_MAG0], (void*)ELFMAG, 4) != 0 ||
+	if((memcmp(&hdr->e_ident[EI_MAG0], (void*)ELFMAG, 4) != 0) ||
 		hdr->e_ident[EI_CLASS] != ELFCLASS64 ||
 		hdr->e_ident[EI_DATA] != ELFDATA2LSB ||
 		hdr->e_type != ET_EXEC ||
@@ -23,30 +24,17 @@ static uint8_t elf_check_file(Elf64_Ehdr* hdr)
 	return 1;
 }
 
-Elf64_Ehdr* LoadProgram(uint32_t LBA, uint32_t size, uint64_t* baseAddress)
+Elf64_Ehdr* LoadProgram(FAT32Driver* f32dr, const char* name, uint64_t* baseAddress)
 {
-	uint64_t memory = kmalloc(size * 128);
-	*baseAddress = memory;
-
-	uint32_t count = size / 128;
-	if(count == 0) count = 1;
-
-	uint32_t remaining = size;
-	for(uint32_t i = 0; i < count; i++)
+	uint64_t memory;
+	DirectoryEntry entry;
+	int res = f32dr->GetFile(name, (void**)&memory, &entry);
+	if(res != 0)
 	{
-		uint32_t sz = 0;
-		if(remaining < 128)
-		{
-			sz = remaining;
-		}
-		else
-		{
-			sz = 128;
-		}
-
-    	ReadSectorsATA(memory + 128 * i, LBA + (i *  128), sz);
-		remaining -= sz;
+		kprintf("Failed to load file %s!\n", name);
 	}
+
+	*baseAddress = memory;
 
 	Elf64_Ehdr* header = (Elf64_Ehdr*)memory;
 	if(elf_check_file(header) != 0)

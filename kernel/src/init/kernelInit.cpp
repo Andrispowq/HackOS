@@ -4,6 +4,10 @@
 
 #include "acpi/fadt.h"
 
+#include "fs/fat32/fat32.h"
+
+#include "fs/vfs.h"
+
 bool fromUEFI = 0;
 extern PageTableManager KernelDirectory;
 
@@ -134,5 +138,48 @@ void InitialiseKernel(struct KernelInfo* info)
     uint64_t size = display->backbuffer.width * display->backbuffer.height * 4;
     display->backbuffer.address = (uint32_t*)kmalloc(size);    
 
+    kprintf("Kernel is initialised, IRQs are launchin!\n\n");
+
     InitialiseIRQ();
+}
+
+#include "elf_loader/elf.h"
+#include "drivers/screen/screen.h"
+
+FAT32Driver* fat32_driver;
+void InitialiseFilesystem()
+{
+    fat32_driver = new FAT32Driver();
+
+    uint64_t addr;
+    Elf64_Ehdr* hdr = LoadProgram(fat32_driver, "C:\\USR\\BIN\\USERTEST.ELF", &addr);
+    PrepareProgram(hdr, addr);
+
+    int(*entry_point)() = (int(*)())hdr->e_entry;
+    int res = entry_point();
+    kprintf("Usertest returned with 0x%x!\n\n", res);
+
+    uint8_t* buffer;
+    buffer = (uint8_t*)kmalloc(512);
+    memcpy(buffer, (void*)0xFD000000, 512);
+    DirectoryEntry entry;
+    memset(&entry, 0, sizeof(DirectoryEntry));
+    memcpy(entry.name, "FBCONT  DAT", 11);
+    entry.fileSize = 512;
+    int ret = fat32_driver->PutFile("C:\\USR", buffer, &entry);
+    if(ret != 0)
+    {
+        kprintf("ERROR: couldn't write file!\n");
+    }
+
+    kprintf("First 8 bytes of buffer: 0x%x\n", *(uint64_t*)buffer);
+
+    memset(buffer, 0, 512);
+    ret = fat32_driver->GetFile("C:\\USR\\FBCONT.DAT", (void**)&buffer, &entry);
+    if(ret != 0)
+    {
+        kprintf("ERROR: couldn't write file!\n");
+    }
+
+    kprintf("First 8 bytes of buffer: 0x%x\n\n", *(uint64_t*)buffer);
 }
