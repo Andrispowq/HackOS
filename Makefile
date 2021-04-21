@@ -33,10 +33,13 @@ buildimg:
 	mformat -i $(BUILD_DIR)/$(OS_NAME).img -F ::
 	mmd -i $(BUILD_DIR)/$(OS_NAME).img ::/EFI
 	mmd -i $(BUILD_DIR)/$(OS_NAME).img ::/EFI/BOOT
+	mmd -i $(BUILD_DIR)/$(OS_NAME).img ::/USR
+	mmd -i $(BUILD_DIR)/$(OS_NAME).img ::/USR/BIN
 	mcopy -i $(BUILD_DIR)/$(OS_NAME).img $(BOOT_EFI) ::/EFI/BOOT
 	mcopy -i $(BUILD_DIR)/$(OS_NAME).img $(KERNEL_DIR)/startup.nsh ::
 	mcopy -i $(BUILD_DIR)/$(OS_NAME).img $(KERNEL_DIR)/bin/kernel.elf ::
 	mcopy -i $(BUILD_DIR)/$(OS_NAME).img util/fonts/zap-light16.psf ::
+	mcopy -i $(BUILD_DIR)/$(OS_NAME).img util/usertest/usertest.elf ::/USR/BIN
 
 run:
 	qemu-system-x86_64 \
@@ -64,7 +67,6 @@ debug:
 
 clean:
 	make -C kernel clean
-	make -C boot/stage_2 clean
 	rm -rf $(GNU_EFI)/x86_64/bootloader
 
 else

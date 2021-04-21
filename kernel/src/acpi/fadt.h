@@ -3,6 +3,8 @@
 
 #include "system_table.h"
 
+#include "dsdt.h"
+
 namespace ACPI
 {
     struct GenericAddressStructure
@@ -13,7 +15,7 @@ namespace ACPI
         uint8_t AccessSize;
         uint64_t Address;
     } __attribute__((packed));
-
+    
     struct FADTHeader
     {
         SDTHeader header;
@@ -88,6 +90,11 @@ namespace ACPI
     public:
         FADTHeader GetFADT() { return _fadt; }
         bool is_valid();
+
+        DSDT* GetDSDT();
+
+        void ACPIEnable();
+        void Shutdown();
 
     private:
         FADTHeader _fadt;

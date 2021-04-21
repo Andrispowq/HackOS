@@ -65,6 +65,11 @@ void PrintRSDPAndMemoryInfo(struct KernelInfo* info)
     ACPI::FADT* fadt = (ACPI::FADT*)rsdp->GetSystemTable("FACP");
     kprintf("\tFADT Table: 0x%x\n\n", fadt);
 
+    if(fadt)
+    {
+        fadt->ACPIEnable();
+    }
+
     kprintf("FADT contents: \n");
     if(fadt)
     {
@@ -123,22 +128,9 @@ void InitialiseDisplay(KernelInfo* info)
 
 void InitialiseKernel(struct KernelInfo* info)
 {
-    PrintRSDPAndMemoryInfo(info);
+    PrintRSDPAndMemoryInfo(info); 
 
-    uint64_t count = _map.entryCount;
-    MemoryMapEntry* entry = _map.firstEntry;
-    for(uint64_t i = 0; i < count; i++)
-    {
-        kprintf("\tFrom 0x%x, size: 0x%x, type: %d, attributes: %x\n", entry->address, entry->size, entry->type, entry->attributes);
-
-        entry++;
-    }
-
-    Display* display = Display::SharedDisplay();
-    uint64_t size = display->backbuffer.width * display->backbuffer.height * 4;
-    display->backbuffer.address = (uint32_t*)kmalloc(size);    
-
-    kprintf("Kernel is initialised, IRQs are launchin!\n\n");
+    kprintf("Kernel is initialised, IRQs are launching!\n\n");
 
     InitialiseIRQ();
 }

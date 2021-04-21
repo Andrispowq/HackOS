@@ -3,6 +3,8 @@
 #include "shell/shell.h"
 #include "init/kernelInit.h"
 
+#include "acpi/fadt.h"
+
 extern uint32_t tick;
 extern double timeSinceBoot;
 
@@ -11,14 +13,18 @@ extern uint32_t kernel_start, end;
 uint64_t kernelStart = (uint64_t)&kernel_start;
 uint64_t kernelEnd = (uint64_t)&end;
 
+KernelInfo* kInfo;
+
 extern "C" int kernel_main(KernelInfo* info)
 {
+    kInfo = info;
+
     InitialiseDisplay(info);
 
     kprintf("Welcome to the HackOS kernel!\n\n");
 
-    InitialiseKernel(info);
     InitialiseFilesystem();
+    InitialiseKernel(info);
 
     kprintf("Finished the initialisation!\n");
     kprintf("Type 'help' for help!\n> ");
@@ -35,12 +41,9 @@ void user_input(char* input)
     {
         kprintf("Stopping the CPU. Bye!\n");
 
-        //Bochs/older QEMU versions
-        __outw(0xB004, 0x2000);
-        //Newer QEMU versions
-        __outw(0x0604, 0x2000);
-        //VirtualBox
-        __outw(0x4004, 0x3400);
+        ACPI::RSDP* rsdp = kInfo->rsdp;
+        ACPI::FADT* fadt = (ACPI::FADT*)rsdp->GetSystemTable("FACP");
+        fadt->Shutdown();
     }
     else if (strcmp(input, "restart") == 0) 
     {

@@ -11,6 +11,9 @@ FAT32Driver::FAT32Driver()
     //The MBR is still at 0x0600, extract the boot partition's start LBA
     uint32_t* MBR = (uint32_t*)0x0600;
 
+	//If we don't find any partition tables valid, we should assume that we aren't partitioned
+	PartitionStart = 0;
+
     uint64_t BaseOffset = 446;
     for(uint64_t i = 0; i < 4; i++)
     {
