@@ -15,6 +15,8 @@
 #include "acpi/rsdp.h"
 #include "acpi/system_table.h"
 
+#include "proc/elf/elf.h"
+
 #include "lib/stdio.h"
 #include "lib/font/font.h"
 
