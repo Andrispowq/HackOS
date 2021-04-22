@@ -35,6 +35,16 @@ extern "C" int kernel_main(KernelInfo* info)
     }
 }
 
+extern "C" void __cxa_pure_virtual()
+{
+    kprintf("ERROR!\n");
+}
+
+extern "C" void __stack_chk_fail()
+{
+    kprintf("Stack check failed!\n");
+}
+
 void user_input(char* input)
 {
     if (strcmp(input, "shutdown") == 0) 

@@ -4,6 +4,7 @@
 #include "cpu/paging/paging.h"
 #include "cpu/rsdp.h"
 #include "cpu/memory_map.h"
+#include "cpu/ahci/ahci.h"
 
 #include "drivers/rtc.h"
 #include "drivers/screen.h"
@@ -40,8 +41,26 @@ void loader_main(struct FramebufferInfo* info)
     free_mem_addr = &end;
 
     //Initialise the Interrupt Descriptor Table, and paging
+    MemoryMapEntry* entries = GetMemoryRegions();
+
     InstallISR();
-    InitPaging();
+    InitPaging(entries);
+
+    //Initialise the AHCI driver
+    uint8_t version;
+    RSDP1* rsdp = FindRSDP(&version);
+
+    for(uint8_t i = 0; i < MemoryRegionCount; i++)
+    {
+        MemoryMapEntry* entry = entries + i;
+
+        for(uint64_t i = entry->address; i < (entry->address + entry->length + 0x1000); i += 0x1000)
+        {
+            MapMemory((uint64_t)i, (uint64_t)i);
+        }        
+    }
+
+    EnumeratePCI(rsdp);
 
     //Initialise the filesystem
     InitialiseFAT();
@@ -71,11 +90,6 @@ void loader_main(struct FramebufferInfo* info)
     }
 
     PrepareProgram(header, kernelMemory);
-
-    uint8_t version;
-    RSDP1* rsdp = FindRSDP(&version);
-
-    MemoryMapEntry* entries = GetMemoryRegions();
 
     struct KernelInfo kernelInfo;
     kernelInfo.framebuffer = get_current_display()->framebuffer;

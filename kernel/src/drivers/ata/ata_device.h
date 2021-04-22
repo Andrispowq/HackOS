@@ -7,12 +7,12 @@ class ATADevice : public Device
 {
 public:
     ATADevice() {}
-    ~ATADevice() {}
+    virtual ~ATADevice() {}
 
-    virtual DeviceType GetType() { return ATA_PIO; };
+    DeviceType GetType() { return ATA_PIO; };
 
-    virtual void Read(uint64_t LBA, void* buffer, uint64_t size);
-    virtual void Write(uint64_t LBA, void* buffer, uint64_t size);
+    void Read(uint64_t LBA, void* buffer, uint64_t size);
+    void Write(uint64_t LBA, void* buffer, uint64_t size);
 };
 
 #endif

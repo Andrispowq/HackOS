@@ -6,6 +6,8 @@
 #include "cpu/idt.h"
 #include "cpu/isr.h"
 
+#include "cpu/memory_map.h"
+
 typedef struct page_table_entry
 {
     uint64_t present                   : 1;
@@ -104,7 +106,7 @@ typedef struct page_map_index
 
 page_map_index_t IndexOf(vaddr_t address);
 
-void InitPaging();
+void InitPaging(MemoryMapEntry* entries);
 
 void MapMemory(vaddr_t virtualAddress, paddr_t physicalAddress);
 void PageFaultHandler(registers_t* regs);

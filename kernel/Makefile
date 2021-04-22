@@ -24,7 +24,7 @@ ASM = nasm
 LD = ld
 
 LDS = link_BIOS.ld
-CFLAGS = -m64 -ffreestanding -fno-pic -fshort-wchar -fno-builtin -mno-red-zone -fno-rtti -fno-exceptions -c -g -I src
+CFLAGS = -m64 -ffreestanding -mno-red-zone -fno-rtti -fno-exceptions -c -g -I src
 ASM_FLAGS = -f elf64
 LDFLAGS = -T $(LDS) -static -Bsymbolic -nostdlib
 

@@ -7,6 +7,8 @@
 #include "fs/fat32/fat32.h"
 #include "fs/vfs.h"
 
+#include "drivers/ata/ata_device.h"
+
 bool fromUEFI = 0;
 extern PageTableManager KernelDirectory;
 
@@ -137,7 +139,8 @@ void InitialiseKernel(struct KernelInfo* info)
 FAT32Driver* fat32_driver;
 void InitialiseFilesystem()
 {
-    fat32_driver = new FAT32Driver();
+    Device* dev0 = new ATADevice();
+    fat32_driver = new FAT32Driver(dev0);
 
     uint64_t addr;
     Elf64_Ehdr* hdr = LoadProgram(fat32_driver, "C:\\USR\\BIN\\USERTEST.ELF", &addr);

@@ -185,3 +185,6 @@ void* operator new[](unsigned long int size) { return (void*)kmalloc((uint64_t)s
 
 void operator delete(void* ptr) { return kfree(ptr); }
 void operator delete[](void* ptr) { return kfree(ptr); }
+
+void operator delete(void* ptr, unsigned long int size) { return kfree(ptr); }
+void operator delete[](void* ptr, unsigned long int size) { return kfree(ptr); }

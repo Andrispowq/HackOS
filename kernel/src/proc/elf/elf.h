@@ -3,7 +3,7 @@
 
 #include "lib/stdint.h"
 
-#include "fs/fat32/fat32.h"
+#include "fs/fat32/fat32driver.h"
  
 typedef uint16_t Elf64_Half;
 typedef uint64_t Elf64_Off;

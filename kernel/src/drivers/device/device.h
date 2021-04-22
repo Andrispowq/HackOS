@@ -2,6 +2,7 @@
 #define DEVICE_H
 
 #include "lib/stdint.h"
+#include "memory/heap.h"
 
 enum DeviceType
 {
@@ -13,7 +14,7 @@ class Device
 {
 public:
     Device() {}
-    ~Device() {}
+    virtual ~Device() {};
 
     virtual DeviceType GetType() = 0;
 

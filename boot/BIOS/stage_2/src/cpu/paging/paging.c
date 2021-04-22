@@ -125,9 +125,9 @@ void* RequestPage()
     return (void*)(index * 0x1000);
 }
 
-void InitPaging()
+void InitPaging(MemoryMapEntry* entries)
 {
-    uint64_t memorySize = 0x1000000;
+    uint64_t memorySize = 0x10000000; //Assume this big memory
     freeMemory = memorySize;
     frameCount = memorySize / 0x1000;
     frameCount /= 64;
@@ -141,7 +141,7 @@ void InitPaging()
     kernel_directory = RequestPage();
     memset(kernel_directory, 0, 0x1000);
 
-    for(uint64_t i = 0; i < memorySize; i += 0x1000)
+    for(uint64_t i = 0; i < 0x1000000; i += 0x1000)
     {
         MapMemory(i, i);
     }

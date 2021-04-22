@@ -2,6 +2,7 @@
 #define FAT32_DRIVER_H
 
 #include "lib/stdint.h"
+#include "drivers/device/device.h"
 
 #define END_CLUSTER 0x0FFFFFF8
 #define BAD_CLUSTER 0x0FFFFFF7
@@ -113,7 +114,7 @@ struct LongDirectoryEntry
 class FAT32Driver
 {
 public:
-    FAT32Driver();
+    FAT32Driver(Device* device);
     ~FAT32Driver();
 
     uint32_t ReadFAT(uint32_t cluster);
@@ -143,6 +144,7 @@ private:
 	int IsFATFormat(char* name);
 	char* ConvertToFATFormat(char* input);
 
+	Device* device;
     FAT32_BootSector* BootSector;
 
     uint8_t* temporaryBuffer;

@@ -109,18 +109,20 @@ buildimg:
 run:
 	qemu-system-x86_64 \
 	-drive file=$(BUILD_DIR)/$(OS_NAME).img,format=raw \
+	-machine q35 \
 	-cpu qemu64 \
 	-m 512M \
 	-net none \
 	-rtc clock=host,base=localtime \
 
 install:
-	sudo dd if=bin/HackOS.bin of=/dev/sdb
+	sudo dd if=bin/HackOS.img of=/dev/sdb
 
 debug:
 	qemu-system-x86_64 \
 	-s \
 	-drive file=$(BUILD_DIR)/$(OS_NAME).img,format=raw \
+	-machine q35 \
 	-cpu qemu64 \
 	-m 512M \
 	-net none \

@@ -6,7 +6,8 @@
 
 #include "drivers/ata/ata.h"
 
-FAT32Driver::FAT32Driver()
+FAT32Driver::FAT32Driver(Device* device)
+	: device(device)
 {
     //The MBR is still at 0x0600, extract the boot partition's start LBA
     uint32_t* MBR = (uint32_t*)0x0600;
@@ -32,7 +33,7 @@ FAT32Driver::FAT32Driver()
 
     //Load the bootsector
     BootSector = (FAT32_BootSector*)kmalloc(512);
-    ReadSectorsATA((uint64_t)BootSector, PartitionStart, 1);
+    device->Read(PartitionStart, (void*)BootSector, 1);
 
     kprintf("Read a bootsector from drive with a FAT32 filesystem on it!\n");
 
@@ -79,8 +80,8 @@ uint32_t FAT32Driver::ReadFAT(uint32_t cluster)
 	uint32_t fat_sector = BootSector->ReservedSectors + (fat_offset / cluster_size);
 	uint32_t ent_offset = (fat_offset % cluster_size) / 4;
 	 
-	 uint32_t fat_LBA = fat_sector + PartitionStart;
-    ReadSectorsATA((uint64_t)temporaryBuffer2, fat_LBA, 1);
+	uint32_t fat_LBA = fat_sector + PartitionStart;
+    device->Read((uint64_t)fat_LBA, (void*)temporaryBuffer2, 1);
 	 
 	uint32_t* FATtable = (uint32_t*)temporaryBuffer2;
 	return FATtable[ent_offset] & 0x0FFFFFFF;
@@ -99,12 +100,12 @@ uint32_t FAT32Driver::WriteFAT(uint32_t cluster, uint32_t value)
 	uint32_t ent_offset = (fat_offset % cluster_size) / 4;
 
     uint32_t fat_LBA = fat_sector + PartitionStart;
-    ReadSectorsATA((uint64_t)temporaryBuffer2, fat_LBA, 1);
+    device->Read((uint64_t)fat_LBA, (void*)temporaryBuffer2, 1);
 	 
 	uint32_t* FATtable = (uint32_t*)temporaryBuffer2;
 	FATtable[ent_offset] = value;
 
-    WriteSectorsATA(fat_LBA, 1, (uint32_t*)temporaryBuffer2);
+    device->Write((uint64_t)fat_LBA, (void*)temporaryBuffer2, 1);
 	return 0;
 }
 
@@ -147,7 +148,7 @@ uint32_t FAT32Driver::ReadCluster(uint32_t cluster, void* buffer)
 	}
 	
 	uint32_t start_sector = PartitionStart + (cluster - 2) * BootSector->SectorsPerCluster + FirstDataSector;
-    ReadSectorsATA((uint64_t)buffer, start_sector, 1);
+    device->Read(start_sector, (void*)buffer, 1);
 	return 0;
 }
 
@@ -159,7 +160,7 @@ uint32_t FAT32Driver::WriteCluster(uint32_t cluster, void* buffer)
 	}
 
 	uint32_t start_sector = PartitionStart + (cluster - 2) * BootSector->SectorsPerCluster + FirstDataSector;
-    WriteSectorsATA(start_sector, 1, (uint32_t*)buffer);
+    device->Write(start_sector, (void*)buffer, 1);
 	return 0;
 }
 

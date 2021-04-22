@@ -1,6 +1,9 @@
 #include "fat32.h"
+
 #include "libc/memory.h"
 #include "libc/string.h"
+
+#include "drivers/ahci/ahci.h"
 
 static FAT32BootSector* BootSector;
 
@@ -39,6 +42,10 @@ void InitialiseFAT()
         }
     }
 
+	FAT32BootSector* sect = kmalloc(sizeof(FAT32BootSector));
+	ReadSectorsAHCI(0, VolumeStartSector, sect, 1);
+	ReadSectorsAHCI(1, VolumeStartSector, sect, 1);
+
     temporaryBuffer = (uint32_t*)kmalloc(BootSector->BytesPerSector * BootSector->SectorsPerCluster);
     temporaryBuffer2 = (uint32_t*)kmalloc(BootSector->BytesPerSector * BootSector->SectorsPerCluster);
 
@@ -70,7 +77,15 @@ int ReadFAT(uint32_t cluster)
 	uint32_t ent_offset = (fat_offset % cluster_size) / 4;
 
     uint32_t fat_LBA = fat_sector + VolumeStartSector;
-    ReadSectorsATA((uint64_t)temporaryBuffer2, fat_LBA, 1);
+
+	if(IsAHCI() == 1)
+	{
+		ReadSectorsAHCI(0, fat_LBA, (void*)temporaryBuffer2, 1);
+	}
+	else
+	{
+    	ReadSectorsATA((uint64_t)temporaryBuffer2, fat_LBA, 1);
+	}
 	 
 	uint32_t* FATtable = (uint32_t*)temporaryBuffer2;
 	return FATtable[ent_offset] & 0x0FFFFFFF;
@@ -84,7 +99,15 @@ int ReadCluster(uint32_t cluster, void* buffer)
 	}
 	
 	uint32_t start_sector = VolumeStartSector + (cluster - 2) * BootSector->SectorsPerCluster + FirstDataSector;
-    ReadSectorsATA((uint64_t)buffer, start_sector, 1);
+	if(IsAHCI() == 1)
+	{
+		ReadSectorsAHCI(0, start_sector, (void*)buffer, 1);
+	}
+	else
+	{
+    	ReadSectorsATA((uint64_t)buffer, start_sector, 1);
+	}
+
     return 0;
 }
 

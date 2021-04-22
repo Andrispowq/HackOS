@@ -20,10 +20,13 @@ void ExpandHeap(uint64_t length);
 void* alloc(uint64_t size);
 void free(void* address);
 
-void* operator new(unsigned long int  size);
+void* operator new(unsigned long int size);
 void* operator new[](unsigned long int size);
 
 void operator delete(void* ptr);
 void operator delete[](void* ptr);
+
+void operator delete(void* ptr, unsigned long int size);
+void operator delete[](void* ptr, unsigned long int size);
 
 #endif
