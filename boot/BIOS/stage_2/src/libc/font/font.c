@@ -1,16 +1,11 @@
 #include "font.h"
 
-#include "fat32/fat32.h"
+#include "libc/memory.h"
 
-PSF1_FONT* LoadFont()
+PSF1_FONT* LoadFont(void* address)
 {
-    uint64_t ptr;
-    DirectoryEntry entry;
-    int ret = GetFile("C:\\BOOT\\SYSTEM\\ZAP-LI~1.PSF", &ptr, &entry);
-    if(ret != 0)
-    {
-        asm("hlt");
-    }
+    uint64_t ptr = kmalloc(512 * 12);
+    memcpy((void*)ptr, address, 512 * 12);
 
     //Check if this is indeed our font file
     PSF1_HEADER* font_hdr = (PSF1_HEADER*)ptr;

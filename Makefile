@@ -6,7 +6,7 @@ BOOTLOADER_DIR = boot
 KERNEL_DIR = kernel
 BUILD_DIR := bin
 
-TARGET_BIOS = true
+TARGET_BIOS = false
 
 ifneq ($(TARGET_BIOS), true)
 
@@ -92,19 +92,18 @@ build_bios:
 
 buildimg:
 	dd if=/dev/zero of=$(BUILD_DIR)/HackOS_FAT.img bs=512 count=93750
-	mformat -i $(BUILD_DIR)/HackOS_FAT.img -F -R 64 -K 63 -B bin/bootloader.bin ::
-	mmd -i $(BUILD_DIR)/HackOS_FAT.img ::/BOOT
-	mmd -i $(BUILD_DIR)/HackOS_FAT.img ::/BOOT/SYSTEM
+	mformat -i $(BUILD_DIR)/HackOS_FAT.img -F -B bin/bootloader.bin ::
+	mmd -i $(BUILD_DIR)/HackOS_FAT.img ::/SYSTEM
 	mmd -i $(BUILD_DIR)/HackOS_FAT.img ::/USR
 	mmd -i $(BUILD_DIR)/HackOS_FAT.img ::/USR/BIN
-	mcopy -i $(BUILD_DIR)/HackOS_FAT.img $(KERNEL_DIR)/bin/kernel.elf ::/BOOT
-	mcopy -i $(BUILD_DIR)/HackOS_FAT.img util/fonts/zap-light16.psf ::/BOOT/SYSTEM
 	mcopy -i $(BUILD_DIR)/HackOS_FAT.img util/usertest/usertest.elf ::/USR/BIN
 
 	dd if=$(BUILD_DIR)/mbr.bin of=$(BUILD_DIR)/$(OS_NAME).img bs=512 seek=0 count=1
-	dd if=$(BUILD_DIR)/HackOS_FAT.img of=$(BUILD_DIR)/$(OS_NAME).img bs=512 seek=1 count=2
-	dd if=$(BUILD_DIR)/second_stage.bin of=$(BUILD_DIR)/$(OS_NAME).img bs=512 seek=3 count=61
-	dd if=$(BUILD_DIR)/HackOS_FAT.img of=$(BUILD_DIR)/$(OS_NAME).img bs=512 seek=64 skip=63 count=93684
+	dd if=$(BUILD_DIR)/bootloader.bin of=$(BUILD_DIR)/$(OS_NAME).img bs=512 seek=1 count=1
+	dd if=$(BUILD_DIR)/second_stage.bin of=$(BUILD_DIR)/$(OS_NAME).img bs=512 seek=2 count=64
+	dd if=util/fonts/zap-light16.psf of=$(BUILD_DIR)/$(OS_NAME).img bs=512 seek=66 count=12
+	dd if=$(BUILD_DIR)/kernel.elf of=$(BUILD_DIR)/$(OS_NAME).img bs=512 seek=78 count=256
+	dd if=$(BUILD_DIR)/HackOS_FAT.img of=$(BUILD_DIR)/$(OS_NAME).img bs=512 seek=334 count=93750
 	
 run:
 	qemu-system-x86_64 \
@@ -129,6 +128,7 @@ debug:
 	-d guest_errors,cpu_reset & \
 	gdb -ex "target remote localhost:1234" -ex "symbol-file kernel/bin/kernel.elf" \
 
+# boot/BIOS/stage_2/bin/second_stage.elf
 clean:
 	rm -rf $(BUILD_DIR)
 	mkdir $(BUILD_DIR)

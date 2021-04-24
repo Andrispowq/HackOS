@@ -6,6 +6,20 @@
 
 #define MAX_OPEN_FILES 256
 
+struct Partition
+{
+    uint8_t attributes;
+    uint8_t cylinder_start;
+    uint8_t head_start;
+    uint8_t sector_start;
+    uint8_t filesystem;
+    uint8_t cylinder_end;
+    uint8_t head_end;
+    uint8_t sector_end;
+    uint32_t LBA_start;
+    uint32_t size;
+};
+
 class Filesystem
 {
 public:

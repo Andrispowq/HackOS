@@ -4,12 +4,9 @@
 #include "cpu/paging/paging.h"
 #include "cpu/rsdp.h"
 #include "cpu/memory_map.h"
-#include "cpu/ahci/pci.h"
 
 #include "drivers/rtc.h"
 #include "drivers/screen.h"
-#include "drivers/ata/ata.h"
-#include "drivers/disk_read.h"
 
 #include "libc/font/font.h"
 #include "libc/memory.h"
@@ -17,8 +14,6 @@
 #include "libc/function.h"
 
 #include "elf_loader/elf.h"
-
-#include "fat32/fat32.h"
 
 struct tm start_time;
 
@@ -57,17 +52,12 @@ void loader_main(struct FramebufferInfo* info)
         }
     }
     
-    //Initialise the AHCI driver
+    //Get the RSDP
     uint8_t version;
     RSDP1* rsdp = FindRSDP(&version);
 
-    EnumeratePCI((RSDP*)rsdp);
-
-    //Initialise the filesystem
-    InitialiseFAT();
-
-    //Load in the font file
-    PSF1_FONT* font = LoadFont();
+    //Load in the font file, loaded at 0x6000
+    PSF1_FONT* font = LoadFont(0x6000);
     
     //Initialise the display
     init_display(info, font);
@@ -80,7 +70,7 @@ void loader_main(struct FramebufferInfo* info)
 
     //Read the kernel, which is 128 sectors long (now), and starts at the 130th sector
     uint64_t kernelMemory;
-    Elf64_Ehdr* header = LoadProgram("C:\\BOOT\\KERNEL.ELF", &kernelMemory);
+    Elf64_Ehdr* header = LoadProgram(0x20000, &kernelMemory);
     if(!header)
     {
         kprintf("ELF header not supported!\n");

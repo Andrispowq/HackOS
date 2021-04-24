@@ -67,10 +67,10 @@ safe_start:
     call    PrintHex
     call    PrintLn    
 
-    ; Our FAT32 filesystem has 64 reserved sectors: bootsector, 2nd stage, backup bootsector
-    mov     ax, 0x03
+    ; Load the second stage: from LBA 2, size 64
+    mov     ax, 2
     mov     bx, KernelOffset
-    mov     cx, 60
+    mov     cx, 64
     mov     dl, [BootDrive]
     call    ReadDisk
 
@@ -82,7 +82,7 @@ safe_start:
 %include "a20_gate.asm"
 
 KernelOffset:   equ 0x8000
-BootDrive:     db 0
+BootDrive:      db 0
 
 BootLoaderString: db "HackOS bootloader loaded! Disk: ", 0x00
 

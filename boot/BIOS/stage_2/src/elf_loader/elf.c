@@ -2,7 +2,6 @@
 
 #include "libc/memory.h"
 #include "cpu/paging/paging.h"
-#include "fat32/fat32.h"
 
 static uint8_t elf_check_file(Elf64_Ehdr* hdr)
 {
@@ -22,17 +21,12 @@ static uint8_t elf_check_file(Elf64_Ehdr* hdr)
 	return 1;
 }
 
-Elf64_Ehdr* LoadProgram(const char* name, uint64_t* mem)
+Elf64_Ehdr* LoadProgram(void* address, uint64_t* mem)
 {
-	uint64_t memory;
-    DirectoryEntry entry;
-    int ret = GetFile(name, &memory, &entry);
-    if(ret != 0)
-    {
-        asm("hlt");
-    }
-	
+	uint64_t memory = kmalloc(512 * 256);	
 	*mem = memory;
+
+	memcpy((void*)memory, address, 512 * 256);
 
 	Elf64_Ehdr* header = (Elf64_Ehdr*)memory;
 	if(elf_check_file(header) != 0)

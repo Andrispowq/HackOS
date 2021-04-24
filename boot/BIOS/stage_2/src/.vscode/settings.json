@@ -1,5 +1,6 @@
 {
     "files.associations": {
-        "ahci.h": "c"
+        "ahci.h": "c",
+        "screen.h": "c"
     }
 }

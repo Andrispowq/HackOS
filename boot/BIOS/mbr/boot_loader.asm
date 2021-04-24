@@ -92,9 +92,20 @@ partition_1:
     db 0x00
     db 0x00
     dd 0x01 ; LBA start
+    dd 333 ; LBA size, 1 + 64 + 12 + 256 = 333 
+
+partition_2: 
+    db 0x00 ; Not active partition
+    db 0x00 ; CHS start
+    db 0x00
+    db 0x00
+    db 0x0B ; Partition type
+    db 0x00 ; CHS end
+    db 0x00
+    db 0x00
+    dd 334 ; LBA start
     dd 93750 ; LBA size, the size of our HackOS_FAT.img
 
-partition_2: times 16 db 0
 partition_3: times 16 db 0
 partition_4: times 16 db 0
 

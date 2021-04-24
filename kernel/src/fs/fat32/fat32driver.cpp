@@ -6,6 +6,10 @@
 
 #include "drivers/ata/ata.h"
 
+#include "fs/filesystem.h"
+
+extern uint8_t fromUEFI;
+
 FAT32Driver::FAT32Driver(Device* device)
 	: device(device)
 {
@@ -15,21 +19,13 @@ FAT32Driver::FAT32Driver(Device* device)
 	//If we don't find any partition tables valid, we should assume that we aren't partitioned
 	PartitionStart = 0;
 
-    uint64_t BaseOffset = 446;
-    for(uint64_t i = 0; i < 4; i++)
-    {
-        uint32_t* ptr = (uint32_t*)((uint64_t)MBR + BaseOffset + i * 16);
-        //The 8th byte holds a 4-byte long LBA entry
-        //The first byte must be 0x80 if it is bootable
-        uint32_t LBA = ptr[2];
-        uint8_t active = *(uint8_t*)ptr;
-
-        if(active == 0x80)
-        {
-            PartitionStart = LBA;
-			break;
-        }
-    }
+	//On UEFI, we don't have partitions for now
+	if(!fromUEFI)
+	{
+    	uint64_t BaseOffset = 446;
+		Partition* part = (Partition*)((uint64_t)MBR + BaseOffset + 16); //the 2nd partition contains the FAT32 filesystem 
+		PartitionStart = part->LBA_start;
+	}
 
     //Load the bootsector
     BootSector = (FAT32_BootSector*)kmalloc(512);
