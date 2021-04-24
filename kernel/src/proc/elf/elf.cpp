@@ -69,6 +69,7 @@ void PrepareProgram(Elf64_Ehdr* header, uint64_t baseAddress)
 
                 uint64_t off = baseAddress + phdr->p_offset;
 				uint64_t size = phdr->p_filesz;
+				memset((void*)segment, 0, size);
                 memcpy((void*)segment, (void*)off, size);
 				break;
 			}

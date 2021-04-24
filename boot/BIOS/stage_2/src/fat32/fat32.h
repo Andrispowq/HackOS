@@ -2,7 +2,7 @@
 #define FAT32_H
 
 #include "libc/stdint.h"
-#include "drivers/ata/ata.h"
+#include "drivers/disk_read.h"
 
 #define END_CLUSTER 0x0FFFFFF8
 #define BAD_CLUSTER 0x0FFFFFF7

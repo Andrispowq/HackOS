@@ -61,6 +61,11 @@ void EnumeratePCI(RSDP* rsdp)
 
     MCFGHeader* header = (MCFGHeader*)GetMCFG(rsdp);
 
+    if(!header)
+    {
+        return;
+    }
+
     int entries = (header->header.Length - sizeof(MCFGHeader)) / sizeof(DeviceConfig);
     for(int i = 0; i < entries; i++)
     {

@@ -66,6 +66,7 @@ void PrepareProgram(Elf64_Ehdr* header, uint64_t memory)
 
                 uint64_t off = memory + phdr->p_offset;
 				uint64_t size = phdr->p_filesz;
+				memset((void*)segment, 0, phdr->p_memsz);
                 memcpy((void*)segment, (void*)off, size);
 				break;
 			}

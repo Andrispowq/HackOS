@@ -115,7 +115,7 @@ void StartCMD(Port* port)
 int Read(Port* port, uint64_t sector, uint32_t sectorCount, void* buffer)
 {
     uint32_t sectorL = (uint32_t) sector;
-    uint32_t sectorH = (uint32_t) (sector >> 32);
+    uint32_t sectorH = (uint32_t) (/*sector >> 32*/sector >> 32);
 
     port->hbaPort->interruptStatus = (uint32_t)-1; // Clear pending interrupt bits
 
@@ -139,10 +139,10 @@ int Read(Port* port, uint64_t sector, uint32_t sectorCount, void* buffer)
     cmdFIS->lba0 = (uint8_t)sectorL;
     cmdFIS->lba1 = (uint8_t)(sectorL >> 8);
     cmdFIS->lba2 = (uint8_t)(sectorL >> 16);
-    cmdFIS->lba3 = (uint8_t)sectorH;
+    cmdFIS->lba3 = (uint8_t)(sectorL >> 24);
+    cmdFIS->lba4 = (uint8_t)sectorH;
     cmdFIS->lba4 = (uint8_t)(sectorH >> 8);
-    cmdFIS->lba4 = (uint8_t)(sectorH >> 16);
-    cmdFIS->deviceRegister = 1<<6; //LBA mode
+    cmdFIS->deviceRegister = 1 << 6; //LBA mode
     cmdFIS->countLow = sectorCount & 0xFF;
     cmdFIS->countHigh = (sectorCount >> 8) & 0xFF;
 
