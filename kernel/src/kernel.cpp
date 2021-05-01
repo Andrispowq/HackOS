@@ -23,7 +23,8 @@ extern "C" int kernel_main(KernelInfo* info)
 
     kprintf("Welcome to the HackOS kernel!\n\n");
 
-    InitialiseFilesystem();
+    //Currently the BIOS boots with ATA, and UEFI with AHCI
+    if(info->booted_from_BIOS) InitialiseFilesystem();
     InitialiseKernel(info);
 
     kprintf("Finished the initialisation!\n");

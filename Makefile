@@ -6,7 +6,7 @@ BOOTLOADER_DIR = boot
 KERNEL_DIR = kernel
 BUILD_DIR := bin
 
-TARGET_BIOS = false
+TARGET_BIOS = true
 
 ifneq ($(TARGET_BIOS), true)
 
@@ -108,7 +108,6 @@ buildimg:
 run:
 	qemu-system-x86_64 \
 	-drive file=$(BUILD_DIR)/$(OS_NAME).img,format=raw \
-	-machine q35 \
 	-cpu qemu64 \
 	-m 512M \
 	-net none \
@@ -121,7 +120,6 @@ debug:
 	qemu-system-x86_64 \
 	-s \
 	-drive file=$(BUILD_DIR)/$(OS_NAME).img,format=raw \
-	-machine q35 \
 	-cpu qemu64 \
 	-m 512M \
 	-net none \

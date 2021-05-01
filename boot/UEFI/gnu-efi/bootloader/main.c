@@ -223,7 +223,7 @@ EFI_STATUS efi_main(EFI_HANDLE ImageHandle, EFI_SYSTEM_TABLE *SystemTable)
 				int pages = (phdr->p_memsz + 0x1000 - 1) / 0x1000;
 				Elf64_Addr segment = phdr->p_paddr;
 				SystemTable->BootServices->AllocatePages(AllocateAddress, EfiLoaderData, pages, &segment);
-				_memset((void*)segment, 0, phdr->p_filesz);
+				_memset((void*)segment, 0, phdr->p_memsz);
 
 				Kernel->SetPosition(Kernel, phdr->p_offset);
 				UINTN size = phdr->p_filesz;
