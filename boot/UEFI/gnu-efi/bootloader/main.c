@@ -98,6 +98,70 @@ Framebuffer* InitializeGOP()
 		Print(L"Graphics Output Protocol located!\n");
 	}
 
+  	EFI_GRAPHICS_OUTPUT_MODE_INFORMATION* info;
+  	UINTN SizeOfInfo, numModes;
+    numModes = gop->Mode->MaxMode;
+
+	uint64_t m720 = 0;
+	uint64_t m1080 = 0;
+	uint64_t m4k = 0;
+	for (UINTN i = 0; i < numModes; i++) 
+	{
+ 		status = uefi_call_wrapper(gop->QueryMode, 4, gop, i, &SizeOfInfo, &info);
+
+		if(status != EFI_SUCCESS)
+		{
+			return 0;
+		}
+
+		if(gop->Mode->Info->HorizontalResolution == 1280)
+		{
+			if(gop->Mode->Info->VerticalResolution == 720)
+			{
+				m720 = i;
+			}
+		}
+		if(gop->Mode->Info->HorizontalResolution == 1920)
+		{
+			if(gop->Mode->Info->VerticalResolution == 1080)
+			{
+				m1080 = i;
+			}
+		}
+		if(gop->Mode->Info->HorizontalResolution == 3840)
+		{
+			if(gop->Mode->Info->VerticalResolution == 2160)
+			{
+				m4k = i;
+			}
+		}
+	}
+
+	if(m4k != 0)
+	{
+		status = uefi_call_wrapper(gop->SetMode, 2, gop, m4k);
+		if(status != EFI_SUCCESS)
+		{
+			return 0;
+		}
+	}
+	else if(m1080 != 0)
+	{
+		status = uefi_call_wrapper(gop->SetMode, 2, gop, m1080);
+		if(status != EFI_SUCCESS)
+		{
+			return 0;
+		}
+	}
+	else if(m720 != 0)
+	{
+		status = uefi_call_wrapper(gop->SetMode, 2, gop, m720);
+		if(status != EFI_SUCCESS)
+		{
+			return 0;
+		}
+	}
+
 	framebuffer.address = (unsigned int*)gop->Mode->FrameBufferBase;
 	framebuffer.width = gop->Mode->Info->HorizontalResolution;
 	framebuffer.height = gop->Mode->Info->VerticalResolution;
