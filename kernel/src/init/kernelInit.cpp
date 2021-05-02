@@ -3,6 +3,7 @@
 #include "lib/memory.h"
 
 #include "acpi/fadt.h"
+#include "acpi/pci/pci.h"
 
 #include "fs/fat32/fat32.h"
 #include "fs/vfs.h"
@@ -12,7 +13,7 @@
 bool fromUEFI = 0;
 extern PageTableManager KernelDirectory;
 
-void PrintRSDPAndMemoryInfo(struct KernelInfo* info)
+void InitialiseRSDP(struct KernelInfo* info)
 {
     ACPI::RSDP* rsdp = (ACPI::RSDP*)info->rsdp;
 
@@ -101,6 +102,13 @@ void PrintRSDPAndMemoryInfo(struct KernelInfo* info)
         reservedMemory / 1024, reservedMemoryMegabytes, reservedMemoryGigabytes);
 
     kprintf("\tTotal system memory: %f megabytes.\n\n", totalSystemMemory);
+
+    if(mcfg != nullptr)
+    {
+        kprintf("Enumerating the PCI:\n");
+        PCI::EnumeratePCI((ACPI::MCFGHeader*)mcfg);
+        kprintf("\n");
+    }
 }
 
 MemoryMap _map(nullptr, 0);
@@ -123,17 +131,7 @@ void InitialiseDisplay(KernelInfo* info)
     InitialiseDisplay(info->framebuffer, info->font);
     clrscr();
 
-    kprintf("Initialising the kernel heap!\n");
-    InitialiseHeap((void*)0x0000100000000000, 0x1000);
-}
-
-void InitialiseKernel(struct KernelInfo* info)
-{
-    PrintRSDPAndMemoryInfo(info); 
-
-    kprintf("Kernel is initialised, IRQs are launching!\n\n");
-
-    InitialiseIRQ();
+    kprintf("Welcome to the HackOS kernel!\n\n");
 }
 
 FAT32Driver* fat32_driver;
@@ -149,4 +147,17 @@ void InitialiseFilesystem()
     int(*entry_point)() = (int(*)())hdr->e_entry;
     int res = entry_point();
     kprintf("Usertest returned with 0x%x!\n\n", res);
+}
+
+void InitialiseKernel(struct KernelInfo* info)
+{
+    kprintf("Initialising the kernel heap!\n");
+    InitialiseHeap((void*)0x0000100000000000, 0x1000);
+
+    InitialiseRSDP(info);
+
+    if(info->booted_from_BIOS) InitialiseFilesystem();
+    kprintf("Kernel is initialised, IRQs are launching!\n");
+
+    InitialiseIRQ();
 }
