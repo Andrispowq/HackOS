@@ -131,7 +131,8 @@ void InitialiseDisplay(KernelInfo* info)
     InitialiseDisplay(info->framebuffer, info->font);
     clrscr();
 
-    kprintf("Welcome to the HackOS kernel!\n\n");
+    kprintf("Welcome to the HackOS kernel!\n");
+    kprintf("Initialised display (%dx%d)\n\n", info->framebuffer.width, info->framebuffer.height);
 }
 
 FAT32Driver* fat32_driver;
