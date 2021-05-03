@@ -2,7 +2,17 @@
 
 #include "lib/memory.h"
 
-void PageTableManager::MapMemory(vaddr_t virtualAddress, paddr_t physicalAddress)
+static void SetEntry(PageTableEntry* entry, PageTableFlagBits flags)
+{
+    entry->present = (flags & (uint64_t)PageTableFlags::Present) >> 0;
+    entry->writeable = (flags & (uint64_t)PageTableFlags::Writable) >> 1;
+    entry->user_access = (flags & (uint64_t)PageTableFlags::User) >> 2;
+    entry->write_through = (flags & (uint64_t)PageTableFlags::WriteThrough) >> 3;
+    entry->cache_disabled = (flags & (uint64_t)PageTableFlags::CacheDisabled) >> 4;
+    entry->execution_disabled = (flags & (uint64_t)PageTableFlags::ExecutionDisabled) >> 63;
+}
+
+void PageTableManager::MapMemory(vaddr_t virtualAddress, paddr_t physicalAddress, PageTableFlagBits flags)
 {
     PageMapIndexer indices(virtualAddress);
 
@@ -13,8 +23,7 @@ void PageTableManager::MapMemory(vaddr_t virtualAddress, paddr_t physicalAddress
         pdp = (PageTable*)PageFrameAllocator::SharedAllocator()->RequestPage();
         memset(pdp, 0, 0x1000);
         pml4_entry.address = (uint64_t)pdp >> 12;
-        pml4_entry.present = 1;
-        pml4_entry.writeable = 1;
+        SetEntry(&pml4_entry, flags);
         pml4->entries[indices.index_PDP] = pml4_entry;
     }
     else
@@ -29,8 +38,7 @@ void PageTableManager::MapMemory(vaddr_t virtualAddress, paddr_t physicalAddress
         pd = (PageTable*)PageFrameAllocator::SharedAllocator()->RequestPage();
         memset(pd, 0, 0x1000);
         pdp_entry.address = (uint64_t)pd >> 12;
-        pdp_entry.present = 1;
-        pdp_entry.writeable = 1;
+        SetEntry(&pdp_entry, flags);
         pdp->entries[indices.index_PD] = pdp_entry;
     }
     else
@@ -45,8 +53,7 @@ void PageTableManager::MapMemory(vaddr_t virtualAddress, paddr_t physicalAddress
         pt = (PageTable*)PageFrameAllocator::SharedAllocator()->RequestPage();
         memset(pt, 0, 0x1000);
         pd_entry.address = (uint64_t)pt >> 12;
-        pd_entry.present = 1;
-        pd_entry.writeable = 1;
+        SetEntry(&pd_entry, flags);
         pd->entries[indices.index_PT] = pd_entry;
     }
     else
@@ -56,8 +63,7 @@ void PageTableManager::MapMemory(vaddr_t virtualAddress, paddr_t physicalAddress
 
     PageTableEntry pt_entry = pt->entries[indices.index_P];
     pt_entry.address = physicalAddress >> 12;
-    pt_entry.present = 1;
-    pt_entry.writeable = 1;
+    SetEntry(&pt_entry, flags);
     pt->entries[indices.index_P] = pt_entry;
 }
     
