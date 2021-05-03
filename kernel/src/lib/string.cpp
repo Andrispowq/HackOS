@@ -1,9 +1,6 @@
 #include "string.h"
 #include "memory.h"
 
-/**
- * K&R implementation
- */
 void itoa(uint8_t* buffer, uint32_t base, uint64_t value) 
 {
     uint8_t* p = buffer;
@@ -45,8 +42,7 @@ void itoa(uint8_t* buffer, uint32_t base, uint64_t value)
     }
 }
 
-/* K&R */
-void reverse(char s[]) 
+void reverse(char* s) 
 {
     int c, i, j;
     for (i = 0, j = strlen(s) - 1; i < j; i++, j--) 
@@ -57,77 +53,63 @@ void reverse(char s[])
     }
 }
 
-/* K&R */
-int strlen(const char s[]) 
+void append(char* s, char n) 
 {
-    int i = 0;
-    while (s[i] != '\0') 
-        ++i;
-
-    return i;
-}
-
-void append(char s[], char n) 
-{
-    int len = strlen(s);
+    size_t len = strlen(s);
     s[len] = n;
     s[len + 1] = '\0';
 }
 
-void backspace(char s[]) 
+void backspace(char* s) 
 {
-    int len = strlen(s);
+    size_t len = strlen(s);
     s[len - 1] = '\0';
 }
 
-/* K&R 
- * Returns <0 if s1<s2, 0 if s1==s2, >0 if s1>s2 */
-int strcmp(char s1[], char s2[]) 
-{
-    int i;
-    for (i = 0; s1[i] == s2[i]; i++) 
-    {
-        if (s1[i] == '\0')
-        {
-            return 0;
-        }
-    }
+extern "C" size_t __strlen(char* s);
+extern "C" int __strcmp(char* s1, char* s2);
+extern "C" int __strncmp(char* s1, char* s2, size_t bytes);
+extern "C" char* __strcpy(char* dst, const char* src);
 
-    return s1[i] - s2[i];
+size_t strlen(char* s) 
+{
+    return __strlen(s);
 }
 
-int strncmp(char s1[], char s2[], int bytes)
+int strcmp(char* s1, char* s2) 
 {
-    int i;
-    for (i = 0; s1[i] == s2[i] && i < bytes; i++) 
+    size_t cnt = 0;
+    while(*s1 != 0)
     {
-        if (s1[i] == '\0')
+        if(*s1 != *s2)
         {
-            return 0;
+            break;
         }
+
+        s1++;
+        s2++;
     }
 
-    return s1[i] - s2[i];
+    return *s1 - *s2;
+    //return __strcmp(s1, s2);
+}
+
+int strncmp(char* s1, char* s2, int bytes)
+{
+    return (__strncmp(s1, s2, bytes) == 0);
 }
 
 char* strcpy(char* dst, const char* src)
 {
-    int length = strlen(src);
-    int i; 
-    for(i = 0; i < length; i++)
-    {
-        dst[i] = src[i];
-    }
-
-    return dst;
+    return __strcpy(dst, src);
 }
 
 char** split(const char* str, char delim, int* count)
 {
-    int size = strlen(str);
+    size_t size = strlen((char*)str);
 
-    int cnt = 0;
-    for(int i = 0; i < size; i++)
+    size_t cnt = 0;
+    for(size_t i = 0; i < size; i++)
     {
         if(str[i] == delim)
         {
@@ -139,13 +121,13 @@ char** split(const char* str, char delim, int* count)
     char** ptr = (char**) kmalloc(cnt * sizeof(char*));
     *count = cnt;
 
-    int idx = 0;
-    int last_idx = 0;
-    for(int i = 0; i < size; i++)
+    size_t idx = 0;
+    size_t last_idx = 0;
+    for(size_t i = 0; i < size; i++)
     {
         if(str[i] == delim)
         {
-            int sz = i - last_idx;
+            size_t sz = i - last_idx;
             ptr[idx] = (char*) kmalloc(sz);
             memcpy(&ptr[idx], &str[last_idx], sz);
             last_idx = idx;
