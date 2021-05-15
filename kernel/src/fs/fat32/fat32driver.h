@@ -2,13 +2,14 @@
 #define FAT32_DRIVER_H
 
 #include "lib/stdint.h"
+#include "lib/memory.h"
+
 #include "drivers/device/device.h"
+#include "arch/x86_64/timer/rtc.h"
 
 #define END_CLUSTER 0x0FFFFFF8
 #define BAD_CLUSTER 0x0FFFFFF7
 #define FREE_CLUSTER 0x00000000
-
-#define HARD_ERR 0x04000000
 
 #define FILE_READ_ONLY 0x01
 #define FILE_HIDDEN 0x02
@@ -17,17 +18,21 @@
 #define FILE_DIRECTORY 0x10
 #define FILE_ARCHIVE 0x20
 #define FILE_LONG_NAME (FILE_READ_ONLY | FILE_HIDDEN | FILE_SYSTEM | FILE_VOLUME_ID)
-#define FILE_LONG_NAME_MASK (FILE_READ_ONLY | FILE_HIDDEN | FILE_SYSTEM | FILE_VOLUME_ID | FILE_DIRECTORY | FILE_ARCHIVE)
-#define FILE_LAST_LONG_ENTRY 0x40
+
 #define ENTRY_FREE 0xE5
 #define ENTRY_END 0x00
 #define LAST_LONG_ENTRY 0x40
 
-#define LOWERCASE_ISSUE	0x01 //E.g.: "test    txt"
-#define BAD_CHARACTER	0x02 //E.g.: "tes&t   txt"
-#define BAD_TERMINATION 0x04 //missing null character at the end
-#define NOT_CONVERTED_YET 0x08 //still contains a dot: E.g."test.txt"
-#define TOO_MANY_DOTS 0x10 //E.g.: "test..txt"; may or may not have already been converted
+#define MAX_ENTRIES_IN_DIRECTORY 32
+
+#define FAT32_SUCCESS 0
+#define FAT32_ERROR_BAD_CLUSTER_VALUE -1
+#define FAT32_ERROR_FILE_NOT_FOUND -2
+#define FAT32_ERROR_NO_FREE_SPACE -3
+#define FAT32_ERROR_INVALID_ARGUMENTS -4
+#define FAT32_ERROR_NOT_DIRECTORY -5
+#define FAT32_ERROR_DIRECTORY -6
+#define FAT32_ERROR_NOT_FAT_NAME -7
 
 struct FAT32_BootSector
 {
@@ -111,27 +116,40 @@ struct LongDirectoryEntry
 	uint16_t name2[2];
 } __attribute__((packed));
 
+struct DirEntry
+{
+	char name[128];
+	uint32_t cluster;
+	uint32_t size;
+	uint8_t attributes;
+};
+
 class FAT32Driver
 {
 public:
     FAT32Driver(Device* device);
     ~FAT32Driver();
 
-    uint32_t ReadFAT(uint32_t cluster);
-	uint32_t WriteFAT(uint32_t cluster, uint32_t value);
+    int ReadFAT(uint32_t cluster);
+	int WriteFAT(uint32_t cluster, uint32_t value);
 
 	uint32_t AllocateFreeFAT();
 
-	uint32_t ReadCluster(uint32_t cluster, void* buffer);
-	uint32_t WriteCluster(uint32_t cluster, void* buffer);
+	int ReadCluster(uint32_t cluster, void* buffer);
+	int WriteCluster(uint32_t cluster, void* buffer);
 
-    DirectoryEntry* ListDirectory(uint32_t cluster, uint32_t attributes, bool exclusive, uint32_t* entryCount);
+    DirEntry* GetDirectories(uint32_t cluster, uint32_t attributes, bool exclusive, uint32_t* entryCount);
+
+	int PrepareAddedDirectory(uint32_t cluster);
 	
-	int DirectorySearch(const char* FilePart, uint32_t cluster, DirectoryEntry* file, uint32_t* entryOffset);
-	int DirectoryAdd(uint32_t cluster, DirectoryEntry* file, void* writeBuffer);
+	int DirectorySearch(const char* FilePart, uint32_t cluster, DirEntry* file, uint32_t* entryOffset);
+	int DirectoryAdd(uint32_t cluster, DirEntry file);
 
-	int GetFile(const char* filePath, void** fileContents, DirectoryEntry* fileMeta);
-	int PutFile(const char* filePath, void* fileContents, DirectoryEntry* fileMeta);
+	int OpenFile(const char* filePath, DirEntry* fileMeta);
+	int CreateFile(const char* filePath, DirEntry* fileMeta);
+
+	int ReadFile(DirEntry fileMeta, uint64_t offset, void* buffer, uint64_t bytes);
+	int WriteFile(DirEntry fileMeta, uint64_t offset, void* buffer, uint64_t bytes);
 
 	uint32_t GetFirstDataSector() const { return FirstDataSector; }
 	uint32_t GetRootDirStart() const { return RootDirStart; }
@@ -139,10 +157,20 @@ public:
 	uint32_t GetTotalClusters() const { return TotalClusters; }
 
 	void ConvertFromFATFormat(char* input, char* output);
-
-private:
 	int IsFATFormat(char* name);
 	char* ConvertToFATFormat(char* input);
+
+	FAT32_BootSector* GetInternalBootSector() { return BootSector; }
+
+private:
+	DirEntry FromFATEntry(DirectoryEntry* entry, bool long_fname);
+	DirectoryEntry* ToFATEntry(DirEntry entry, uint32_t& longEntries);
+
+	bool Compare(DirectoryEntry* entry, const char* name, bool long_name);
+
+	uint8_t GetMilliseconds() const;
+	uint16_t GetTime() const;
+	uint16_t GetDate() const;
 
 	Device* device;
     FAT32_BootSector* BootSector;

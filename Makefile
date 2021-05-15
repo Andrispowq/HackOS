@@ -6,7 +6,7 @@ BOOTLOADER_DIR = boot
 KERNEL_DIR = kernel
 BUILD_DIR := bin
 
-TARGET_BIOS = false
+TARGET_BIOS = true
 
 ifneq ($(TARGET_BIOS), true)
 
@@ -14,6 +14,10 @@ GNU_EFI = $(BOOTLOADER_DIR)/UEFI/gnu-efi
 OVMF_DIR = $(BOOTLOADER_DIR)/UEFI/OVMFbin
 
 BOOT_EFI := $(GNU_EFI)/x86_64/bootloader/main.efi
+
+init:
+	make clean
+	make -C boot/UEFI/gnu-efi
 
 all:
 	make build_efi
@@ -74,6 +78,10 @@ else
 MBR_DIR = $(BOOTLOADER_DIR)/BIOS/mbr
 FIRST_STAGE_DIR = $(BOOTLOADER_DIR)/BIOS/stage_1
 SECOND_STAGE_DIR = $(BOOTLOADER_DIR)/BIOS/stage_2
+
+init:
+	make clean
+	make -C boot/UEFI/gnu-efi
 
 all:
 	make build_bios

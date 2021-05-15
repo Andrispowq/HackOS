@@ -142,7 +142,12 @@ void InitialiseFilesystem()
     fat32_driver = new FAT32Driver(dev0);
 
     uint64_t addr;
-    Elf64_Ehdr* hdr = LoadProgram(fat32_driver, "C:\\USR\\BIN\\USERTEST.ELF", &addr);
+    Elf64_Ehdr* hdr = LoadProgram(fat32_driver, "~/USR/BIN/USERTEST.ELF", &addr);
+    if(hdr == nullptr)
+    {
+        return;
+    }
+
     PrepareProgram(hdr, addr);
 
     int(*entry_point)() = (int(*)())hdr->e_entry;

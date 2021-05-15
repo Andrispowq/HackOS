@@ -33,7 +33,7 @@ extern "C" int kernel_main(KernelInfo* info)
 
 extern "C" void __cxa_pure_virtual()
 {
-    kprintf("ERROR!\n");
+    kprintf("Virtual function definition not found!\n");
 }
 
 extern "C" void __stack_chk_fail()
