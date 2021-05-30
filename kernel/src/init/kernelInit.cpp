@@ -138,6 +138,15 @@ void InitialiseDisplay(KernelInfo* info)
 FAT32Driver* fat32_driver;
 void InitialiseFilesystem()
 {
+    vector<uint32_t> vec;
+    vec.push_back(1);
+    vec.push_back(2);
+    vec.push_back(3);
+    vec.push_back(4);
+    vec.push_back(5);
+
+    vec.erase(2);
+
     Device* dev0 = new ATADevice();
     fat32_driver = new FAT32Driver(dev0);
 

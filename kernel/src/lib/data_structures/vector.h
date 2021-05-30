@@ -62,7 +62,12 @@ public:
         }
 
         //Shift elements back by one
-        memcpy(&ptr[index], &ptr[index + 1], (_size - index - 1));
+        for(uint32_t i = index; i < _size - 1; i++)
+        {
+            ptr[i] = ptr[i + 1];
+        }
+
+        _size--;
     }
 
     void clear()
