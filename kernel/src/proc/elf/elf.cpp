@@ -24,35 +24,30 @@ static uint8_t elf_check_file(Elf64_Ehdr* hdr)
 	return 1;
 }
 
-Elf64_Ehdr* LoadProgram(FAT32Driver* f32dr, const char* name, uint64_t* baseAddress)
+Elf64_Ehdr* LoadProgram(FAT32* fat32_fs, const char* name, uint64_t* baseAddress)
 {
-	DirEntry entry;
-	int res = f32dr->OpenFile(name, &entry);
-	if(res != 0)
+	FAT32_ActiveFile* file = fat32_fs->OpenFile(name);
+	if(file == nullptr)
 	{
 		kprintf("Failed to open file %s!\n", name);
 		return nullptr;
 	}
 
-	uint64_t memory = kmalloc(entry.size);
-	res = f32dr->ReadFile(entry, 0, (void*)memory, entry.size);
-	if(res != 0)
-	{
-		kprintf("Failed to read file %s!\n", name);
-		kfree((void*)memory);
-		return nullptr;
-	}
+	uint64_t size = (uint64_t)file->file->entry.size;
+	uint64_t memory = kmalloc(size);
+	fat32_fs->ReadFile(file, (void*)memory, size);
+	fat32_fs->CloseFile(file);
 
 	*baseAddress = memory;
 
 	Elf64_Ehdr* header = (Elf64_Ehdr*)memory;
-	if(elf_check_file(header) != 0)
+	if(elf_check_file(header) == 0)
 	{
 		kfree((void*)memory);
-		return header;
+		return nullptr;
 	}
 
-	return nullptr;
+	return header;
 }
 
 extern PageTableManager KernelDirectory;

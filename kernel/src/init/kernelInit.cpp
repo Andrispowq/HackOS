@@ -135,26 +135,15 @@ void InitialiseDisplay(KernelInfo* info)
     kprintf("Initialised display (%dx%d)\n\n", info->framebuffer.width, info->framebuffer.height);
 }
 
-FAT32Driver* fat32_driver;
+FAT32* fat32_fs;
 void InitialiseFilesystem()
 {
-    vector<uint32_t> vec;
-    vec.push_back(1);
-    vec.push_back(2);
-    vec.push_back(3);
-    vec.push_back(4);
-    vec.push_back(5);
-
-    vec.erase(2);
-
     Device* dev0 = new ATADevice();
-    fat32_driver = new FAT32Driver(dev0);
-
-    FAT32* fat32_fs = new FAT32(dev0);
+    fat32_fs = new FAT32(dev0);
     fat32_fs->ListCurrent();
 
     uint64_t addr;
-    Elf64_Ehdr* hdr = LoadProgram(fat32_driver, "~/USR/BIN/USERTEST.ELF", &addr);
+    Elf64_Ehdr* hdr = LoadProgram(fat32_fs, "~/USR/BIN/USERTEST.ELF", &addr);
     if(hdr == nullptr)
     {
         return;

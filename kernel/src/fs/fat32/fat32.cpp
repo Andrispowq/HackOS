@@ -272,7 +272,9 @@ void FAT32::DeleteFromRecords(const char* name)
 
 const char* FAT32::GetCurrentDirectory() const
 {
-	char* name = "~";
+	char* name = new char[2];
+	name[0] = '~';
+	name[1] = 0;
 	size_t counter = 1;
 
 	vector<FAT32_FolderStructure*> structs;
@@ -283,7 +285,7 @@ const char* FAT32::GetCurrentDirectory() const
 		curr = curr->parent;
 	}
 
-	for (size_t i = structs.size() - 1; i >= 0; --i)
+	for (int i = (structs.size() - 1); i >= 0; --i)
 	{
 		char* nm = structs[i]->entry.name;
 		size_t len = strlen(nm);
@@ -292,11 +294,11 @@ const char* FAT32::GetCurrentDirectory() const
 		memcpy(&curr[1], nm, len);
 		curr[len + 1] = 0;
 
-		char* new_name = new char[counter + len + 2 + 1];
+		char* new_name = new char[counter + len + 2];
 		memcpy(new_name, name, counter);
-		memcpy(&new_name[counter], curr, len + 2);
-		new_name[counter + len + 2] = 0;
-		counter += (len + 3);
+		memcpy(&new_name[counter], curr, len + 1);
+		new_name[counter + len + 1] = 0;
+		counter += (len + 1);
 		delete[] name;
 		delete[] curr;
 		name = new_name;
@@ -317,8 +319,8 @@ void FAT32::ListCurrent()
 			continue;
 		}
 
-		char* flags = new char[7];
-		flags[7] = 0;
+		char flags[7];
+		flags[6] = 0;
 		if (elem->entry.attributes & FILE_READ_ONLY) flags[0] = '-'; else flags[0] = 'w';
 		if (elem->entry.attributes & FILE_HIDDEN) flags[1] = 'h'; else flags[1] = '-';
 		if (elem->entry.attributes & FILE_SYSTEM) flags[2] = 's'; else flags[2] = '-';
@@ -326,7 +328,6 @@ void FAT32::ListCurrent()
 		if (elem->entry.attributes & FILE_DIRECTORY) flags[4] = 'd'; else flags[4] = '-';
 		if (elem->entry.attributes & FILE_ARCHIVE) flags[5] = 'a'; else flags[5] = '-';
 		kprintf("%s - %s\n", elem->entry.name, flags);
-		delete[] flags;
 	}
 }
 
