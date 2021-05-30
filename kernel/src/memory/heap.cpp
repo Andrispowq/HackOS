@@ -135,9 +135,8 @@ void HeapSegmentHeader::CombineForward()
         next->next->last = this;
     }
 
-    next = next->next;
-
     length = length + next->length + sizeof(HeapSegmentHeader);
+    next = next->next;
 }
 
 void HeapSegmentHeader::CombineBackward()

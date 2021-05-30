@@ -4,27 +4,60 @@
 #include "fs/filesystem.h"
 #include "fat32driver.h"
 
+struct FAT32_FolderStructure
+{
+    ~FAT32_FolderStructure();
+
+	FAT32_FolderStructure* parent;
+	DirEntry entry;
+
+	vector<FAT32_FolderStructure*> children;
+};
+
+struct FAT32_ActiveFile : public ActiveFile
+{
+	FAT32_FolderStructure* file;
+	const char* path;
+};
+
 class FAT32 : public Filesystem
 {
 public:
     FAT32(Device* device);
     ~FAT32();
 
-    virtual int OpenFile(const char* path, void* file) {}
-    virtual int CloseFile(void* file) {}
+    FAT32_ActiveFile* OpenFile(const char* path);
+	FAT32_ActiveFile* CreateFile(const char* path, const char* fileName, uint8_t attributes, uint64_t size);
+	void DeleteFile(FAT32_ActiveFile* file);
+	void CloseFile(FAT32_ActiveFile* file);
 
-    virtual int CreateFile(const char* path) {}
-    virtual int ResizeFile(const char* path, size_t newSize) {}
-    virtual int DeleteFile(const char* path) {}
+	int ReadFile(FAT32_ActiveFile* file, void* buffer, uint64_t nBytes);
+	int WriteFile(FAT32_ActiveFile* file, void* buffer, uint64_t nBytes);
+	int ResizeFile(FAT32_ActiveFile* file, uint64_t new_size);
 
-    virtual int GetDirectoryEntryCount(const char* path, uint64_t* count) {}
-    virtual int GetFile(const char* path, uint64_t index, void* file) {}
+	FAT32_FolderStructure* GetRoot() const { return root; }
+	FAT32_FolderStructure* GetCurrent() const { return current; }
 
-    virtual int Read(void* file, void* buffer, uint64_t size) {}
-    virtual int Write(void* file, void* buffer, uint64_t size) {}
+	void AddToRecords(const char* path, DirEntry entry);
+	void DeleteFromRecords(const char* name);
+
+	const char* GetCurrentDirectory() const;
+
+	FAT32Driver* GetDriver() { return driver; }
+
+	void ListCurrent();
+	void GoTo(char* name);
 
 private:
-    FAT32Driver* driver;
+	FAT32_FolderStructure* RetrieveFromRoot(DirEntry entry);
+
+	FAT32_FolderStructure* GetFolderByCluster(uint32_t cluster);
+	vector<FAT32_FolderStructure*> GetAllEntries(FAT32_FolderStructure* top);
+
+	FAT32Driver* driver;
+
+	FAT32_FolderStructure* root;
+	FAT32_FolderStructure* current;
 };
 
 #endif

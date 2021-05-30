@@ -8,6 +8,9 @@
         "stdio.h": "c",
         "ports.h": "c",
         "framebuffer.h": "c",
-        "idt.h": "c"
+        "idt.h": "c",
+        "cstdarg": "cpp",
+        "cstdio": "cpp",
+        "cstdint": "cpp"
     }
 }

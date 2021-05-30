@@ -2,7 +2,6 @@
 #define FILESYSTEM_H
 
 #include "drivers/device/device.h"
-#include "openfile.h"
 
 #define MAX_OPEN_FILES 256
 
@@ -20,24 +19,34 @@ struct Partition
     uint32_t size;
 };
 
+class ActiveFile
+{
+public:
+    ActiveFile() : seek_position(0) {}
+    ~ActiveFile() {}
+
+public:
+    size_t seek_position;
+};
+
 class Filesystem
 {
 public:
     Filesystem(Device* device) : device(device) {}
     ~Filesystem() {}
 
-    virtual int OpenFile(const char* path, OpenFile* file) = 0;
-    virtual int CloseFile(void* file) = 0;
+    virtual ActiveFile* OpenFile(const char* path) {}
+    virtual int CloseFile(ActiveFile* file) {}
 
-    virtual int CreateFile(const char* path) = 0;
-    virtual int ResizeFile(const char* path, size_t newSize) = 0;
-    virtual int DeleteFile(const char* path) = 0;
+    virtual int CreateFile(const char* path) {}
+    virtual int ResizeFile(const char* path, size_t newSize) {}
+    virtual int DeleteFile(const char* path) {}
 
-    virtual int GetDirectoryEntryCount(const char* path, uint64_t* count) = 0;
-    virtual int GetFile(const char* path, uint64_t index, void* file) = 0;
+    virtual int GetDirectoryEntryCount(const char* path, uint64_t* count) {}
+    virtual int GetFile(const char* path, uint64_t index, ActiveFile* file) {}
 
-    virtual int Read(void* file, void* buffer, uint64_t size) = 0;
-    virtual int Write(void* file, void* buffer, uint64_t size) = 0;
+    virtual int Read(ActiveFile* file, void* buffer, uint64_t size) {}
+    virtual int Write(ActiveFile* file, void* buffer, uint64_t size) {}
 
 private:
     Device* device;

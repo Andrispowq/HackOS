@@ -141,6 +141,9 @@ void InitialiseFilesystem()
     Device* dev0 = new ATADevice();
     fat32_driver = new FAT32Driver(dev0);
 
+    FAT32* fat32_fs = new FAT32(dev0);
+    fat32_fs->ListCurrent();
+
     uint64_t addr;
     Elf64_Ehdr* hdr = LoadProgram(fat32_driver, "~/USR/BIN/USERTEST.ELF", &addr);
     if(hdr == nullptr)

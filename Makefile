@@ -131,6 +131,7 @@ debug:
 	-cpu qemu64 \
 	-m 512M \
 	-net none \
+	-monitor stdio \
 	-d guest_errors,cpu_reset & \
 	gdb -ex "target remote localhost:1234" -ex "symbol-file kernel/bin/kernel.elf" \
 
