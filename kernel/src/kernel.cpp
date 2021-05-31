@@ -14,6 +14,9 @@ uint64_t kernelStart = (uint64_t)&kernel_start;
 uint64_t kernelEnd = (uint64_t)&end;
 
 KernelInfo* kInfo;
+Filesystem* fat32_fs;
+
+#include "fs/fat32/fat32.h"
 
 extern "C" int kernel_main(KernelInfo* info)
 {

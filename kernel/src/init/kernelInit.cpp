@@ -135,12 +135,11 @@ void InitialiseDisplay(KernelInfo* info)
     kprintf("Initialised display (%dx%d)\n\n", info->framebuffer.width, info->framebuffer.height);
 }
 
-FAT32* fat32_fs;
+extern Filesystem* fat32_fs;
 void InitialiseFilesystem()
 {
     Device* dev0 = new ATADevice();
     fat32_fs = new FAT32(dev0);
-    fat32_fs->ListCurrent();
 
     uint64_t addr;
     Elf64_Ehdr* hdr = LoadProgram(fat32_fs, "~/USR/BIN/USERTEST.ELF", &addr);

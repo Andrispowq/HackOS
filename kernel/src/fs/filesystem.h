@@ -3,7 +3,14 @@
 
 #include "drivers/device/device.h"
 
-#define MAX_OPEN_FILES 256
+typedef uint32_t permissions_t;
+
+#define READ_ONLY (0x1 << 0)
+#define HIDDEN (0x1 << 1)
+#define SYSTEM (0x1 << 2)
+#define VOLUME_ID (0x1 << 3)
+#define DIRECTORY (0x1 << 4)
+#define ARCHIVE (0x1 << 5)
 
 struct Partition
 {
@@ -35,22 +42,21 @@ public:
     Filesystem(Device* device) : device(device) {}
     ~Filesystem() {}
 
-    virtual ActiveFile* OpenFile(const char* path) {}
-    virtual int CloseFile(ActiveFile* file) {}
+    virtual ActiveFile* OpenFile(const char* path) = 0;
+    virtual void CloseFile(ActiveFile* file) = 0;
 
-    virtual int CreateFile(const char* path) {}
-    virtual int ResizeFile(const char* path, size_t newSize) {}
-    virtual int DeleteFile(const char* path) {}
+    virtual ActiveFile* CreateFile(const char* path, const char* name, permissions_t permissions) = 0;
+    virtual void ResizeFile(ActiveFile* file, size_t newSize) = 0;
+    virtual void DeleteFile(ActiveFile* file) = 0;
 
-    virtual int GetDirectoryEntryCount(const char* path, uint64_t* count) {}
-    virtual int GetFile(const char* path, uint64_t index, ActiveFile* file) {}
+    virtual uint64_t GetDirectoryEntryCount(const char* path) = 0;
+    virtual ActiveFile* GetFile(const char* path, uint64_t index) = 0;
 
-    virtual int Read(ActiveFile* file, void* buffer, uint64_t size) {}
-    virtual int Write(ActiveFile* file, void* buffer, uint64_t size) {}
+    virtual int Read(ActiveFile* file, void* buffer, uint64_t size) = 0;
+    virtual int Write(ActiveFile* file, void* buffer, uint64_t size) = 0;
 
 private:
     Device* device;
-    uint64_t openFiles[MAX_OPEN_FILES];
 };
 
 #endif

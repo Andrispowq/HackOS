@@ -24,19 +24,21 @@ static uint8_t elf_check_file(Elf64_Ehdr* hdr)
 	return 1;
 }
 
-Elf64_Ehdr* LoadProgram(FAT32* fat32_fs, const char* name, uint64_t* baseAddress)
+#include "fs/fat32/fat32.h"
+
+Elf64_Ehdr* LoadProgram(Filesystem* fs, const char* name, uint64_t* baseAddress)
 {
-	FAT32_ActiveFile* file = fat32_fs->OpenFile(name);
+	ActiveFile* file = fs->OpenFile(name);
 	if(file == nullptr)
 	{
 		kprintf("Failed to open file %s!\n", name);
 		return nullptr;
 	}
 
-	uint64_t size = (uint64_t)file->file->entry.size;
+	uint64_t size = (uint64_t)((FAT32_ActiveFile*)file)->entry.size;
 	uint64_t memory = kmalloc(size);
-	fat32_fs->ReadFile(file, (void*)memory, size);
-	fat32_fs->CloseFile(file);
+	fs->Read(file, (void*)memory, size);
+	fs->CloseFile(file);
 
 	*baseAddress = memory;
 

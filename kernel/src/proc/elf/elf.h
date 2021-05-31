@@ -3,7 +3,7 @@
 
 #include "lib/stdint.h"
 
-#include "fs/fat32/fat32.h"
+#include "fs/filesystem.h"
  
 typedef uint16_t Elf64_Half;
 typedef uint64_t Elf64_Off;
@@ -90,7 +90,7 @@ enum Elf_Type
 
 #define ET_EXEC 	0x02  // ELF is executable
 
-Elf64_Ehdr* LoadProgram(FAT32* fat32_fs, const char* name, uint64_t* baseAddress);
+Elf64_Ehdr* LoadProgram(Filesystem* fs, const char* name, uint64_t* baseAddress);
 void PrepareProgram(Elf64_Ehdr* header, uint64_t baseAddress);
 
 #endif

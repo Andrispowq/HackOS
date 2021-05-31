@@ -19,8 +19,6 @@ uint64_t get_base_pointer()
 
 extern uint32_t tick;
 
-#include "fs/fat32/fat32.h"
-extern FAT32* fat32_fs;
 void shell_command(char* input)
 {
     switch(state)
@@ -33,7 +31,7 @@ void shell_command(char* input)
         break;
     }    
 
-    kprintf("HackOS@%s$ ", fat32_fs->GetCurrentDirectory());
+    kprintf("> ");
 }
 
 void command_mode(char* input)
@@ -71,19 +69,6 @@ void command_mode(char* input)
         kprintf("Entering calculator mode!\nType 'quit' to return to command mode!\n");
 
         state = CALCULATOR_MODE;
-    }
-    else if(check_short_command(input, "ls", 2))
-    {
-        fat32_fs->ListCurrent();
-    }
-    else if(check_short_command(input, "cd ", 3))
-    {
-        size_t len = strlen(input) - 3;
-        char* new_loc = new char[len + 1];
-        memcpy(new_loc, &input[3], len);
-        new_loc[len] = 0;
-        fat32_fs->GoTo(new_loc);
-        delete[] new_loc;
     }
     else if(check_command(input, "swapbuffers"))
     {
