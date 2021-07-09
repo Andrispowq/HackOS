@@ -10,6 +10,9 @@ int check_short_command(char* cmd, const char* text, int length);
 void command_mode(char* input);
 void calculator_mode(char* input);
 
+extern uint32_t tick;
+char working_dir[255];
+
 uint64_t get_stack_pointer()
 {
     asm volatile("mov %rsp, %rax");
@@ -20,8 +23,11 @@ uint64_t get_base_pointer()
     asm volatile("mov %rbp, %rax");
 }
 
-extern uint32_t tick;
-extern Filesystem* fat32_fs;
+void InitialiseShell()
+{
+    memset(working_dir, 0, 255);
+    working_dir[0] = '~';
+}
 
 void shell_command(char* input)
 {
@@ -35,7 +41,7 @@ void shell_command(char* input)
         break;
     }    
 
-    kprintf("$ ");
+    kprintf("root@root:%s$ ", working_dir);
 }
 
 void command_mode(char* input)
@@ -74,15 +80,58 @@ void command_mode(char* input)
 
         state = CALCULATOR_MODE;
     }
-    else if(check_command(input, "ls"))
+    else if(check_short_command(input, "cd ", 3))
     {
-        uint64_t count = fat32_fs->GetDirectoryEntryCount("~/");
-        for(uint64_t i = 0; i < count; i++)
+        if(strlen(input) > 3)
         {
-            ActiveFile* file = fat32_fs->GetFile("~", i);
-            kprintf("%s\n", file->GetName());
+            const char* arg = input + 3;
+            size_t len = strlen(working_dir);
+
+            if((strcmp((char*)arg, "..") == 0) || (strcmp((char*)working_dir, "~")))
+            {
+                for(uint32_t i = len - 1; i >= 0; i--)
+                {
+                    if(working_dir[i] == '/')
+                    {
+                        working_dir[i] = 0;
+                        break;
+                    }
+
+                    working_dir[i] == 0;
+                }
+            }
+            else
+            {
+	            Filesystem* drive_C = filesystems[0];
+                uint64_t count = drive_C->GetDirectoryEntryCount(arg);
+
+                if(count == 0)
+                {
+                    kprintf("Tried to enter a non-directory!\n");
+                }
+
+                working_dir[len] = '/';
+                strcpy(&working_dir[len + 1], arg);
+            }
         }
 
+    }
+    else if(check_command(input, "ls"))
+    {
+	    Filesystem* drive_C = filesystems[0];
+        uint64_t count = drive_C->GetDirectoryEntryCount(working_dir);
+
+        for(uint64_t i = 0; i < count; i++)
+        {
+            ActiveFile* file = drive_C->GetFile(working_dir, i);
+
+            if(file->GetAttributes() & 0x10)
+                kprintf("%s/ ", file->GetName());
+            else
+                kprintf("%s ", file->GetName());
+        }
+
+        kprintf("\n");
         state = COMMAND_MODE;
     }
     else

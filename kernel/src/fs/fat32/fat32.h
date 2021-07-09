@@ -4,10 +4,14 @@
 #include "fs/filesystem.h"
 #include "fat32driver.h"
 
+void LocateFilesystemsFAT32(Device* device);
+
 struct FAT32_ActiveFile : public ActiveFile
 {
     virtual uint64_t GetSize() const override;
     virtual const char* GetName() const override;
+
+    virtual uint32_t GetAttributes() const override;
 
 	DirEntry entry;
 	const char* path;
@@ -16,7 +20,7 @@ struct FAT32_ActiveFile : public ActiveFile
 class FAT32 : public Filesystem
 {
 public:
-    FAT32(Device* device);
+    FAT32(Device* device, uint32_t part_start);
     ~FAT32();
 
     virtual ActiveFile* OpenFile(const char* path) override;

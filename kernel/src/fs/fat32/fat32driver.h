@@ -11,7 +11,7 @@
 class FAT32Driver
 {
 public:
-    FAT32Driver(Device* device);
+    FAT32Driver(Device* device, uint32_t part_start);
     ~FAT32Driver();
 
 	vector<DirEntry> GetDirectories(uint32_t cluster, uint32_t filter_attributes, bool exclude);
@@ -33,6 +33,8 @@ public:
 	int ResizeFile(DirEntry fileMeta, uint32_t new_size);
 
 	uint32_t GetRootDirStart() const { return RootDirStart; }
+
+	static vector<FAT32Driver*> LocateFilesystemsFAT32(Device* device);
 
 private:
 	uint32_t ReadFAT(uint32_t cluster);

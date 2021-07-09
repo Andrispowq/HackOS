@@ -3,6 +3,8 @@
 
 #include "drivers/device/device.h"
 
+#define MAX_FILESYSTEMS MAX_DEVICE_COUNT * 4
+
 typedef uint32_t permissions_t;
 
 #define READ_ONLY (0x1 << 0)
@@ -35,6 +37,8 @@ public:
     virtual uint64_t GetSize() const = 0;
     virtual const char* GetName() const = 0;
 
+    virtual uint32_t GetAttributes() const = 0;
+
 public:
     size_t seek_position;
 };
@@ -42,7 +46,7 @@ public:
 class Filesystem
 {
 public:
-    Filesystem(Device* device) : device(device) {}
+    Filesystem(Device* device, uint32_t part_start) : device(device), PartitionStart(part_start) {}
     ~Filesystem() {}
 
     virtual ActiveFile* OpenFile(const char* path) = 0;
@@ -60,6 +64,13 @@ public:
 
 private:
     Device* device;
+    uint32_t PartitionStart;
 };
+
+extern Filesystem* filesystems[MAX_FILESYSTEMS];
+
+void InitialiseFilesystems();
+void RegisterFilesystem(Filesystem* filesystem);
+void UnregisterFilesystem(Filesystem* filesystem); //Doesn't delete the device
 
 #endif

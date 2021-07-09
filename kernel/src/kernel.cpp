@@ -14,7 +14,6 @@ uint64_t kernelStart = (uint64_t)&kernel_start;
 uint64_t kernelEnd = (uint64_t)&end;
 
 KernelInfo* kInfo;
-Filesystem* fat32_fs;
 
 extern "C" int kernel_main(KernelInfo* info)
 {
@@ -24,7 +23,10 @@ extern "C" int kernel_main(KernelInfo* info)
     InitialiseKernel(info);
 
     kprintf("Finished the initialisation!\n");
-    kprintf("Type 'help' for help!\n$ ");
+    kprintf("Type 'help' for help!\n");
+    kprintf("root@root:~/dev/hda/$ ");
+
+    InitialiseShell();
 
     while(1)
     {

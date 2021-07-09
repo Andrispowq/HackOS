@@ -4,6 +4,31 @@
 #include "lib/string.h"
 #include "lib/stdio.h"
 
+extern uint8_t fromUEFI;
+
+void LocateFilesystemsFAT32(Device* device)
+{
+	//The MBR is still at 0x0600, extract the boot partition's start LBA
+    uint32_t* MBR = (uint32_t*)0x0600;
+
+	//On UEFI, we don't have partitions for now
+	if(!fromUEFI)
+	{
+    	uint64_t BaseOffset = 446;
+		Partition* part = (Partition*)((uint64_t)MBR + BaseOffset); //the 2nd partition contains the FAT32 filesystem 
+		
+		for(uint32_t i = 0; i < 4; i++)
+		{
+			if(part->filesystem == 0x0B)
+			{
+				RegisterFilesystem(new FAT32(device, part->LBA_start));
+			}
+
+			part++;
+		}
+	}
+}
+
 uint64_t FAT32_ActiveFile::GetSize() const
 {
 	return entry.size;
@@ -14,10 +39,16 @@ const char* FAT32_ActiveFile::GetName() const
 	return entry.name;
 }
 
-FAT32::FAT32(Device* device)
-	: Filesystem(device)
+
+uint32_t FAT32_ActiveFile::GetAttributes() const
 {
-	driver = new FAT32Driver(device);
+	return (uint32_t)entry.attributes;
+}
+
+FAT32::FAT32(Device* device, uint32_t part_start)
+	: Filesystem(device, part_start)
+{
+	driver = new FAT32Driver(device, part_start);
 }
 
 FAT32::~FAT32()
@@ -101,11 +132,15 @@ void FAT32::DeleteFile(ActiveFile* file)
 uint64_t FAT32::GetDirectoryEntryCount(const char* path)
 {
 	DirEntry entry;
-	driver->OpenFile(path, &entry);
+	int ret = driver->OpenFile(path, &entry);
+	if	(ret != 0)
+	{
+		return 0;
+	}
 
 	vector<DirEntry> entries = driver->GetDirectories(entry.cluster, 0, false);
 	
-	if((strcmp((char*)path, (char*)"~") == 0) || (strcmp((char*)path, (char*)"~/") == 0))
+	if(strcmp((char*)path, (char*)"~") == 0)
 	{
 		return entries.size();
 	}
@@ -133,11 +168,12 @@ ActiveFile* FAT32::GetFile(const char* path, uint64_t index)
 
 		size_t pathlen = strlen((char*)path);
 		size_t namelen = strlen(file.name);
-		char* totalPath = new char[pathlen + namelen + 2];
+		size_t totalLen = pathlen + namelen + 1;
+		char* totalPath = new char[totalLen + 1];
 		memcpy(totalPath, path, pathlen);
 		totalPath[pathlen] = '/';
 		memcpy(&totalPath[pathlen + 1], file.name, namelen);
-		totalPath[pathlen + 1 + namelen] = 0;
+		totalPath[pathlen + namelen + 1] = 0;
 
 		ActiveFile* opened = OpenFile(totalPath);
 		delete[] totalPath;

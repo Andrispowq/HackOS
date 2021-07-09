@@ -124,6 +124,11 @@ static void keyboard_callback(Registers* regs)
             if(!(control_keys & 0x1) && (letter >= 'A' && letter <= 'Z'))
                 letter += ('a' - 'A'); //If shift is not down, we display a lowercase letter
 
+            if(control_keys & (0x1 << 3))
+            {
+                letter = '~';
+            }
+
             /* Remember that printf only accepts char[] */
             char str[2] = { letter, '\0' };
             append(key_buffer, letter);

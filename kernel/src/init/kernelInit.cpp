@@ -135,14 +135,10 @@ void InitialiseDisplay(KernelInfo* info)
     kprintf("Initialised display (%dx%d)\n\n", info->framebuffer.width, info->framebuffer.height);
 }
 
-extern Filesystem* fat32_fs;
 void InitialiseFilesystem()
 {
-    Device* dev0 = new ATADevice();
-    fat32_fs = new FAT32(dev0);
-
     uint64_t addr;
-    Elf64_Ehdr* hdr = LoadProgram(fat32_fs, "~/USR/BIN/USERTEST.ELF", &addr);
+    Elf64_Ehdr* hdr = LoadProgram("~/USR/BIN/USERTEST.ELF", &addr);
     if(hdr == nullptr)
     {
         return;
@@ -160,10 +156,13 @@ void InitialiseKernel(struct KernelInfo* info)
     kprintf("Initialising the kernel heap!\n");
     InitialiseHeap((void*)0x0000100000000000, 0x1000);
 
-    //Initialise the devices, before the RSDP and the PCI bus
+    //Initialise the devices and filesystem, before the RSDP and the PCI bus
     InitialiseDevices();
+    InitialiseFilesystems();
+
     ATADevice* device = new ATADevice(); //Let's just assume this is here
     RegisterDevice(device);
+    LocateFilesystemsFAT32(device);
 
     InitialiseRSDP(info);
 

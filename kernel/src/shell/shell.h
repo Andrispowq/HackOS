@@ -11,6 +11,7 @@
 
 static int state = COMMAND_MODE;
 
+void InitialiseShell();
 void shell_command(char* input);
 
 #endif

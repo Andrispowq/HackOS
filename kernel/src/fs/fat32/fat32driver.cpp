@@ -10,8 +10,8 @@
 
 extern uint8_t fromUEFI;
 
-FAT32Driver::FAT32Driver(Device* device)
-	: device(device)
+FAT32Driver::FAT32Driver(Device* device, uint32_t part_start)
+	: device(device), PartitionStart(part_start)
 {
     //The MBR is still at 0x0600, extract the boot partition's start LBA
     uint32_t* MBR = (uint32_t*)0x0600;
@@ -821,7 +821,7 @@ uint32_t FAT32Driver::GetClusterFromFilePath(const char* filePath, DirEntry* ent
 	DirEntry fileInfo;
 
 	uint32_t iterator = 2;
-	if ((strcmp((char*)filePath, "~/") == 0) || (strcmp((char*)filePath, "~") == 0))
+	if (strcmp((char*)filePath, "~") == 0)
 	{
 		fileInfo.attributes = FILE_DIRECTORY | FILE_VOLUME_ID;
 		fileInfo.size = 0;
