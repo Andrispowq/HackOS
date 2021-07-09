@@ -32,6 +32,9 @@ public:
     ActiveFile() : seek_position(0) {}
     ~ActiveFile() {}
 
+    virtual uint64_t GetSize() const = 0;
+    virtual const char* GetName() const = 0;
+
 public:
     size_t seek_position;
 };

@@ -160,9 +160,14 @@ void InitialiseKernel(struct KernelInfo* info)
     kprintf("Initialising the kernel heap!\n");
     InitialiseHeap((void*)0x0000100000000000, 0x1000);
 
+    //Initialise the devices, before the RSDP and the PCI bus
+    InitialiseDevices();
+    ATADevice* device = new ATADevice(); //Let's just assume this is here
+    RegisterDevice(device);
+
     InitialiseRSDP(info);
 
-    if(info->booted_from_BIOS) InitialiseFilesystem();
+    InitialiseFilesystem();
     kprintf("Kernel is initialised, IRQs are launching!\n");
 
     InitialiseIRQ();

@@ -4,6 +4,16 @@
 #include "lib/string.h"
 #include "lib/stdio.h"
 
+uint64_t FAT32_ActiveFile::GetSize() const
+{
+	return entry.size;
+}
+
+const char* FAT32_ActiveFile::GetName() const
+{
+	return entry.name;
+}
+
 FAT32::FAT32(Device* device)
 	: Filesystem(device)
 {
@@ -70,6 +80,7 @@ ActiveFile* FAT32::CreateFile(const char* path, const char* name, permissions_t 
 
 	FAT32_ActiveFile* file = new FAT32_ActiveFile();
 	file->path = ptr;
+	file->entry = entry;
 
 	return (ActiveFile*)file;
 }
@@ -94,7 +105,7 @@ uint64_t FAT32::GetDirectoryEntryCount(const char* path)
 
 	vector<DirEntry> entries = driver->GetDirectories(entry.cluster, 0, false);
 	
-	if(strcmp((char*)path, (char*)"~") == 0)
+	if((strcmp((char*)path, (char*)"~") == 0) || (strcmp((char*)path, (char*)"~/") == 0))
 	{
 		return entries.size();
 	}

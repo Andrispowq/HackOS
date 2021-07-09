@@ -24,8 +24,6 @@ public:
     void put_backspace();
     void clear();
 
-    void PresentBackbuffer();
-
     static Display* SharedDisplay();
 
 public:

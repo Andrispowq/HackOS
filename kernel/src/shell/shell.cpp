@@ -1,6 +1,9 @@
 #include "shell.h"
 #include "arch/x86_64/timer/rtc.h"
 
+#include "fs/filesystem.h"
+#include "lib/data_structures/vector.h"
+
 int check_command(char* cmd, const char* text);
 int check_short_command(char* cmd, const char* text, int length);
 
@@ -18,6 +21,7 @@ uint64_t get_base_pointer()
 }
 
 extern uint32_t tick;
+extern Filesystem* fat32_fs;
 
 void shell_command(char* input)
 {
@@ -31,7 +35,7 @@ void shell_command(char* input)
         break;
     }    
 
-    kprintf("> ");
+    kprintf("$ ");
 }
 
 void command_mode(char* input)
@@ -70,9 +74,14 @@ void command_mode(char* input)
 
         state = CALCULATOR_MODE;
     }
-    else if(check_command(input, "swapbuffers"))
+    else if(check_command(input, "ls"))
     {
-        Display::SharedDisplay()->PresentBackbuffer();
+        uint64_t count = fat32_fs->GetDirectoryEntryCount("~/");
+        for(uint64_t i = 0; i < count; i++)
+        {
+            ActiveFile* file = fat32_fs->GetFile("~", i);
+            kprintf("%s\n", file->GetName());
+        }
 
         state = COMMAND_MODE;
     }

@@ -821,7 +821,7 @@ uint32_t FAT32Driver::GetClusterFromFilePath(const char* filePath, DirEntry* ent
 	DirEntry fileInfo;
 
 	uint32_t iterator = 2;
-	if (strcmp((char*)filePath, "~") == 0)
+	if ((strcmp((char*)filePath, "~/") == 0) || (strcmp((char*)filePath, "~") == 0))
 	{
 		fileInfo.attributes = FILE_DIRECTORY | FILE_VOLUME_ID;
 		fileInfo.size = 0;

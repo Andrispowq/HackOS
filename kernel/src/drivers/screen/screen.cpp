@@ -29,12 +29,6 @@ void InitialiseDisplay(Framebuffer framebuffer, PSF1_FONT* font)
         KernelDirectory.MapMemory(i, i, (uint64_t)PageTableFlags::Present | (uint64_t)PageTableFlags::Writable | (uint64_t)PageTableFlags::CacheDisabled);
     }
 
-    display.backbuffer.width = framebuffer.width;
-    display.backbuffer.height = framebuffer.height;
-    display.backbuffer.bpp = framebuffer.bpp;
-    display.backbuffer.pitch = framebuffer.pitch;
-    display.backbuffer.address = nullptr;
-
     display.framebuffer = framebuffer;
     display.console.fontColour = 0xFF00FFFF;
     display.console.bgColour = 0xFF505050;
@@ -236,22 +230,4 @@ int Display::putc(char ch)
     display.console.current_y = y;
 
     return 0;
-}
-
-static uint32_t* middleBuffer = nullptr;
-void Display::PresentBackbuffer()
-{
-    uint64_t size = framebuffer.width * framebuffer.height * 4;
-    if(!middleBuffer)
-    {
-        middleBuffer = (uint32_t*)kmalloc(size);
-    }
-
-    asm("cli");
-
-    memcpy(middleBuffer, framebuffer.address, size);
-    memcpy(framebuffer.address, backbuffer.address, size);
-    memcpy(middleBuffer, backbuffer.address, size);
-
-    asm("sti");
 }

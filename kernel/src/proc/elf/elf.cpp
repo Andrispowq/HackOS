@@ -35,7 +35,7 @@ Elf64_Ehdr* LoadProgram(Filesystem* fs, const char* name, uint64_t* baseAddress)
 		return nullptr;
 	}
 
-	uint64_t size = (uint64_t)((FAT32_ActiveFile*)file)->entry.size;
+	uint64_t size = file->GetSize();
 	uint64_t memory = kmalloc(size);
 	fs->Read(file, (void*)memory, size);
 	fs->CloseFile(file);

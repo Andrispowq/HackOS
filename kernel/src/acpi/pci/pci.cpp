@@ -1,8 +1,9 @@
 #include "pci.h"
 
 #include "arch/x86_64/paging/paging.h"
-
 #include "lib/stdio.h"
+
+#include "drivers/ahci/ahci_device.h"
 
 extern PageTableManager KernelDirectory;
 
@@ -27,7 +28,7 @@ namespace PCI
             GetSubclassName(pciDeviceHeader->Class, pciDeviceHeader->Subclass),
             GetProgIFName(pciDeviceHeader->Class, pciDeviceHeader->Subclass, pciDeviceHeader->ProgIF));
 
-        /*switch (pciDeviceHeader->Class)
+        switch (pciDeviceHeader->Class)
         {
         case 0x01: // mass storage controller
             switch (pciDeviceHeader->Subclass)
@@ -36,10 +37,16 @@ namespace PCI
                 switch (pciDeviceHeader->ProgIF)
                 {
                 case 0x01: //AHCI 1.0 device
-                    new AHCI::AHCIDriver(pciDeviceHeader);
+                    AHCI::AHCIDriver* driver = new AHCI::AHCIDriver(pciDeviceHeader);
+                    vector<AHCI::AHCIDevice*> devices = driver->PreparePorts();
+
+                    for(uint32_t i = 0; i < devices.size(); i++)
+                    {
+                        RegisterDevice(devices[i]);
+                    }
                 }
             }
-        }*/
+        }
     }
 
     void EnumerateDevice(uint64_t busAddress, uint64_t device)
