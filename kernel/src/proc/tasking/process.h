@@ -13,6 +13,9 @@
 
 #define STACK_SIZE 4096
 
+void MoveStack(void* new_stack_start, uint64_t size);
+extern "C" void JumpToECX(uint64_t rip, uint64_t pageDirAddr, uint64_t rbp, uint64_t rsp);
+
 class Process
 {
 public:
@@ -25,6 +28,7 @@ public:
     PageTableManager* pageTable;
     uint64_t pid;
     uint64_t rsp, rbp, rip;
+    uint64_t original_stack_top;
     uint64_t state;
     char* name;
 

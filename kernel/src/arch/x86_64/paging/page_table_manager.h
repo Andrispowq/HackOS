@@ -26,6 +26,8 @@ public:
     paddr_t PhysicalAddress(vaddr_t virtualAddress);
 
     void SetAsCurrent();
+
+    PageTable* GetPML4() { return pml4; }
 private:
     PageTable* pml4;
 };

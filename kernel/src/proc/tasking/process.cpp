@@ -8,49 +8,109 @@ Process* ready_queue;
 uint64_t next_pid = 0;
 uint8_t __enabled = 0;
 
-extern uint64_t initial_esp;
+extern uint64_t initial_rsp;
+extern PageTableManager* CurrentDirectory;
 extern PageTableManager* KernelDirectory;
 
 extern void EnableTasking();
 extern void StartTask(uint64_t index);
 
-void task_confirm()
+Process::Process(const char* name, void* rip)
+    : name((char*)name), rip((uint64_t)rip)
 {
-	kprintf("Tasking is running!\n");
-    _Kill();
+    pid = ++next_pid;
+    state = PROCESS_STATE_ALIVE;
+    
+    next = nullptr;
+    rsp = kmalloc(STACK_SIZE);
+    uint64_t* stack = (uint64_t*)(rsp + 4096);
+    rbp = (uint64_t)stack;
+    original_stack_top = rbp;
+	*--stack = 0x00000202; //rflags
+	*--stack = 0x8; //cs
+	*--stack = (uint64_t)rip; //rip
+	*--stack = 0; //rax
+	*--stack = 0; //rbx
+	*--stack = 0; //rcx;
+	*--stack = 0; //rdx
+	*--stack = 0; //rsi
+	*--stack = 0; //rdi
+	*--stack = rsp + 4096; //rbp
+	*--stack = 0x10; //ds
+	*--stack = 0x10; //fs
+	*--stack = 0x10; //es
+	*--stack = 0x10; //gs
+	rsp = (uint64_t)stack;
 }
 
-void idle_thread()
+Process::~Process()
 {
-    EnableTasking();
-	__enabled = 1;
-    while(true);
+    delete pageTable;
+    kfree((void*)original_stack_top);
 }
 
-void Kill(uint64_t pid)
+void Process::notify(int signal)
 {
-	if(pid == 1) kprintf("Idle can't be killed!\n");
-	if(pid == current_process->pid) _Kill();
-
-	Process* orig = current_process;
-	Process* curr = orig;
-
-	while(curr)
+	switch(signal)
 	{
-		if(curr->pid == pid) 
-        {
-			kprintf("Process %s (%d) was set to ZOMBIE.\n", curr->name, pid);
-			curr->state = PROCESS_STATE_ZOMBIE;
-			break;
-		}
-
-		curr = curr->next;
+	case SIG_ILL:
+		kprintf("Received SIGILL, terminating!\n");
+		_Kill();
+		break;
+	case SIG_TERM:
+		kprintf("Received SIGTERM, terminating!\n");
+		_Kill();
+	case SIG_SEGV:
+		kprintf("Received SIGSEGV, terminating!\n");
+		_Kill();
+	default:
+		kprintf("Received unknown SIG!\n");
+		return;
 	}
 }
 
-void SendSignal(int signal)
+/* This adds a process while no others are running! */
+void __AddProcess(Process* p)
 {
-	current_process->notify(signal);
+    Process* tmp = ready_queue;
+    while (tmp->next)
+       tmp = tmp->next;
+
+    tmp->next = p;
+    return;
+}
+
+/* add process but take care of others also! */
+uint64_t addProcess(Process* p)
+{
+	StartTask(0);
+	__AddProcess(p);
+	StartTask(1);
+	return p->pid;
+}
+
+bool IsRunning(uint64_t pid)
+{
+	StartTask(0);
+
+	Process* p = current_process;
+	Process* orig = current_process;
+
+	bool ret = false;
+	while(true)
+	{
+		if(p->pid == pid)  
+        { 
+            ret = true; 
+            break;
+        }
+
+		p = p->next;
+		if(p == orig) break;
+	}
+
+	StartTask(1);
+	return ret;
 }
 
 bool IsTaskingOnline()
@@ -61,6 +121,28 @@ bool IsTaskingOnline()
 Process* GetRunningProcess()
 {
 	return current_process;
+}
+
+void SendSignal(int signal)
+{
+	current_process->notify(signal);
+}
+
+void PrintAll()
+{
+	Process* orig = current_process;
+	Process* p = orig;
+
+	while(true)
+	{
+		kprintf("Process: %s (%d) %s\n", p->name, p->pid,
+			p->state == PROCESS_STATE_ZOMBIE ? "ZOMBIE":
+					p->state==PROCESS_STATE_ALIVE ? "ALIVE" : "DEAD");
+		p = p->next;
+
+		if(p == orig) 
+            break;
+	}
 }
 
 void _Kill()
@@ -90,7 +172,7 @@ void _Kill()
         tmp = tmp->next;
     }
 
-	kfree(current_process);
+	delete current_process;
 	StartTask(1);
 
 	asm volatile("sti");
@@ -98,216 +180,134 @@ void _Kill()
 	ScheduleIRQ();
 }
 
-void PrintAll()
+void Kill(uint64_t pid)
 {
+	if(pid == 1) kprintf("Idle can't be killed!\n");
+	if(pid == current_process->pid) _Kill();
+
 	Process* orig = current_process;
-	Process* p = orig;
+	Process* curr = orig;
 
-	while(true)
+	while(curr)
 	{
-		kprintf("Process: %s (%d) %s\n", p->name, p->pid,
-			p->state == PROCESS_STATE_ZOMBIE ? "ZOMBIE":
-					p->state==PROCESS_STATE_ALIVE ? "ALIVE" : "DEAD");
-		p = p->next;
+		if(curr->pid == pid) 
+        {
+			kprintf("Process %s (%d) was set to ZOMBIE.\n", curr->name, pid);
+			curr->state = PROCESS_STATE_ZOMBIE;
+			break;
+		}
 
-		if(p == orig) 
-            break;
+		curr = curr->next;
 	}
-}
-
-bool IsRunning(uint64_t pid)
-{
-	StartTask(0);
-
-	Process* p = current_process;
-	Process* orig = current_process;
-
-	bool ret = false;
-	while(true)
-	{
-		if(p->pid == pid)  
-        { 
-            ret = true; 
-            break;
-        }
-
-		p = p->next;
-		if(p == orig) break;
-	}
-
-	StartTask(1);
-	return ret;
-}
-
-Process::Process(const char* name, void* rip)
-    : name(name), rip(rip)
-{
-    pid = ++next_pid;
-    state = PROCESS_STATE_ALIVE;
-    
-    next = nullptr;
-    rsp = kmalloc(STACK_SIZE);
-    uint64_t* stack = (uint64_t*)(rsp + 4096);
-    rbp = (uint64_t)stack;
-	*--stack = 0x00000202; //rflags
-	*--stack = 0x8; //cs
-	*--stack = (uint64_t)rip; //rip
-	*--stack = 0; //rax
-	*--stack = 0; //rbx
-	*--stack = 0; //rcx;
-	*--stack = 0; //rdx
-	*--stack = 0; //rsi
-	*--stack = 0; //rdi
-	*--stack = rsp + 4096; //rbp
-	*--stack = 0x10; //ds
-	*--stack = 0x10; //fs
-	*--stack = 0x10; //es
-	*--stack = 0x10; //gs
-	rsp = (uint64_t)stack;
-}
-
-Process::~Process()
-{
-    
-}
-
-void Process::notify(int signal)
-{
-	switch(signal)
-	{
-	case SIG_ILL:
-		kprintf("Received SIGILL, terminating!\n");
-		_Kill();
-		break;
-	case SIG_TERM:
-		kprintf("Received SIGTERM, terminating!\n");
-		_Kill();
-	case SIG_SEGV:
-		kprintf("Received SIGSEGV, terminating!\n");
-		_Kill();
-	default:
-		kprintf("Received unknown SIG!\n");
-		return;
-	}
-}
-
-/* This adds a process while no others are running! */
-void __addProcess(PROCESS* p)
-{
-    PROCESS* tmp = ready_queue;
-    while (tmp->next)
-       tmp = tmp->next;
-
-    tmp->next = p;
-    return;
-}
-
-/* add process but take care of others also! */
-int addProcess(PROCESS* p)
-{
-	set_task(0);
-	__addProcess(p);
-	set_task(1);
-	return p->id;
 }
 
 void __exec()
 {
-    uint32_t esp, ebp, eip;
-    eip = cp->eip;
-    esp = cp->esp;
-    ebp = cp->ebp;
+    uint32_t rsp, rbp, rip;
+    rip = current_process->rip;
+    rsp = current_process->rsp;
+    rbp = current_process->rbp;
 
-    current_directory = cp->page_directory;
-
-    //printf("ESP: %x, EBP: %x, EIP: %x, curr_dir: %x\n", esp, ebp, eip, current_directory->physicalAddr);
-    jump_to_ecx(eip, current_directory->physicalAddr, ebp, esp);
+    CurrentDirectory = current_process->pageTable;
+    JumpToECX(rip, (uint64_t)CurrentDirectory->GetPML4(), rbp, rsp);
 }
 
-void schedule_noirq()
+void ScheduleIRQ()
 {
-	if(!__enabled) return;
+	if(!__enabled) 
+        return;
+    
 	asm volatile("int $0x2E");
 	return;
 }
 
-void schedule()
+void Schedule()
 {
-    uint32_t esp, ebp, eip;
+    current_process = current_process->next;
+    if(!current_process) current_process = ready_queue; //If we're at the end, start over again
 
-    cp = cp->next;
-    if(!cp) cp = ready_queue; //If we're at the end, start over again
+    uint32_t rsp, rbp, rip;
+    rip = current_process->rip;
+    rsp = current_process->rsp;
+    rbp = current_process->rbp;
 
-    eip = cp->eip;
-    esp = cp->esp;
-    ebp = cp->ebp;
-
-    current_directory = cp->page_directory;
-
-    //printf("ESP: %x, EBP: %x, EIP: %x, curr_dir: %x\n", esp, ebp, eip, current_directory->physicalAddr);
-    jump_to_ecx(eip, current_directory->physicalAddr, ebp, esp);
+    CurrentDirectory = current_process->pageTable;
+    JumpToECX(rip, (uint64_t)CurrentDirectory->GetPML4(), rbp, rsp);
 }
 
-void initialise_tasking()
+void InitialiseTasking()
 {
     // Relocate the stack so we know where it is
-    move_stack((void*)0xE0000000, 0x2000);
+    MoveStack((void*)0x000700000000000, 0x2000);
 
-	cp = createProcess("kernel_idle", idle_thread);
-	cp->next = 0;
-    ready_queue = cp;
+	current_process = new Process("kernel_idle", (void*)idle_thread);
+    ready_queue = current_process;
 
-	__addProcess(createProcess("task_confirm", task_confirm));
-	__addProcess(createProcess("kernel", kernel_task));
+	__AddProcess(new Process("task_confirm", (void*)task_confirm));
+	//__AddProcess(new Process("kernel", kernel_task));
 	__exec();
 
     asm volatile("sti");
 
-	printf("Failed to start tasking!");
+	kprintf("Failed to start tasking!");
 }
 
-void move_stack(void* new_stack_start, uint32_t size)
+void task_confirm()
 {
-    uint32_t i;
+	kprintf("Tasking is running!\n");
+    _Kill();
+}
 
-    for(i = (uint32_t)new_stack_start; i >= ((uint32_t)new_stack_start - size);
+void idle_thread()
+{
+    EnableTasking();
+	__enabled = 1;
+    while(true);
+}
+
+void MoveStack(void* new_stack_start, uint64_t size)
+{
+    uint64_t i;
+
+    for(i = (uint64_t)new_stack_start; i >= ((uint64_t)new_stack_start - size);
         i -= 0x1000)
     {
-        alloc_frame(get_page(i, 1, current_directory), 0, 1);
+        uint64_t addr = (uint64_t)PageFrameAllocator::SharedAllocator()->RequestPage();
+        CurrentDirectory->MapMemory(addr, addr);
     }
 
     // Flush the TLB by reading and writing the page directory address again.
-    uint32_t pd_addr;
+    uint64_t pd_addr;
     asm volatile("mov %%cr3, %0" : "=r" (pd_addr));
     asm volatile("mov %0, %%cr3" : : "r" (pd_addr)); 
 
-    uint32_t old_stack_pointer; 
-    asm volatile("mov %%esp, %0" : "=r" (old_stack_pointer));
+    uint64_t old_stack_pointer; 
+    asm volatile("mov %%rsp, %0" : "=r" (old_stack_pointer));
 
-    uint32_t old_base_pointer;  
-    asm volatile("mov %%ebp, %0" : "=r" (old_base_pointer));
+    uint64_t old_base_pointer;  
+    asm volatile("mov %%rbp, %0" : "=r" (old_base_pointer));
 
-    uint32_t offset = (uint32_t)new_stack_start - initial_esp; 
-    uint32_t new_stack_pointer = old_stack_pointer + offset;
-    uint32_t new_base_pointer = old_base_pointer + offset; 
+    uint64_t offset = (uint64_t)new_stack_start - initial_rsp; 
+    uint64_t new_stack_pointer = old_stack_pointer + offset;
+    uint64_t new_base_pointer = old_base_pointer + offset; 
 
-    memcpy((void*)new_stack_pointer, (void*)old_stack_pointer, initial_esp - old_stack_pointer);
+    memcpy((void*)new_stack_pointer, (void*)old_stack_pointer, initial_rsp - old_stack_pointer);
 
     // Backtrace through the original stack, copying new values into
     // the new stack.
-    for(i = (uint32_t)new_stack_start; i > (uint32_t)new_stack_start - size; i -= 4)
+    for(i = (uint64_t)new_stack_start; i > (uint64_t)new_stack_start - size; i -= 4)
     {
-        uint32_t tmp = *(uint32_t*)i;
+        uint64_t tmp = *(uint64_t*)i;
 
-        if ((old_stack_pointer < tmp) && (tmp < initial_esp))
+        if ((old_stack_pointer < tmp) && (tmp < initial_rsp))
         {
             tmp = tmp + offset;
-            uint32_t* tmp2 = (uint32_t*)i;
+            uint64_t* tmp2 = (uint64_t*)i;
             *tmp2 = tmp;
         }
     }
 
     // Change stacks.
-    asm volatile("mov %0, %%esp" : : "r" (new_stack_pointer));
-    asm volatile("mov %0, %%ebp" : : "r" (new_base_pointer));
+    asm volatile("mov %0, %%rsp" : : "r" (new_stack_pointer));
+    asm volatile("mov %0, %%rbp" : : "r" (new_base_pointer));
 }
