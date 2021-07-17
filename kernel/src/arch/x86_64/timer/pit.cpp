@@ -6,6 +6,20 @@
 #include "lib/function.h"
 
 uint32_t tick = 0;
+static uint64_t task = 0;
+static uint8_t task_was_on = 0;
+
+void StartTask(uint64_t index)
+{
+	if(!task_was_on) return;
+	task = index;
+}
+
+void EnableTasking()
+{
+	task_was_on = 1;
+	task = 1;
+}
 
 uint32_t frequency;
 double timeSinceBoot = 0.0;

@@ -1,7 +1,7 @@
 #ifndef PROCESS_H
 #define PROCESS_H
 
-#include "paging/paging.h"
+#include "arch/x86_64/paging/paging.h"
 
 #define PROCESS_STATE_ALIVE 0
 #define PROCESS_STATE_ZOMBIE 1
@@ -14,7 +14,7 @@
 #define STACK_SIZE 4096
 
 void MoveStack(void* new_stack_start, uint64_t size);
-extern "C" void JumpToECX(uint64_t rip, uint64_t pageDirAddr, uint64_t rbp, uint64_t rsp);
+extern "C" void JumpToAddress(uint64_t rip, uint64_t pageDirAddr, uint64_t rbp, uint64_t rsp);
 
 class Process
 {

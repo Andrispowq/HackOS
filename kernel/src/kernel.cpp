@@ -10,6 +10,7 @@ extern double timeSinceBoot;
 
 extern uint32_t kernel_start, end;
 
+uint64_t initial_rsp;
 uint64_t kernelStart = (uint64_t)&kernel_start;
 uint64_t kernelEnd = (uint64_t)&end;
 
@@ -18,6 +19,7 @@ KernelInfo* kInfo;
 extern "C" int kernel_main(KernelInfo* info)
 {
     kInfo = info;
+    initial_rsp = 0x7C00;
 
     InitialiseDisplay(info);
     InitialiseKernel(info);

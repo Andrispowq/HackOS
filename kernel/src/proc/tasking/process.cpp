@@ -10,7 +10,7 @@ uint8_t __enabled = 0;
 
 extern uint64_t initial_rsp;
 extern PageTableManager* CurrentDirectory;
-extern PageTableManager* KernelDirectory;
+extern PageTableManager KernelDirectory;
 
 extern void EnableTasking();
 extern void StartTask(uint64_t index);
@@ -41,6 +41,8 @@ Process::Process(const char* name, void* rip)
 	*--stack = 0x10; //es
 	*--stack = 0x10; //gs
 	rsp = (uint64_t)stack;
+
+	pageTable = CurrentDirectory->Clone();
 }
 
 Process::~Process()
@@ -209,7 +211,7 @@ void __exec()
     rbp = current_process->rbp;
 
     CurrentDirectory = current_process->pageTable;
-    JumpToECX(rip, (uint64_t)CurrentDirectory->GetPML4(), rbp, rsp);
+    JumpToAddress(rip, (uint64_t)CurrentDirectory->GetPML4(), rbp, rsp);
 }
 
 void ScheduleIRQ()
@@ -232,24 +234,7 @@ void Schedule()
     rbp = current_process->rbp;
 
     CurrentDirectory = current_process->pageTable;
-    JumpToECX(rip, (uint64_t)CurrentDirectory->GetPML4(), rbp, rsp);
-}
-
-void InitialiseTasking()
-{
-    // Relocate the stack so we know where it is
-    MoveStack((void*)0x000700000000000, 0x2000);
-
-	current_process = new Process("kernel_idle", (void*)idle_thread);
-    ready_queue = current_process;
-
-	__AddProcess(new Process("task_confirm", (void*)task_confirm));
-	//__AddProcess(new Process("kernel", kernel_task));
-	__exec();
-
-    asm volatile("sti");
-
-	kprintf("Failed to start tasking!");
+    JumpToAddress(rip, (uint64_t)CurrentDirectory->GetPML4(), rbp, rsp);
 }
 
 void task_confirm()
@@ -265,6 +250,23 @@ void idle_thread()
     while(true);
 }
 
+void InitialiseTasking()
+{
+    // Relocate the stack so we know where it is
+    //MoveStack((void*)0x000700000000000, 0x2000);
+
+	current_process = new Process("kernel_idle", (void*)idle_thread);
+    ready_queue = current_process;
+
+	__AddProcess(new Process("task_confirm", (void*)task_confirm));
+	//__AddProcess(new Process("kernel", kernel_task));
+	__exec();
+
+    asm volatile("sti");
+
+	kprintf("Failed to start tasking!");
+}
+
 void MoveStack(void* new_stack_start, uint64_t size)
 {
     uint64_t i;
@@ -273,7 +275,7 @@ void MoveStack(void* new_stack_start, uint64_t size)
         i -= 0x1000)
     {
         uint64_t addr = (uint64_t)PageFrameAllocator::SharedAllocator()->RequestPage();
-        CurrentDirectory->MapMemory(addr, addr);
+        CurrentDirectory->MapMemory(i, addr);
     }
 
     // Flush the TLB by reading and writing the page directory address again.

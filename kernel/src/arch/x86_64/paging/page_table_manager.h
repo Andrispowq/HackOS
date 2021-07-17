@@ -17,19 +17,30 @@ enum class PageTableFlags : uint64_t
 
 typedef uint64_t PageTableFlagBits;
 
+extern "C" void CopyPagePhysical(uint64_t src, uint64_t dst);
+
 class PageTableManager
 {
 public:
     PageTableManager(PageTable* PML4Address) : pml4(PML4Address) {}
+    //~PageTableManager() {}
     
     void MapMemory(vaddr_t virtualAddress, paddr_t physicalAddress, PageTableFlagBits flags = 0x3);
     paddr_t PhysicalAddress(vaddr_t virtualAddress);
 
     void SetAsCurrent();
+    PageTableManager* Clone();
 
     PageTable* GetPML4() { return pml4; }
 private:
+    PageTable* ClonePT(PageTable* src);
+    PageTable* ClonePD(PageTable* src);
+    PageTable* ClonePDP(PageTable* src);
+    PageTable* ClonePML4(PageTable* src);
+
+private:
     PageTable* pml4;
 };
+
 
 #endif

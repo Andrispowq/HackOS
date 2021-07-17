@@ -10,6 +10,8 @@
 
 #include "drivers/ata/ata_device.h"
 
+#include "proc/tasking/process.h"
+
 bool fromUEFI = 0;
 extern PageTableManager KernelDirectory;
 
@@ -170,4 +172,6 @@ void InitialiseKernel(struct KernelInfo* info)
     kprintf("Kernel is initialised, IRQs are launching!\n");
 
     InitialiseIRQ();
+
+    InitialiseTasking();
 }

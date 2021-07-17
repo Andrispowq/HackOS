@@ -2,6 +2,9 @@
 
 #include "lib/memory.h"
 
+extern PageTableManager KernelDirectory;
+extern PageTableManager* CurrentDirectory;
+
 static void SetEntry(PageTableEntry* entry, PageTableFlagBits flags)
 {
     entry->present = (flags & (uint64_t)PageTableFlags::Present) >> 0;
@@ -88,4 +91,48 @@ paddr_t PageTableManager::PhysicalAddress(vaddr_t virtualAddress)
 void PageTableManager::SetAsCurrent()
 {
     asm volatile("mov %0, %%cr3" : : "r"(pml4));
+    CurrentDirectory = this;
 }
+
+PageTableManager* PageTableManager::Clone()
+{
+    PageTable* newPML4 = ClonePML4(pml4);
+    PageTableManager* manager = new PageTableManager(newPML4);
+    return manager;
+}
+
+PageTable* PageTableManager::ClonePT(PageTable* src)
+{
+    PageTable* table = (PageTable*) kmalloc(sizeof(PageTable));
+    memcpy(table, src, sizeof(PageTable));
+    return table;
+}
+
+PageTable* PageTableManager::ClonePD(PageTable* src)
+{
+    PageTable* page_dir = (PageTable*) kmalloc(sizeof(PageTable));
+
+    for(uint32_t i = 0; i < 512; i++)
+    {
+        if (src->entries[i].address == 0)
+        {
+            continue;
+        }
+
+        uint64_t entry = *(uint64_t*)(&src->entries[i]);
+        uint64_t kernel_entry = *(uint64_t*)(&KernelDirectory.GetPML4()->entries[i]);
+        if(entry == kernel_entry)
+        {
+            page_dir->entries[i] = src->entries[i];
+        }
+        else
+        {
+            PageTable* orig = (PageTable*)(src->entries[i].address << 12);
+            PageTable* pt = ClonePT(orig);
+            page_dir->entries[i].address = (uint64_t)pt >> 12;
+        }
+    }
+}
+
+PageTable* PageTableManager::ClonePDP(PageTable* src);
+PageTable* PageTableManager::ClonePML4(PageTable* src);

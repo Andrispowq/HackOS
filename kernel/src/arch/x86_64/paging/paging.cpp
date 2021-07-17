@@ -5,6 +5,7 @@
 #include "lib/stdio.h"
 
 PageTableManager KernelDirectory(nullptr);
+PageTableManager* CurrentDirectory = nullptr;
 
 extern uint64_t kernelStart, kernelEnd;
 extern uint8_t fromUEFI;
