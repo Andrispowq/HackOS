@@ -33,6 +33,7 @@ public:
 
     PageTable* GetPML4() { return pml4; }
 private:
+    void* ClonePage(void* src);
     PageTable* ClonePT(PageTable* src);
     PageTable* ClonePD(PageTable* src);
     PageTable* ClonePDP(PageTable* src);

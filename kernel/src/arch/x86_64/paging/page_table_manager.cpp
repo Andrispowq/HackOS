@@ -101,11 +101,45 @@ PageTableManager* PageTableManager::Clone()
     return manager;
 }
 
+void* PageTableManager::ClonePage(void* src)
+{
+    void* addr = PageFrameAllocator::SharedAllocator()->RequestPage();
+    memcpy(addr, src, 0x1000);
+    return addr;
+}
+
 PageTable* PageTableManager::ClonePT(PageTable* src)
 {
-    PageTable* table = (PageTable*) kmalloc(sizeof(PageTable));
-    memcpy(table, src, sizeof(PageTable));
-    return table;
+    PageTable* page_table = (PageTable*) kmalloc(sizeof(PageTable));
+
+    for(uint32_t i = 0; i < 512; i++)
+    {
+        if (src->entries[i].address == 0)
+        {
+            continue;
+        }
+
+        uint64_t entry = *(uint64_t*)(&src->entries[i]);
+        uint64_t kernel_entry = *(uint64_t*)(&KernelDirectory.GetPML4()->entries[i]);
+        if(entry == kernel_entry)
+        {
+            page_table->entries[i] = src->entries[i];
+        }
+        else
+        {
+            void* orig = (void*)(src->entries[i].address << 12);
+            void* addr = ClonePage(orig);
+            page_table->entries[i].address = (uint64_t)addr >> 12;
+        }
+
+        if (src->entries[i].present) page_table->entries[i].present = 1;
+        if (src->entries[i].writeable) page_table->entries[i].writeable = 1;
+        if (src->entries[i].user_access) page_table->entries[i].user_access = 1;
+        if (src->entries[i].accessed) page_table->entries[i].accessed = 1;
+        if (src->entries[i].dirty) page_table->entries[i].dirty = 1;
+    }
+
+    return page_table;
 }
 
 PageTable* PageTableManager::ClonePD(PageTable* src)
@@ -131,8 +165,81 @@ PageTable* PageTableManager::ClonePD(PageTable* src)
             PageTable* pt = ClonePT(orig);
             page_dir->entries[i].address = (uint64_t)pt >> 12;
         }
+
+        if (src->entries[i].present) page_dir->entries[i].present = 1;
+        if (src->entries[i].writeable) page_dir->entries[i].writeable = 1;
+        if (src->entries[i].user_access) page_dir->entries[i].user_access = 1;
+        if (src->entries[i].accessed) page_dir->entries[i].accessed = 1;
+        if (src->entries[i].dirty) page_dir->entries[i].dirty = 1;
     }
+
+    return page_dir;
 }
 
-PageTable* PageTableManager::ClonePDP(PageTable* src);
-PageTable* PageTableManager::ClonePML4(PageTable* src);
+PageTable* PageTableManager::ClonePDP(PageTable* src)
+{
+    PageTable* page_dir = (PageTable*) kmalloc(sizeof(PageTable));
+
+    for(uint32_t i = 0; i < 512; i++)
+    {
+        if (src->entries[i].address == 0)
+        {
+            continue;
+        }
+
+        uint64_t entry = *(uint64_t*)(&src->entries[i]);
+        uint64_t kernel_entry = *(uint64_t*)(&KernelDirectory.GetPML4()->entries[i]);
+        if(entry == kernel_entry)
+        {
+            page_dir->entries[i] = src->entries[i];
+        }
+        else
+        {
+            PageTable* orig = (PageTable*)(src->entries[i].address << 12);
+            PageTable* pt = ClonePD(orig);
+            page_dir->entries[i].address = (uint64_t)pt >> 12;
+        }
+
+        if (src->entries[i].present) page_dir->entries[i].present = 1;
+        if (src->entries[i].writeable) page_dir->entries[i].writeable = 1;
+        if (src->entries[i].user_access) page_dir->entries[i].user_access = 1;
+        if (src->entries[i].accessed) page_dir->entries[i].accessed = 1;
+        if (src->entries[i].dirty) page_dir->entries[i].dirty = 1;
+    }
+
+    return page_dir;
+}
+
+PageTable* PageTableManager::ClonePML4(PageTable* src)
+{
+    PageTable* page_dir = (PageTable*) kmalloc(sizeof(PageTable));
+
+    for(uint32_t i = 0; i < 512; i++)
+    {
+        if (src->entries[i].address == 0)
+        {
+            continue;
+        }
+
+        uint64_t entry = *(uint64_t*)(&src->entries[i]);
+        uint64_t kernel_entry = *(uint64_t*)(&KernelDirectory.GetPML4()->entries[i]);
+        if(entry == kernel_entry)
+        {
+            page_dir->entries[i] = src->entries[i];
+        }
+        else
+        {
+            PageTable* orig = (PageTable*)(src->entries[i].address << 12);
+            PageTable* pt = ClonePDP(orig);
+            page_dir->entries[i].address = (uint64_t)pt >> 12;
+        }
+
+        if (src->entries[i].present) page_dir->entries[i].present = 1;
+        if (src->entries[i].writeable) page_dir->entries[i].writeable = 1;
+        if (src->entries[i].user_access) page_dir->entries[i].user_access = 1;
+        if (src->entries[i].accessed) page_dir->entries[i].accessed = 1;
+        if (src->entries[i].dirty) page_dir->entries[i].dirty = 1;
+    }
+
+    return page_dir;
+}
