@@ -34,10 +34,10 @@ public:
     PageTable* GetPML4() { return pml4; }
 private:
     void* ClonePage(void* src);
-    PageTable* ClonePT(PageTable* src);
-    PageTable* ClonePD(PageTable* src);
-    PageTable* ClonePDP(PageTable* src);
-    PageTable* ClonePML4(PageTable* src);
+    PageTable* ClonePT(PageTable* src, PageTable* kernel);
+    PageTable* ClonePD(PageTable* src, PageTable* kernel);
+    PageTable* ClonePDP(PageTable* src, PageTable* kernel);
+    PageTable* ClonePML4(PageTable* src, PageTable* kernel);
 
 private:
     PageTable* pml4;

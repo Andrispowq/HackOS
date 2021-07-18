@@ -5,10 +5,9 @@ global JumpToAddress
 JumpToAddress:
     cli
 
-    mov     rax, rsi
     mov     rbp, rdx
     mov     rsp, rcx
-    mov     cr3, rax
+    mov     cr3, rsi
     mov     rax, 0x12345
 
     sti

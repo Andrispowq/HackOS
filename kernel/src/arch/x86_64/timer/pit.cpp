@@ -4,6 +4,7 @@
 #include "arch/x86_64/ports.h"
 
 #include "lib/function.h"
+#include "proc/tasking/process.h"
 
 uint32_t tick = 0;
 static uint64_t task = 0;
@@ -28,6 +29,11 @@ static void timer_callback(Registers* regs)
 {
     tick++;    
     timeSinceBoot += 1.0 / (double)frequency;
+
+    if(task == 1)
+    {
+        ScheduleIRQ();
+    }
     
     UNUSED(regs);
 }
