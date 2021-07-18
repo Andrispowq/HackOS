@@ -30,10 +30,10 @@ static void timer_callback(Registers* regs)
     tick++;    
     timeSinceBoot += 1.0 / (double)frequency;
 
-    if(task == 1)
+    /*if(task == 1)
     {
         Schedule();
-    }
+    }*/
     
     UNUSED(regs);
 }

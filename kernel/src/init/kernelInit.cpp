@@ -11,6 +11,7 @@
 #include "drivers/ata/ata_device.h"
 
 #include "proc/tasking/process.h"
+#include "shell/shell.h"
 
 bool fromUEFI = 0;
 extern PageTableManager KernelDirectory;
@@ -170,6 +171,8 @@ void InitialiseKernel(struct KernelInfo* info)
 
     InitialiseFilesystem();
     InitialiseIRQ();
-    
+
+    InitialiseShell();
+
     InitialiseTasking();
 }

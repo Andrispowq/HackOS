@@ -31,8 +31,6 @@ void kernel_task()
     kprintf("Type 'help' for help!\n");
     kprintf("root@root:~/dev/hda/$ ");
 
-    InitialiseShell();
-
     while(1)
     {
         asm("hlt");

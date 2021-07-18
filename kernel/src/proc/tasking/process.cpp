@@ -18,6 +18,19 @@ extern PageTableManager KernelDirectory;
 extern void EnableTasking();
 extern void StartTask(uint64_t index);
 
+void task_confirm()
+{
+	kprintf("Tasking is running!\n");
+    _Kill();
+}
+
+void idle_thread()
+{
+    EnableTasking();
+	__enabled = 1;
+    while(true);
+}
+
 Process::Process(const char* name, void* rip)
     : name((char*)name), rip((uint64_t)rip)
 {
@@ -242,19 +255,6 @@ void Schedule()
     JumpToAddress(rip, CurrentDirectory->PhysicalAddress(pml4), rbp, rsp);
 }
 
-void task_confirm()
-{
-	kprintf("Tasking is running!\n");
-    _Kill();
-}
-
-void idle_thread()
-{
-    EnableTasking();
-	__enabled = 1;
-    while(true);
-}
-
 void InitialiseTasking()
 {
     // Relocate the stack so we know where it is
@@ -265,7 +265,6 @@ void InitialiseTasking()
 
 	__AddProcess(new Process("task_confirm", (void*)task_confirm));
 	__AddProcess(new Process("kernel", (void*)kernel_task));
-    asm volatile("sti");
 	__exec();
 
 	kprintf("Failed to start tasking!");
