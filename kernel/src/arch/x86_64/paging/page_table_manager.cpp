@@ -90,7 +90,8 @@ paddr_t PageTableManager::PhysicalAddress(vaddr_t virtualAddress)
 
 void PageTableManager::SetAsCurrent()
 {
-    asm volatile("mov %0, %%cr3" : : "r"(pml4));
+    uint64_t phys_pml4 = PhysicalAddress((uint64_t)pml4);
+    asm volatile("mov %0, %%cr3" : : "r"(phys_pml4));
     CurrentDirectory = this;
 }
 
@@ -110,7 +111,7 @@ void* PageTableManager::ClonePage(void* src)
 
 PageTable* PageTableManager::ClonePT(PageTable* src, PageTable* kernel)
 {
-    PageTable* page_dir = (PageTable*) kmalloc(sizeof(PageTable));
+    PageTable* page_dir = (PageTable*) PageFrameAllocator::SharedAllocator()->RequestPage();
     memset(page_dir, 0, sizeof(PageTable));
 
     for(uint32_t i = 0; i < 512; i++)
@@ -149,7 +150,7 @@ PageTable* PageTableManager::ClonePT(PageTable* src, PageTable* kernel)
 
 PageTable* PageTableManager::ClonePD(PageTable* src, PageTable* kernel)
 {
-    PageTable* page_dir = (PageTable*) kmalloc(sizeof(PageTable));
+    PageTable* page_dir = (PageTable*) PageFrameAllocator::SharedAllocator()->RequestPage();
     memset(page_dir, 0, sizeof(PageTable));
 
     for(uint32_t i = 0; i < 512; i++)
@@ -189,7 +190,7 @@ PageTable* PageTableManager::ClonePD(PageTable* src, PageTable* kernel)
 
 PageTable* PageTableManager::ClonePDP(PageTable* src, PageTable* kernel)
 {
-    PageTable* page_dir = (PageTable*) kmalloc(sizeof(PageTable));
+    PageTable* page_dir = (PageTable*) PageFrameAllocator::SharedAllocator()->RequestPage();
     memset(page_dir, 0, sizeof(PageTable));
 
     for(uint32_t i = 0; i < 512; i++)
@@ -229,7 +230,7 @@ PageTable* PageTableManager::ClonePDP(PageTable* src, PageTable* kernel)
 
 PageTable* PageTableManager::ClonePML4(PageTable* src, PageTable* kernel)
 {
-    PageTable* page_dir = (PageTable*) kmalloc(sizeof(PageTable));
+    PageTable* page_dir = (PageTable*) PageFrameAllocator::SharedAllocator()->RequestPage();
     memset(page_dir, 0, sizeof(PageTable));
 
     for(uint32_t i = 0; i < 512; i++)

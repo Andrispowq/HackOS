@@ -32,7 +32,7 @@ static void timer_callback(Registers* regs)
 
     if(task == 1)
     {
-        ScheduleIRQ();
+        Schedule();
     }
     
     UNUSED(regs);

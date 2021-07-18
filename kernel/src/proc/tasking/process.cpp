@@ -3,6 +3,9 @@
 #include "lib/stdio.h"
 #include "lib/memory.h"
 
+#include "kernel.h"
+#include "arch/x86_64/interrupts/idt.h"
+
 Process* current_process;
 Process* ready_queue;
 uint64_t next_pid = 0;
@@ -255,25 +258,27 @@ void idle_thread()
 void InitialiseTasking()
 {
     // Relocate the stack so we know where it is
-    //MoveStack((void*)0x000700000000000, 0x2000);
+    MoveStack((void*)0x000700000000000, 0x2000);
 
 	current_process = new Process("kernel_idle", (void*)idle_thread);
     ready_queue = current_process;
 
 	__AddProcess(new Process("task_confirm", (void*)task_confirm));
-	//__AddProcess(new Process("kernel", kernel_task));
-	__exec();
-
+	__AddProcess(new Process("kernel", (void*)kernel_task));
     asm volatile("sti");
+	__exec();
 
 	kprintf("Failed to start tasking!");
 }
 
 void MoveStack(void* new_stack_start, uint64_t size)
 {
-    uint64_t i;
+	if(initial_rsp == 0)
+	{
+		return;
+	}
 
-    for(i = (uint64_t)new_stack_start; i >= ((uint64_t)new_stack_start - size);
+    for(uint64_t i = (uint64_t)new_stack_start; i >= ((uint64_t)new_stack_start - size);
         i -= 0x1000)
     {
         uint64_t addr = (uint64_t)PageFrameAllocator::SharedAllocator()->RequestPage();
@@ -299,7 +304,7 @@ void MoveStack(void* new_stack_start, uint64_t size)
 
     // Backtrace through the original stack, copying new values into
     // the new stack.
-    for(i = (uint64_t)new_stack_start; i > (uint64_t)new_stack_start - size; i -= 4)
+    for(uint64_t i = (uint64_t)new_stack_start; i > (uint64_t)new_stack_start - size; i -= 8)
     {
         uint64_t tmp = *(uint64_t*)i;
 

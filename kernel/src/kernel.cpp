@@ -19,11 +19,14 @@ KernelInfo* kInfo;
 extern "C" int kernel_main(KernelInfo* info)
 {
     kInfo = info;
-    initial_rsp = 0x7C00;
+    initial_rsp = 0;
 
     InitialiseDisplay(info);
     InitialiseKernel(info);
+}
 
+void kernel_task()
+{
     kprintf("Finished the initialisation!\n");
     kprintf("Type 'help' for help!\n");
     kprintf("root@root:~/dev/hda/$ ");
@@ -34,16 +37,6 @@ extern "C" int kernel_main(KernelInfo* info)
     {
         asm("hlt");
     }
-}
-
-extern "C" void __cxa_pure_virtual()
-{
-    kprintf("Virtual function definition not found!\n");
-}
-
-extern "C" void __stack_chk_fail()
-{
-    kprintf("Stack check failed!\n");
 }
 
 void user_input(char* input)
@@ -85,4 +78,14 @@ void user_input(char* input)
     {
         shell_command(input);   
     }
+}
+
+extern "C" void __cxa_pure_virtual()
+{
+    kprintf("Virtual function definition not found!\n");
+}
+
+extern "C" void __stack_chk_fail()
+{
+    kprintf("Stack check failed!\n");
 }

@@ -169,9 +169,7 @@ void InitialiseKernel(struct KernelInfo* info)
     InitialiseRSDP(info);
 
     InitialiseFilesystem();
-    kprintf("Kernel is initialised, IRQs are launching!\n");
-
     InitialiseIRQ();
-
+    
     InitialiseTasking();
 }

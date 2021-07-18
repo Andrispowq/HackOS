@@ -127,7 +127,7 @@ void InitialiseIRQ()
     __outb(PIC1_DATA, 0b11111000);
     __outb(PIC2_DATA, 0b11111111);
 
-    asm("sti");
+    //asm volatile("sti");
 }
 
 //ISR handlers
