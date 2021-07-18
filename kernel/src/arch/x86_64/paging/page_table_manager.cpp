@@ -141,8 +141,6 @@ PageTable* PageTableManager::ClonePT(PageTable* src, PageTable* kernel)
             if (src->entries[i].size) page_dir->entries[i].size = 1;
             if (src->entries[i].global) page_dir->entries[i].global = 1;
             if (src->entries[i].execution_disabled) page_dir->entries[i].execution_disabled = 1;
-
-            page_dir->entries[i].user_access = 1;
         }
     }
 
@@ -161,14 +159,14 @@ PageTable* PageTableManager::ClonePD(PageTable* src, PageTable* kernel)
             continue;
         }
 
-        /*uint64_t entry = *(uint64_t*)(&src->entries[i]);
+        uint64_t entry = *(uint64_t*)(&src->entries[i]);
         uint64_t kernel_entry = *(uint64_t*)(&kernel->entries[i]);
         if(entry == kernel_entry)
         {
             page_dir->entries[i] = src->entries[i];
         }
         else
-        {*/
+        {
             PageTable* orig = (PageTable*)(src->entries[i].address << 12);
             PageTable* kern = (PageTable*)(kernel->entries[i].address << 12);
             PageTable* pt = ClonePT(orig, kern);
@@ -183,9 +181,7 @@ PageTable* PageTableManager::ClonePD(PageTable* src, PageTable* kernel)
             if (src->entries[i].size) page_dir->entries[i].size = 1;
             if (src->entries[i].global) page_dir->entries[i].global = 1;
             if (src->entries[i].execution_disabled) page_dir->entries[i].execution_disabled = 1;
-
-            page_dir->entries[i].user_access = 1;
-        //}
+        }
     }
 
     return page_dir;
@@ -203,14 +199,14 @@ PageTable* PageTableManager::ClonePDP(PageTable* src, PageTable* kernel)
             continue;
         }
 
-        /*uint64_t entry = *(uint64_t*)(&src->entries[i]);
+        uint64_t entry = *(uint64_t*)(&src->entries[i]);
         uint64_t kernel_entry = *(uint64_t*)(&kernel->entries[i]);
         if(entry == kernel_entry)
         {
             page_dir->entries[i] = src->entries[i];
         }
         else
-        {*/
+        {
             PageTable* orig = (PageTable*)(src->entries[i].address << 12);
             PageTable* kern = (PageTable*)(kernel->entries[i].address << 12);
             PageTable* pt = ClonePD(orig, kern);
@@ -225,9 +221,7 @@ PageTable* PageTableManager::ClonePDP(PageTable* src, PageTable* kernel)
             if (src->entries[i].size) page_dir->entries[i].size = 1;
             if (src->entries[i].global) page_dir->entries[i].global = 1;
             if (src->entries[i].execution_disabled) page_dir->entries[i].execution_disabled = 1;
-
-            //page_dir->entries[i].user_access = 1;
-        //}
+        }
     }
 
     return page_dir;
@@ -245,14 +239,14 @@ PageTable* PageTableManager::ClonePML4(PageTable* src, PageTable* kernel)
             continue;
         }
 
-        /*uint64_t entry = *(uint64_t*)(&src->entries[i]);
+        uint64_t entry = *(uint64_t*)(&src->entries[i]);
         uint64_t kernel_entry = *(uint64_t*)(&kernel->entries[i]);
         if(entry == kernel_entry)
         {
             page_dir->entries[i] = src->entries[i];
         }
         else
-        {*/
+        {
             PageTable* orig = (PageTable*)(src->entries[i].address << 12);
             PageTable* kern = (PageTable*)(kernel->entries[i].address << 12);
             PageTable* pt = ClonePDP(orig, kern);
@@ -267,9 +261,7 @@ PageTable* PageTableManager::ClonePML4(PageTable* src, PageTable* kernel)
             if (src->entries[i].size) page_dir->entries[i].size = 1;
             if (src->entries[i].global) page_dir->entries[i].global = 1;
             if (src->entries[i].execution_disabled) page_dir->entries[i].execution_disabled = 1;
-
-            //page_dir->entries[i].user_access = 1;
-        //}
+        }
     }
 
     return page_dir;

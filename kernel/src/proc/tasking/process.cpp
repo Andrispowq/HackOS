@@ -208,10 +208,11 @@ void __exec()
     uint32_t rsp, rbp, rip;
     rip = current_process->rip;
     rsp = current_process->rsp;
-    rbp = current_process->rbp;
+	rbp = current_process->rbp;
 
     CurrentDirectory = current_process->pageTable;
-    JumpToAddress(rip, (uint64_t)CurrentDirectory->GetPML4(), rbp, rsp);
+	uint64_t pml4 = (uint64_t)CurrentDirectory->GetPML4();
+    JumpToAddress(rip, CurrentDirectory->PhysicalAddress(pml4), rbp, rsp);
 }
 
 void ScheduleIRQ()
@@ -234,7 +235,8 @@ void Schedule()
     rbp = current_process->rbp;
 
     CurrentDirectory = current_process->pageTable;
-    JumpToAddress(rip, (uint64_t)CurrentDirectory->GetPML4(), rbp, rsp);
+	uint64_t pml4 = (uint64_t)CurrentDirectory->GetPML4();
+    JumpToAddress(rip, CurrentDirectory->PhysicalAddress(pml4), rbp, rsp);
 }
 
 void task_confirm()
