@@ -170,9 +170,8 @@ void InitialiseKernel(struct KernelInfo* info)
     InitialiseRSDP(info);
 
     InitialiseFilesystem();
-    InitialiseIRQ();
-
     InitialiseShell();
 
+    InitialiseIRQ();
     InitialiseTasking();
 }

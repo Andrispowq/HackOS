@@ -30,10 +30,13 @@ static void timer_callback(Registers* regs)
     tick++;    
     timeSinceBoot += 1.0 / (double)frequency;
 
-    /*if(task == 1)
+    if(task == 1)
     {
+        __outb(PIC1_COMMAND, PIC_EOI); //Send EOI because we aren't returning from here
+        GetRunningProcess()->rip = regs->rip;
+
         Schedule();
-    }*/
+    }
     
     UNUSED(regs);
 }

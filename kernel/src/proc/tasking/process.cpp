@@ -5,6 +5,7 @@
 
 #include "kernel.h"
 #include "arch/x86_64/interrupts/idt.h"
+#include "arch/x86_64/timer/pit.h"
 
 Process* current_process;
 Process* ready_queue;
@@ -28,7 +29,7 @@ void idle_thread()
 {
     EnableTasking();
 	__enabled = 1;
-    while(true);
+	while(true) asm("hlt");
 }
 
 Process::Process(const char* name, void* rip)

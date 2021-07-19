@@ -156,7 +156,7 @@ extern "C"
             isr_t handler = interrupt_handlers[regs->int_no];
             handler(regs);
         }
-    
+
         if (regs->int_no >= 40)
         {
             __outb(PIC2_COMMAND, PIC_EOI);
