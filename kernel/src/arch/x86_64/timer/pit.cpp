@@ -33,9 +33,7 @@ static void timer_callback(Registers* regs)
     if(task == 1)
     {
         __outb(PIC1_COMMAND, PIC_EOI); //Send EOI because we aren't returning from here
-        GetRunningProcess()->rip = regs->rip;
-
-        Schedule();
+        Schedule(regs);
     }
     
     UNUSED(regs);

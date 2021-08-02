@@ -2,6 +2,7 @@
 #define PROCESS_H
 
 #include "arch/x86_64/paging/paging.h"
+#include "arch/x86_64/interrupts/idt.h"
 
 #define PROCESS_STATE_ALIVE 0
 #define PROCESS_STATE_ZOMBIE 1
@@ -13,8 +14,7 @@
 
 #define STACK_SIZE 4096
 
-void MoveStack(void* new_stack_start, uint64_t size);
-extern "C" void JumpToAddress(uint64_t rip, uint64_t pageDirAddr, uint64_t rbp, uint64_t rsp);
+extern "C" void StartProcess(uint64_t pml4, uint64_t stack_top);
 
 class Process
 {
@@ -22,7 +22,7 @@ public:
     Process(const char* name, void* rip);
     ~Process();
 
-    void notify(int signal);
+    void Notify(int signal);
 
 public:
     PageTableManager* pageTable;
@@ -30,8 +30,8 @@ public:
     uint64_t rsp, rbp, rip;
     uint64_t original_stack_top;
     uint64_t state;
-    char* name;
 
+    char* name;
     Process* next;
 };
 
@@ -49,7 +49,9 @@ void PrintAll();
 void _Kill();
 void Kill();
 void ScheduleIRQ();
-void Schedule();
+void Schedule(Registers* regs);
 void InitialiseTasking();
+
+void MoveStack(void* new_stack_start, uint64_t size);
 
 #endif

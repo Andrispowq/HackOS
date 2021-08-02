@@ -26,19 +26,26 @@ extern "C" int kernel_main(KernelInfo* info)
     InitialiseKernel(info);
 }
 
-void kernel_task()
+void draw_task()
 {
-    asm("cli");
+    uint32_t x = 0;
 
-    kprintf("Finished the initialisation!\n");
-    kprintf("Type 'help' for help!\n");
-    kprintf("root@root:~/dev/hda/$ ");
-
-    asm("sti");
     while(true)
     {
-        asm("hlt");
+        Display::SharedDisplay()->framebuffer.DrawRect(x, 800, 100, 100, Display::SharedDisplay()->console.bgColour);
+        Display::SharedDisplay()->framebuffer.DrawRect(x++, 800, 100, 100, 0xFF0000FF);
     }
+}
+
+void kernel_task()
+{
+    kprintf("Finished the initialisation!\n");
+    kprintf("Type 'help' for help!\n");
+    kprintf("root@root:~/$ ");
+
+    AddProcess(new Process("draw", (void*)draw_task));
+
+    while(true) asm("hlt");
 }
 
 void user_input(char* input)

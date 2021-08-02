@@ -26,6 +26,7 @@ public:
 } __attribute__((packed));
 
 extern "C" void __gdt_flush(uint64_t gdtr);
+extern "C" void __tss_flush(uint64_t tss);
 
 void InitialiseGDT();
 

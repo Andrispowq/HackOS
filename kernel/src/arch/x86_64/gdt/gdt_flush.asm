@@ -1,6 +1,7 @@
 bits 64
 
 global __gdt_flush
+global __tss_flush
 
 __gdt_flush:
     lgdt    [rdi]        ; Load the new GDT pointer
@@ -17,3 +18,7 @@ __gdt_flush:
     push    rax
     push    rdi
     retfq
+
+__tss_flush:
+    ltr di
+    ret

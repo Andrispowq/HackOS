@@ -120,7 +120,7 @@ void InitialiseDisplay(KernelInfo* info)
 {
     fromUEFI = 1 - info->booted_from_BIOS;
 
-    if(fromUEFI)
+    //if(fromUEFI)
     {
         asm("cli");
         InitialiseGDT();

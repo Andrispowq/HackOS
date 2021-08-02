@@ -33,30 +33,35 @@ void idle_thread()
 }
 
 Process::Process(const char* name, void* rip)
-    : name((char*)name), rip((uint64_t)rip)
+    : name((char*)name)
 {
     pid = ++next_pid;
     state = PROCESS_STATE_ALIVE;
+	this->rip = (uint64_t)rip;
     
     next = nullptr;
     rsp = kmalloc(STACK_SIZE);
     uint64_t* stack = (uint64_t*)(rsp + 4096);
     rbp = (uint64_t)stack;
     original_stack_top = rbp;
-	*--stack = 0x00000202; //rflags
+	*--stack = 0x0000000000000202; //rflags
 	*--stack = 0x8; //cs
 	*--stack = (uint64_t)rip; //rip
+	*--stack = 0; //r15
+	*--stack = 0; //r14
+	*--stack = 0; //r13
+	*--stack = 0; //r12
+	*--stack = 0; //r11
+	*--stack = 0; //r10
+	*--stack = 0; //r9
+	*--stack = 0; //r8
 	*--stack = 0; //rax
-	*--stack = 0; //rbx
-	*--stack = 0; //rcx;
+	*--stack = 0; //rcx
 	*--stack = 0; //rdx
+	*--stack = 0; //rbx
+	*--stack = rbp; //rbp
 	*--stack = 0; //rsi
 	*--stack = 0; //rdi
-	*--stack = rsp + 4096; //rbp
-	*--stack = 0x10; //ds
-	*--stack = 0x10; //fs
-	*--stack = 0x10; //es
-	*--stack = 0x10; //gs
 	rsp = (uint64_t)stack;
 
 	pageTable = CurrentDirectory->Clone();
@@ -68,7 +73,7 @@ Process::~Process()
     kfree((void*)original_stack_top);
 }
 
-void Process::notify(int signal)
+void Process::Notify(int signal)
 {
 	switch(signal)
 	{
@@ -100,7 +105,7 @@ void __AddProcess(Process* p)
 }
 
 /* add process but take care of others also! */
-uint64_t addProcess(Process* p)
+uint64_t AddProcess(Process* p)
 {
 	StartTask(0);
 	__AddProcess(p);
@@ -144,7 +149,7 @@ Process* GetRunningProcess()
 
 void SendSignal(int signal)
 {
-	current_process->notify(signal);
+	current_process->Notify(signal);
 }
 
 void PrintAll()
@@ -222,14 +227,13 @@ void Kill(uint64_t pid)
 
 void __exec()
 {
-    uint32_t rsp, rbp, rip;
-    rip = current_process->rip;
-    rsp = current_process->rsp;
-	rbp = current_process->rbp;
-
     CurrentDirectory = current_process->pageTable;
 	uint64_t pml4 = (uint64_t)CurrentDirectory->GetPML4();
-    JumpToAddress(rip, CurrentDirectory->PhysicalAddress(pml4), rbp, rsp);
+
+	uint64_t rsp = current_process->rsp;
+	current_process->rsp += 16 * 8;
+
+    StartProcess(CurrentDirectory->PhysicalAddress(pml4), rsp);
 }
 
 void ScheduleIRQ()
@@ -237,23 +241,37 @@ void ScheduleIRQ()
 	if(!__enabled) 
         return;
     
-	asm volatile("int $0x2E");
+	asm volatile("int $0x20");
 	return;
 }
 
-void Schedule()
+void Schedule(Registers* regs)
 {
+	uint64_t* stack = (uint64_t*)current_process->rsp;
+	*--stack = regs->rip;
+	*--stack = regs->r15;
+	*--stack = regs->r14;
+	*--stack = regs->r13;
+	*--stack = regs->r12;
+	*--stack = regs->r11;
+	*--stack = regs->r10;
+	*--stack = regs->r9;
+	*--stack = regs->r8;
+	*--stack = regs->rax;
+	*--stack = regs->rcx;
+	*--stack = regs->rdx;
+	*--stack = regs->rbx;
+	*--stack = regs->rbp;
+	*--stack = regs->rsi;
+	*--stack = regs->rdi;
+	current_process->rsp = (uint64_t)stack;
+	current_process->rip = regs->rip;
+	current_process->rbp = regs->rbp;
+
     current_process = current_process->next;
     if(!current_process) current_process = ready_queue; //If we're at the end, start over again
 
-    uint32_t rsp, rbp, rip;
-    rip = current_process->rip;
-    rsp = current_process->rsp;
-    rbp = current_process->rbp;
-
-    CurrentDirectory = current_process->pageTable;
-	uint64_t pml4 = (uint64_t)CurrentDirectory->GetPML4();
-    JumpToAddress(rip, CurrentDirectory->PhysicalAddress(pml4), rbp, rsp);
+    __exec();
 }
 
 void InitialiseTasking()

@@ -117,12 +117,20 @@ void InitialiseIDT()
     __outb(PIC2_DATA, a2); 
 }
 
+void InvOPCodeHandler(Registers* regs)
+{
+    kprintf("#INVOP ----- Invalid Opcode Fault (0x6)\n");
+    asm("cli"); asm("hlt");
+}
+
 void InitialiseIRQ()
 {
     InitTimer(1000);
     InitKeyboard();
     InitialiseMouse(Display::SharedDisplay()->framebuffer.width, 
         Display::SharedDisplay()->framebuffer.height);
+
+    RegisterInterruptHandler(6, InvOPCodeHandler);
 
     __outb(PIC1_DATA, 0b11111000);
     __outb(PIC2_DATA, 0b11111111);

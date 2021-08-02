@@ -119,6 +119,7 @@ run:
 	-cpu qemu64 \
 	-m 512M \
 	-net none \
+	-monitor stdio \
 	-rtc clock=host,base=localtime \
 
 install:
