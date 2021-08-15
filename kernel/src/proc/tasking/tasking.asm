@@ -3,7 +3,7 @@
 global StartProcess
 
 StartProcess:
-    cli
+    cli 
 
     mov     cr3, rdi
     mov     rsp, rsi

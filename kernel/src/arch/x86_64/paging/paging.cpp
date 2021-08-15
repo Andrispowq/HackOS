@@ -45,7 +45,8 @@ void PageFaultHandler(Registers* regs)
 
     kprintf("\n\n\n---------------------------------------------");
 
-    kprintf("\n\n\nPAGE FAULT: at virtual address %x\n", cr2, flags);
+    kprintf("\n\n\nPAGE FAULT: at virtual address %x, physical address %x\n", 
+        cr2, CurrentDirectory->PhysicalAddress(cr2), flags);
 
     kprintf("Flags:\n");
     kprintf("Present: %d\n", present);

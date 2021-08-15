@@ -227,7 +227,7 @@ void Kill(uint64_t pid)
 
 void __exec()
 {
-    CurrentDirectory = current_process->pageTable;
+    //CurrentDirectory = current_process->pageTable;
 	uint64_t pml4 = (uint64_t)CurrentDirectory->GetPML4();
 
 	uint64_t rsp = current_process->rsp;

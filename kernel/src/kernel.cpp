@@ -24,6 +24,8 @@ extern "C" int kernel_main(KernelInfo* info)
 
     InitialiseDisplay(info);
     InitialiseKernel(info);
+
+    while(true) asm("hlt");
 }
 
 void draw_task()

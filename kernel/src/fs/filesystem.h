@@ -36,6 +36,7 @@ public:
 
     virtual uint64_t GetSize() const = 0;
     virtual const char* GetName() const = 0;
+    virtual const char* GetPath() const = 0;
 
     virtual uint32_t GetAttributes() const = 0;
 

@@ -87,34 +87,62 @@ void command_mode(char* input)
             const char* arg = input + 3;
             size_t len = strlen(working_dir);
 
-            if((strcmp((char*)arg, "..") == 0) || (strcmp((char*)working_dir, "~")))
+            if(strcmp((char*)arg, ".") == 0)
             {
-                for(uint32_t i = len - 1; i >= 0; i--)
+                //Nothing to do
+            }
+            else if(strcmp((char*)arg, "..") == 0)
+            {
+                if(strcmp((char*)working_dir, "~") == 0)
                 {
-                    if(working_dir[i] == '/')
+                    //Root doesn't have an upper directory
+                }
+                else
+                {
+                    size_t last_dash = 0;
+                    for(size_t i = 0; i < len; i++)
                     {
-                        working_dir[i] = 0;
-                        break;
+                        if(working_dir[i] == '/')
+                        {
+                            last_dash = i;
+                        }
                     }
 
-                    working_dir[i] == 0;
+                    working_dir[last_dash] = 0;
                 }
             }
             else
             {
 	            Filesystem* drive_C = filesystems[0];
-                uint64_t count = drive_C->GetDirectoryEntryCount(arg);
+                uint64_t count = drive_C->GetDirectoryEntryCount(working_dir);
 
-                if(count == 0)
+                if(count != 0)
                 {
-                    kprintf("Tried to enter a non-directory!\n");
-                }
+                    for(uint64_t i = 0; i < count; i++)
+                    {
+                        ActiveFile* file = drive_C->GetFile(working_dir, i);
 
-                working_dir[len] = '/';
-                strcpy(&working_dir[len + 1], arg);
+                        if((file->GetAttributes() & 0x10) != 0x10)
+                        {
+                            kprintf("Tried to enter a non-directory!\n");
+                        }
+                        else if(strcmp((char*)file->GetName(), (char*)arg) == 0)
+                        {
+                            strcpy(working_dir, file->GetPath());
+                        }
+                    }
+                }
+                else
+                {
+                    kprintf("ERROR: In a non-directory!\n");
+                }
             }
         }
 
+    }
+    else if(check_command(input, "wd"))
+    {
+        kprintf("Current working directory: %s\n", working_dir);
     }
     else if(check_command(input, "ls"))
     {

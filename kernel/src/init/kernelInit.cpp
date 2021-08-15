@@ -173,5 +173,5 @@ void InitialiseKernel(struct KernelInfo* info)
     InitialiseShell();
 
     InitialiseIRQ();
-    InitialiseTasking();
+    //InitialiseTasking();
 }

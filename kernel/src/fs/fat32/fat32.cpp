@@ -39,6 +39,10 @@ const char* FAT32_ActiveFile::GetName() const
 	return entry.name;
 }
 
+const char* FAT32_ActiveFile::GetPath() const
+{
+	return path;
+}
 
 uint32_t FAT32_ActiveFile::GetAttributes() const
 {
@@ -139,15 +143,7 @@ uint64_t FAT32::GetDirectoryEntryCount(const char* path)
 	}
 
 	vector<DirEntry> entries = driver->GetDirectories(entry.cluster, 0, false);
-	
-	if(strcmp((char*)path, (char*)"~") == 0)
-	{
-		return entries.size();
-	}
-	else
-	{
-		return entries.size() - 2; //we don't count the '.' and '..' entries
-	}
+	return entries.size();
 }
 
 ActiveFile* FAT32::GetFile(const char* path, uint64_t index)
@@ -157,11 +153,6 @@ ActiveFile* FAT32::GetFile(const char* path, uint64_t index)
 
 	vector<DirEntry> entries = driver->GetDirectories(entry.cluster, 0, false);
 
-	if(strcmp((char*)path, (char*)"~") != 0)
-	{
-		index += 2;
-	}
-
 	if(index < entries.size())
 	{
 		DirEntry file = entries[index];
@@ -169,6 +160,7 @@ ActiveFile* FAT32::GetFile(const char* path, uint64_t index)
 		size_t pathlen = strlen((char*)path);
 		size_t namelen = strlen(file.name);
 		size_t totalLen = pathlen + namelen + 1;
+
 		char* totalPath = new char[totalLen + 1];
 		memcpy(totalPath, path, pathlen);
 		totalPath[pathlen] = '/';
