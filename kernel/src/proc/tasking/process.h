@@ -14,7 +14,8 @@
 
 #define STACK_SIZE 4096
 
-extern "C" void StartProcess(uint64_t pml4, uint64_t stack_top);
+extern "C" void StartProcess(uint64_t new_stack, uint64_t pml4);
+extern "C" void StartProcess_FirstTime(uint64_t new_stack, uint64_t pml4);
 
 class Process
 {
@@ -27,9 +28,11 @@ public:
 public:
     PageTableManager* pageTable;
     uint64_t pid;
-    uint64_t rsp, rbp, rip;
-    uint64_t original_stack_top;
+    uint64_t rsp, rip;
     uint64_t state;
+
+    uint64_t* stack;
+    char working_dir[256];
 
     char* name;
     Process* next;
@@ -49,7 +52,7 @@ void PrintAll();
 void _Kill();
 void Kill();
 void ScheduleIRQ();
-void Schedule(Registers* regs);
+void Schedule();
 void InitialiseTasking();
 
 void MoveStack(void* new_stack_start, uint64_t size);

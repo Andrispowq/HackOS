@@ -20,5 +20,5 @@ __gdt_flush:
     retfq
 
 __tss_flush:
-    ltr di
+    ltr     di
     ret

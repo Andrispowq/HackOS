@@ -8,6 +8,14 @@
 #include "drivers/mouse/mouse.h"
 #include "drivers/screen/screen.h"
 
+static void DefaultExceptionHandler(Registers* registers)
+{
+    kprintf("Recieved interrupt #%x with error code %x on the default handler!\n", 
+        registers->int_no, registers->err_code);
+    kprintf("RIP: %x, RSP: %x\n", registers->rip, registers->rsp);
+    asm("cli; hlt");
+}
+
 void IDTR::SetGate(uint8_t entry, uint8_t flags, uint64_t handler) 
 {
     offset[entry].offset0 = (uint16_t)(handler & 0x000000000000FFFF);
@@ -82,6 +90,11 @@ void InitialiseIDT()
     idtr.SetGate(IRQ14, IDT_TA_InterruptGate, (uint64_t)irq14);
     idtr.SetGate(IRQ15, IDT_TA_InterruptGate, (uint64_t)irq15);
 
+    for(uint8_t i = 0; i < 32; i++)
+    {
+        RegisterInterruptHandler(i, DefaultExceptionHandler);
+    }
+
     //Load the IDT in assembly
     idtr.Flush();
 
@@ -117,20 +130,12 @@ void InitialiseIDT()
     __outb(PIC2_DATA, a2); 
 }
 
-void InvOPCodeHandler(Registers* regs)
-{
-    kprintf("#INVOP ----- Invalid Opcode Fault (0x6)\n");
-    asm("cli"); asm("hlt");
-}
-
 void InitialiseIRQ()
 {
     InitTimer(1000);
     InitKeyboard();
     InitialiseMouse(Display::SharedDisplay()->framebuffer.width, 
         Display::SharedDisplay()->framebuffer.height);
-
-    RegisterInterruptHandler(6, InvOPCodeHandler);
 
     __outb(PIC1_DATA, 0b11111000);
     __outb(PIC2_DATA, 0b11111111);

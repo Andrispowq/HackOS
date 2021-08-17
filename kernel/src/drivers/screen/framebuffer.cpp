@@ -12,12 +12,15 @@ uint32_t Framebuffer::GetPixel(uint32_t x, uint32_t y)
 
 void Framebuffer::DrawRect(uint32_t x, uint32_t y, uint32_t width, uint32_t height, uint32_t colour)
 {
-    for(uint32_t _y = y; _y < (y + height); _y++)
+    uint32_t x_end = x + width;
+    uint32_t y_end = y + height;
+
+    for(uint32_t _y = 0; _y < y_end; _y++)
     {
-        uint32_t* _address = (uint32_t*)(address + _y * pitch);
-        for(uint32_t _x = x; _x < (x + width); _x++)
+        for(uint32_t _x = 0; _x < x_end; _x++)
         {
-            _address[_x] = colour;
+            PutPixel(_x, _y, colour);
+            //address[y * width + x] = colour;
         }
     }
 }

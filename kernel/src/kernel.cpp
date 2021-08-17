@@ -20,7 +20,7 @@ KernelInfo* kInfo;
 extern "C" int kernel_main(KernelInfo* info)
 {
     kInfo = info;
-    initial_rsp = 0;
+   	asm volatile("mov %%rsp, %0" : "=r" (initial_rsp));	
 
     InitialiseDisplay(info);
     InitialiseKernel(info);
@@ -34,8 +34,9 @@ void draw_task()
 
     while(true)
     {
-        Display::SharedDisplay()->framebuffer.DrawRect(x, 800, 100, 100, Display::SharedDisplay()->console.bgColour);
-        Display::SharedDisplay()->framebuffer.DrawRect(x++, 800, 100, 100, 0xFF0000FF);
+        asm("hlt");
+        //Display::SharedDisplay()->framebuffer.DrawRect(x, 200, 200, 200, Display::SharedDisplay()->console.bgColour);
+        //Display::SharedDisplay()->framebuffer.DrawRect(x += 20, 200, 200, 200, 0xFF0000FF);
     }
 }
 
