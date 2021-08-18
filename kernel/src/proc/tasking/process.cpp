@@ -301,7 +301,8 @@ void ScheduleIRQ()
 
 void Schedule()
 {
-	asm volatile("mov %rbp, %rsp");
+	asm volatile("cli");
+
 	asm volatile("add $0x10, %rsp");
 
 	asm volatile("push %r15");

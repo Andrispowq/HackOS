@@ -34,9 +34,9 @@ void draw_task()
 
     while(true)
     {
-        asm("hlt");
-        //Display::SharedDisplay()->framebuffer.DrawRect(x, 200, 200, 200, Display::SharedDisplay()->console.bgColour);
-        //Display::SharedDisplay()->framebuffer.DrawRect(x += 20, 200, 200, 200, 0xFF0000FF);
+        //asm("hlt");
+        Display::SharedDisplay()->framebuffer.DrawRect(x, 200, 200, 200, Display::SharedDisplay()->console.bgColour);
+        Display::SharedDisplay()->framebuffer.DrawRect(x += 20, 200, 200, 200, 0xFF0000FF);
     }
 }
 
