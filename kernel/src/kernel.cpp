@@ -30,10 +30,13 @@ extern "C" int kernel_main(KernelInfo* info)
 
 void kernel_task()
 {
+    PrintAll();
+
     kprintf("Finished the initialisation!\n");
     kprintf("Type 'help' for help!\n");
     kprintf("root@root:~/$ ");
 
+    _Kill();
     while(true) asm("hlt");
 }
 

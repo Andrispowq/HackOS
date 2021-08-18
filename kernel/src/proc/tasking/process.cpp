@@ -164,18 +164,14 @@ void SendSignal(int signal)
 
 void PrintAll()
 {
-	Process* orig = current_process;
-	Process* p = orig;
+	Process* p = ready_queue;
 
-	while(true)
+	while(p)
 	{
 		kprintf("Process: %s (%d) %s\n", p->name, p->pid,
 			p->state == PROCESS_STATE_ZOMBIE ? "ZOMBIE":
 					p->state == PROCESS_STATE_ALIVE ? "ALIVE" : "DEAD");
 		p = p->next;
-
-		if(p == orig) 
-            break;
 	}
 }
 
@@ -257,6 +253,11 @@ void ScheduleIRQ()
 
 void Schedule()
 {
+	if(ready_queue->next == nullptr)
+	{
+		return; //We only have one task remaining, we can't schedule
+	}
+
 	uint64_t* old_stack = &current_process->rsp;
 
     current_process = current_process->next;
