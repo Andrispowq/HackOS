@@ -28,25 +28,11 @@ extern "C" int kernel_main(KernelInfo* info)
     while(true) asm("hlt");
 }
 
-void draw_task()
-{
-    uint32_t x = 0;
-
-    while(true)
-    {
-        //asm("hlt");
-        Display::SharedDisplay()->framebuffer.DrawRect(x, 200, 200, 200, Display::SharedDisplay()->console.bgColour);
-        Display::SharedDisplay()->framebuffer.DrawRect(x += 20, 200, 200, 200, 0xFF0000FF);
-    }
-}
-
 void kernel_task()
 {
     kprintf("Finished the initialisation!\n");
     kprintf("Type 'help' for help!\n");
     kprintf("root@root:~/$ ");
-
-    AddProcess(new Process("draw", (void*)draw_task));
 
     while(true) asm("hlt");
 }

@@ -4,6 +4,9 @@ global StartProcess
 global StartProcess_FirstTime
 
 %macro PUSHALL 0
+    push    0
+    push    0
+
     push    r15
     push    r14
     push    r13
@@ -82,14 +85,21 @@ global StartProcess_FirstTime
 %endmacro
 
 StartProcess:
-    PUSHALL
+    mov     rsp, rbp ;skip Schedule
+    pop     rbp     
+    mov     rsp, rbp ;skip timer_callback
+    pop     rbp
+    mov     rsp, rbp ;skip ISRHandler
+    pop     rbp
+    pop     rax      ;skip return address
 
-    mov     cr3, rsi
+    add     rsp, 0x28 ;skip offset added in isr_common_stub
+
+    mov     [rsi], rsp ;save the stack top
+
+    ;should now be at the context set at the interrupt handler, load the new stack, and pop everything off
+    mov     cr3, rdx
     mov     rsp, rdi
-
-    mov     al, 0x20
-    mov     dx, 0x20
-    out     dx, al
 
     POPALL
 

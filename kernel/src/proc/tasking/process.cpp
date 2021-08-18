@@ -45,7 +45,7 @@ Process::Process(const char* name, void* rip)
     uint64_t* _stack = (uint64_t*)((void*)stack + 4096);
     uint64_t rbp = (uint64_t)_stack;
 	*--_stack = 0x10; //ss
-	*--_stack = (uint64_t)_stack; //stack
+	*--_stack = (uint64_t)(_stack); //stack
 	*--_stack = 0x0000000000000202; //rflags
 	*--_stack = 0x8; //cs
 	*--_stack = (uint64_t)rip; //rip
@@ -237,57 +237,13 @@ void Kill(uint64_t pid)
 
 void __exec()
 {
-    /*CurrentDirectory = current_process->pageTable;
+    CurrentDirectory = current_process->pageTable;
 	uint64_t pml4 = (uint64_t)CurrentDirectory->GetPML4();
 
-    StartProcess_FirstTime(current_process->rsp, CurrentDirectory->PhysicalAddress(pml4));*/
-	uint64_t pml4 = (uint64_t)CurrentDirectory->GetPML4();
+	uint64_t new_stack = current_process->rsp;
+	current_process->rsp += sizeof(Registers);
 
-	asm volatile("mov %%rax, %%cr3": :"a"(pml4));
-	asm volatile("mov %%rax, %%rsp": :"a"(current_process->rsp));
-
-	asm volatile("movdqa 240(%rsp), %xmm0");
-	asm volatile("movdqa 224(%rsp), %xmm1");
-	asm volatile("movdqa 208(%rsp), %xmm2");
-	asm volatile("movdqa 192(%rsp), %xmm3");
-	asm volatile("movdqa 176(%rsp), %xmm4");
-	asm volatile("movdqa 160(%rsp), %xmm5");
-	asm volatile("movdqa 144(%rsp), %xmm6");
-	asm volatile("movdqa 128(%rsp), %xmm7");
-
-	asm volatile("movdqa 112(%rsp), %xmm8");
-	asm volatile("movdqa 96(%rsp), %xmm9");
-	asm volatile("movdqa 80(%rsp), %xmm10");
-	asm volatile("movdqa 64(%rsp), %xmm11");
-	asm volatile("movdqa 48(%rsp), %xmm12");
-	asm volatile("movdqa 32(%rsp), %xmm13");
-	asm volatile("movdqa 16(%rsp), %xmm14");
-	asm volatile("movdqa 0(%rsp), %xmm15");
-
-	asm volatile("add $256, %rsp");
-
-	asm volatile("pop %rdi");
-	asm volatile("pop %rsi");
-	asm volatile("add $0x8, %rsp");
-	asm volatile("pop %rbp");
-	asm volatile("pop %rbx");
-	asm volatile("pop %rdx");
-	asm volatile("pop %rcx");
-	asm volatile("pop %rax");
-
-	asm volatile("pop %r8");
-	asm volatile("pop %r9");
-	asm volatile("pop %r10");
-	asm volatile("pop %r11");
-	asm volatile("pop %r12");
-	asm volatile("pop %r13");
-	asm volatile("pop %r14");
-	asm volatile("pop %r15");
-
-	asm volatile("add $0x10, %rsp");
-
-    asm volatile("sti");
-    asm volatile("iretq");
+    StartProcess_FirstTime(new_stack, CurrentDirectory->PhysicalAddress(pml4));
 }
 
 void ScheduleIRQ()
@@ -301,109 +257,18 @@ void ScheduleIRQ()
 
 void Schedule()
 {
-	asm volatile("cli");
-
-	asm volatile("add $0x10, %rsp");
-
-	asm volatile("push %r15");
-	asm volatile("push %r14");
-	asm volatile("push %r13");
-	asm volatile("push %r12");
-	asm volatile("push %r11");
-	asm volatile("push %r10");
-	asm volatile("push %r9");
-	asm volatile("push %r8");
-
-	asm volatile("push %rax");
-	asm volatile("push %rcx");
-	asm volatile("push %rdx");
-	asm volatile("push %rbx");
-	asm volatile("push %rbp");
-	asm volatile("push %rsp");
-	asm volatile("push %rsi");
-	asm volatile("push %rdi");
-
-	asm volatile("sub $256, %rsp");
-
-	asm volatile("movdqa %xmm0, 240(%rsp)");
-	asm volatile("movdqa %xmm1, 224(%rsp)");
-	asm volatile("movdqa %xmm2, 208(%rsp)");
-	asm volatile("movdqa %xmm3, 192(%rsp)");
-	asm volatile("movdqa %xmm4, 176(%rsp)");
-	asm volatile("movdqa %xmm5, 160(%rsp)");
-	asm volatile("movdqa %xmm6, 144(%rsp)");
-	asm volatile("movdqa %xmm7, 128(%rsp)");
-
-	asm volatile("movdqa %xmm8, 112(%rsp)");
-	asm volatile("movdqa %xmm9, 96(%rsp)");
-	asm volatile("movdqa %xmm10, 80(%rsp)");
-	asm volatile("movdqa %xmm11, 64(%rsp)");
-	asm volatile("movdqa %xmm12, 48(%rsp)");
-	asm volatile("movdqa %xmm13, 32(%rsp)");
-	asm volatile("movdqa %xmm14, 16(%rsp)");
-	asm volatile("movdqa %xmm15, 0(%rsp)");
-
-	asm volatile("mov %%rsp, %%rax" : "=a"(current_process->rsp));
+	uint64_t* old_stack = &current_process->rsp;
 
     current_process = current_process->next;
     if(!current_process) current_process = ready_queue;
 
-	kprintf("Starting %s (PID %x)\n", current_process->name, current_process->pid);
-
+    CurrentDirectory = current_process->pageTable;
 	uint64_t pml4 = (uint64_t)CurrentDirectory->GetPML4();
 
-	asm volatile("mov %%rax, %%cr3": :"a"(pml4));
-	asm volatile("mov %%rax, %%rsp": :"a"(current_process->rsp));
+	uint64_t new_stack = current_process->rsp;
+	current_process->rsp += sizeof(Registers);
 
-	asm volatile("movdqa 240(%rsp), %xmm0");
-	asm volatile("movdqa 224(%rsp), %xmm1");
-	asm volatile("movdqa 208(%rsp), %xmm2");
-	asm volatile("movdqa 192(%rsp), %xmm3");
-	asm volatile("movdqa 176(%rsp), %xmm4");
-	asm volatile("movdqa 160(%rsp), %xmm5");
-	asm volatile("movdqa 144(%rsp), %xmm6");
-	asm volatile("movdqa 128(%rsp), %xmm7");
-
-	asm volatile("movdqa 112(%rsp), %xmm8");
-	asm volatile("movdqa 96(%rsp), %xmm9");
-	asm volatile("movdqa 80(%rsp), %xmm10");
-	asm volatile("movdqa 64(%rsp), %xmm11");
-	asm volatile("movdqa 48(%rsp), %xmm12");
-	asm volatile("movdqa 32(%rsp), %xmm13");
-	asm volatile("movdqa 16(%rsp), %xmm14");
-	asm volatile("movdqa 0(%rsp), %xmm15");
-
-	asm volatile("add $256, %rsp");
-
-	asm volatile("out %%al, %%dx": :"d"(0x20), "a"(0x20)); // send EoI to master PIC
-
-	asm volatile("pop %rdi");
-	asm volatile("pop %rsi");
-	asm volatile("add $0x8, %rsp");
-	asm volatile("pop %rbp");
-	asm volatile("pop %rbx");
-	asm volatile("pop %rdx");
-	asm volatile("pop %rcx");
-	asm volatile("pop %rax");
-
-	asm volatile("pop %r8");
-	asm volatile("pop %r9");
-	asm volatile("pop %r10");
-	asm volatile("pop %r11");
-	asm volatile("pop %r12");
-	asm volatile("pop %r13");
-	asm volatile("pop %r14");
-	asm volatile("pop %r15");
-
-	asm volatile("add $0x10, %rsp");
-
-    asm volatile("sti");
-    asm volatile("iretq");
-
-    /*CurrentDirectory = current_process->pageTable;
-	uint64_t pml4 = (uint64_t)CurrentDirectory->GetPML4();
-
-    StartProcess(current_process->rsp, CurrentDirectory->PhysicalAddress(pml4));*/
+    StartProcess(new_stack, old_stack, CurrentDirectory->PhysicalAddress(pml4));
 }
 
 void InitialiseTasking()

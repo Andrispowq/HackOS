@@ -14,7 +14,7 @@
 
 #define STACK_SIZE 4096
 
-extern "C" void StartProcess(uint64_t new_stack, uint64_t pml4);
+extern "C" void StartProcess(uint64_t new_stack, uint64_t* old_stack, uint64_t pml4);
 extern "C" void StartProcess_FirstTime(uint64_t new_stack, uint64_t pml4);
 
 class Process
