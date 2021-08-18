@@ -1,7 +1,8 @@
 #include "ahci_device.h"
-#include "arch/x86_64/paging/page_table_manager.h"""
+#include "arch/x86_64/paging/page_table_manager.h"
 
 extern PageTableManager KernelDirectory;
+extern PageTableManager* CurrentDirectory;
 
 namespace AHCI
 {
@@ -63,7 +64,7 @@ namespace AHCI
                     Ports[PortCount]->PortNumber = PortCount;
                     PortCount++;
 
-                    AHCIDevice* device = new AHCIDevice(Ports[PortCount]);
+                    AHCIDevice* device = new AHCIDevice(Ports[PortCount - 1]);
                     devices.push_back(device);
                 }
             }
@@ -129,10 +130,7 @@ namespace AHCI
 
     bool Port::Read(uint64_t Sector, void* Buffer, uint32_t SectorCount)
     {
-        uint32_t SectorL = (uint32_t) Sector;
-        uint32_t SectorH = (uint32_t) (Sector >> 32);
-
-        HBAPortPtr->InterruptStatus = (uint32_t) - 1; // Clear pending interrupt bits
+        HBAPortPtr->InterruptStatus = (uint32_t) -1; // Clear pending interrupt bits
 
         HBACommandHeader* CommandHeader = (HBACommandHeader*)HBAPortPtr->CommandListBase;
         CommandHeader->CommandFISLength = sizeof(FIS_REG_H2D) / sizeof(uint32_t); //command FIS size;
@@ -140,11 +138,13 @@ namespace AHCI
         CommandHeader->PRDTLength = 1;
 
         HBACommandTable* CommandTable = (HBACommandTable*)(CommandHeader->CommandTableBaseAddress);
-        memset(CommandTable, 0, sizeof(HBACommandTable) + (CommandHeader->PRDTLength-1)*sizeof(HBAPRDTEntry));
+        memset(CommandTable, 0, sizeof(HBACommandTable) + (CommandHeader->PRDTLength - 1) * sizeof(HBAPRDTEntry));
 
-        CommandTable->PRDTEntry[0].DataBaseAddress = (uint32_t)(uint64_t)Buffer;
-        CommandTable->PRDTEntry[0].DataBaseAddressUpper = (uint32_t)((uint64_t)Buffer >> 32);
-        CommandTable->PRDTEntry[0].ByteCount = (SectorCount<<9)-1; // 512 bytes per sector
+        uint64_t buffAddress = (uint64_t)KernelDirectory.PhysicalAddress((uint64_t)Buffer) + ((uint64_t)Buffer & 0xFFF);
+
+        CommandTable->PRDTEntry[0].DataBaseAddress = (uint32_t)buffAddress;
+        CommandTable->PRDTEntry[0].DataBaseAddressUpper = (uint32_t)(buffAddress >> 32);
+        CommandTable->PRDTEntry[0].ByteCount = (SectorCount << 9) - 1; // 512 bytes per sector
         CommandTable->PRDTEntry[0].InterruptOnCompletion = 1;
 
         FIS_REG_H2D* CommandFIS = (FIS_REG_H2D*)(&CommandTable->CommandFIS);
@@ -153,12 +153,12 @@ namespace AHCI
         CommandFIS->CommandControl = 1; // command
         CommandFIS->Command = ATA_CMD_READ_DMA_EX;
 
-        CommandFIS->LBA0 = (uint8_t)SectorL;
-        CommandFIS->LBA1 = (uint8_t)(SectorL >> 8);
-        CommandFIS->LBA2 = (uint8_t)(SectorL >> 16);
-        CommandFIS->LBA3 = (uint8_t)SectorH;
-        CommandFIS->LBA4 = (uint8_t)(SectorH >> 8);
-        CommandFIS->LBA4 = (uint8_t)(SectorH >> 16);
+        CommandFIS->LBA0 = (uint8_t)(Sector);
+        CommandFIS->LBA1 = (uint8_t)(Sector >> 8);
+        CommandFIS->LBA2 = (uint8_t)(Sector >> 16);
+        CommandFIS->LBA3 = (uint8_t)(Sector >> 24);
+        CommandFIS->LBA4 = (uint8_t)(Sector >> 32);
+        CommandFIS->LBA5 = (uint8_t)(Sector >> 40);
 
         CommandFIS->DeviceRegister = 1 << 6; //LBA mode
 
@@ -195,10 +195,7 @@ namespace AHCI
 
     bool Port::Write(uint64_t Sector, void* Buffer, uint32_t SectorCount)
     {
-        uint32_t SectorL = (uint32_t) Sector;
-        uint32_t SectorH = (uint32_t) (Sector >> 32);
-
-        HBAPortPtr->InterruptStatus = (uint32_t) - 1; // Clear pending interrupt bits
+        HBAPortPtr->InterruptStatus = (uint32_t) -1; // Clear pending interrupt bits
 
         HBACommandHeader* CommandHeader = (HBACommandHeader*)HBAPortPtr->CommandListBase;
         CommandHeader->CommandFISLength = sizeof(FIS_REG_H2D) / sizeof(uint32_t); //command FIS size;
@@ -206,11 +203,13 @@ namespace AHCI
         CommandHeader->PRDTLength = 1;
 
         HBACommandTable* CommandTable = (HBACommandTable*)(CommandHeader->CommandTableBaseAddress);
-        memset(CommandTable, 0, sizeof(HBACommandTable) + (CommandHeader->PRDTLength-1)*sizeof(HBAPRDTEntry));
+        memset(CommandTable, 0, sizeof(HBACommandTable) + (CommandHeader->PRDTLength - 1) * sizeof(HBAPRDTEntry));
 
-        CommandTable->PRDTEntry[0].DataBaseAddress = (uint32_t)(uint64_t)Buffer;
-        CommandTable->PRDTEntry[0].DataBaseAddressUpper = (uint32_t)((uint64_t)Buffer >> 32);
-        CommandTable->PRDTEntry[0].ByteCount = (SectorCount<<9) - 1; // 512 bytes per sector
+        uint64_t buffAddress = (uint64_t)CurrentDirectory->PhysicalAddress((uint64_t)Buffer);
+
+        CommandTable->PRDTEntry[0].DataBaseAddress = (uint32_t)buffAddress;
+        CommandTable->PRDTEntry[0].DataBaseAddressUpper = (uint32_t)(buffAddress >> 32);
+        CommandTable->PRDTEntry[0].ByteCount = (SectorCount << 9) - 1; // 512 bytes per sector
         CommandTable->PRDTEntry[0].InterruptOnCompletion = 1;
 
         FIS_REG_H2D* CommandFIS = (FIS_REG_H2D*)(&CommandTable->CommandFIS);
@@ -219,12 +218,12 @@ namespace AHCI
         CommandFIS->CommandControl = 1; // command
         CommandFIS->Command = ATA_CMD_READ_DMA_EX;
 
-        CommandFIS->LBA0 = (uint8_t)SectorL;
-        CommandFIS->LBA1 = (uint8_t)(SectorL >> 8);
-        CommandFIS->LBA2 = (uint8_t)(SectorL >> 16);
-        CommandFIS->LBA3 = (uint8_t)SectorH;
-        CommandFIS->LBA4 = (uint8_t)(SectorH >> 8);
-        CommandFIS->LBA4 = (uint8_t)(SectorH >> 16);
+        CommandFIS->LBA0 = (uint8_t)(Sector);
+        CommandFIS->LBA1 = (uint8_t)(Sector >> 8);
+        CommandFIS->LBA2 = (uint8_t)(Sector >> 16);
+        CommandFIS->LBA3 = (uint8_t)(Sector >> 24);
+        CommandFIS->LBA4 = (uint8_t)(Sector >> 32);
+        CommandFIS->LBA5 = (uint8_t)(Sector >> 40);
 
         CommandFIS->DeviceRegister = 1 << 6; //LBA mode
 
@@ -270,7 +269,8 @@ namespace AHCI
 
     AHCIDevice::AHCIDevice(Port* port)
         : port(port)
-    {        
+    {
+        port->Configure();
     }    
 
     void AHCIDevice::Read(uint64_t LBA, void* buffer, uint64_t size)

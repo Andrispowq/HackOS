@@ -21,13 +21,6 @@ namespace PCI
         if (pciDeviceHeader->DeviceID == 0) return;
         if (pciDeviceHeader->DeviceID == 0xFFFF) return;
 
-        kprintf("Function found: %s / %s / %s / %s / %s\n", 
-            GetVendorName(pciDeviceHeader->VendorID),
-            GetDeviceName(pciDeviceHeader->VendorID, pciDeviceHeader->DeviceID),
-            DeviceClasses[pciDeviceHeader->Class],
-            GetSubclassName(pciDeviceHeader->Class, pciDeviceHeader->Subclass),
-            GetProgIFName(pciDeviceHeader->Class, pciDeviceHeader->Subclass, pciDeviceHeader->ProgIF));
-
         switch (pciDeviceHeader->Class)
         {
         case 0x01: // mass storage controller

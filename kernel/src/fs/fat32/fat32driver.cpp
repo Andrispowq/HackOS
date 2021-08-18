@@ -8,6 +8,8 @@
 
 #include "fs/filesystem.h"
 
+#include "arch/x86_64/paging/page_table_manager.h"
+
 extern uint8_t fromUEFI;
 
 FAT32Driver::FAT32Driver(Device* device, uint32_t part_start)

@@ -27,6 +27,10 @@ void LocateFilesystemsFAT32(Device* device)
 			part++;
 		}
 	}
+	else
+	{
+		RegisterFilesystem(new FAT32(device, 0));
+	}
 }
 
 uint64_t FAT32_ActiveFile::GetSize() const

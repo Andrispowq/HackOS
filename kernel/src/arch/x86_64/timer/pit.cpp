@@ -27,12 +27,10 @@ double timeSinceBoot = 0.0;
 
 static void timer_callback(Registers* regs) 
 {
-    if(!task)
-    {
-        tick++;    
-        timeSinceBoot += 1.0 / (double)frequency;
-	}
-    else
+    tick++;    
+    timeSinceBoot += 1.0 / (double)frequency;
+    
+    if(task)
     {
         __outb(PIC1_COMMAND, PIC_EOI); //Send EOI because we aren't returning from here
         Schedule();

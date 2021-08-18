@@ -48,7 +48,7 @@ void* alloc(size_t size)
     }
 
     HeapSegmentHeader* currentSeg = (HeapSegmentHeader*) heapStart;
-    while(1)
+    while(true)
     {
         if(currentSeg->free)
         {
@@ -147,6 +147,8 @@ void HeapSegmentHeader::CombineBackward()
     }
 }
 
+#include "lib/stdio.h"
+
 HeapSegmentHeader* HeapSegmentHeader::Split(size_t size)
 {
     if (size < 0x10) 
@@ -161,6 +163,7 @@ HeapSegmentHeader* HeapSegmentHeader::Split(size_t size)
     }
 
     HeapSegmentHeader* newSplitHdr = (HeapSegmentHeader*) ((size_t)this + size + sizeof(HeapSegmentHeader));
+    kprintf("New header: %x\n", newSplitHdr);
     next->last = newSplitHdr; // Set the next segment's last segment to our new segment
     newSplitHdr->next = next; // Set the new segment's next segment to out original next segment
     next = newSplitHdr; // Set our new segment to the new segment

@@ -20,7 +20,7 @@ KernelInfo* kInfo;
 extern "C" int kernel_main(KernelInfo* info)
 {
     kInfo = info;
-   	asm volatile("mov %%rsp, %0" : "=r" (initial_rsp));	
+   	asm volatile("mov %%rsp, %0" : "=r" (initial_rsp));
 
     InitialiseDisplay(info);
     InitialiseKernel(info);
@@ -30,13 +30,11 @@ extern "C" int kernel_main(KernelInfo* info)
 
 void kernel_task()
 {
-    PrintAll();
-
     kprintf("Finished the initialisation!\n");
     kprintf("Type 'help' for help!\n");
+    SleepFor(1000);
     kprintf("root@root:~/$ ");
 
-    _Kill();
     while(true) asm("hlt");
 }
 

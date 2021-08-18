@@ -157,17 +157,16 @@ void InitialiseFilesystem()
 void InitialiseKernel(struct KernelInfo* info)
 {
     kprintf("Initialising the kernel heap!\n");
-    InitialiseHeap((void*)0x0000100000000000, 0x1000);
+    InitialiseHeap((void*)0x0000100000000000, 0x100);
 
     //Initialise the devices and filesystem, before the RSDP and the PCI bus
     InitialiseDevices();
     InitialiseFilesystems();
 
-    ATADevice* device = new ATADevice(); //Let's just assume this is here
-    RegisterDevice(device);
-    LocateFilesystemsFAT32(device);
-
     InitialiseRSDP(info);
+
+    RegisterDevice(new ATADevice());
+    LocateFilesystemsFAT32(devices[0]);
 
     InitialiseFilesystem();
     InitialiseShell();
