@@ -45,15 +45,15 @@ void PageFaultHandler(Registers* regs)
 
     kprintf("\n\n\n---------------------------------------------");
 
-    kprintf("\n\n\nPAGE FAULT: at virtual address %x, physical address %x\n", 
-        cr2, CurrentDirectory->PhysicalAddress(cr2), flags);
+    kprintf("\n\n\nPAGE FAULT: at virtual address %x, physical address %x, RIP: %x\n", 
+        cr2, CurrentDirectory->PhysicalAddress(cr2) + cr2 & 0xFFF, flags, regs->rip);
 
     kprintf("Flags:\n");
-    kprintf("Present: %d\n", present);
-    kprintf("Write: %d\n", rw);
-    kprintf("User access: %d\n", us);
-    kprintf("Reserved: %d\n", reserved);
-    kprintf("Instruction fetch: %d\n", inst);
+    kprintf("Present: %s\n", (present > 0) ? "true" : "false");
+    kprintf("Write: %s\n", (rw > 0) ? "true" : "false");
+    kprintf("User access: %s\n", (us > 0) ? "true" : "false");
+    kprintf("Reserved: %s\n", (reserved > 0) ? "true" : "false");
+    kprintf("Instruction fetch: %s\n", (reserved > 0) ? "true" : "false");
 
     kprintf("\n\n\n---------------------------------------------\n\n\n");
 

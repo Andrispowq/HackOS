@@ -4,6 +4,7 @@
 
 #include "acpi/fadt.h"
 #include "acpi/pci/pci.h"
+#include "acpi/apic/madt.h"
 
 #include "fs/fat32/fat32.h"
 #include "fs/vfs.h"
@@ -112,6 +113,12 @@ void InitialiseRSDP(struct KernelInfo* info)
         PCI::EnumeratePCI((ACPI::MCFGHeader*)mcfg);
         kprintf("\n");
     }
+
+    if(apic != nullptr)
+    {
+        ACPI::MADT* madt = (ACPI::MADT*)apic;
+        madt->DetectCores();
+    }
 }
 
 MemoryMap _map(nullptr, 0);
@@ -157,7 +164,7 @@ void InitialiseFilesystem()
 void InitialiseKernel(struct KernelInfo* info)
 {
     kprintf("Initialising the kernel heap!\n");
-    InitialiseHeap((void*)0x0000100000000000, 0x100);
+    InitialiseHeap((void*)0x0000100000000000, 0x10);
 
     //Initialise the devices and filesystem, before the RSDP and the PCI bus
     InitialiseDevices();

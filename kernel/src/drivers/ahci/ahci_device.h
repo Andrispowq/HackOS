@@ -161,6 +161,8 @@ namespace AHCI
         HBAPort* HBAPortPtr;
         PortType AHCIPortType;
         uint8_t PortNumber;
+
+        uint64_t tempBuffer;
     };
 
     class AHCIDevice : public Device

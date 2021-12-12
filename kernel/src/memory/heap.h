@@ -17,7 +17,7 @@ typedef struct HeapSegmentHeader
 void InitialiseHeap(void* start_address, uint64_t size);
 void ExpandHeap(uint64_t length);
 
-void* alloc(uint64_t size);
+void* alloc(uint64_t size, uint64_t alignment = 0);
 void free(void* address);
 
 void* operator new(unsigned long int size);

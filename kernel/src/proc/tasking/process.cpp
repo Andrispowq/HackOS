@@ -275,7 +275,7 @@ void Schedule()
 void InitialiseTasking()
 {
     // Relocate the stack so we know where it is
-    MoveStack((void*)0x000700000000000, 0x2000);
+    //MoveStack((void*)0x000700000000000, 0x2000);
 
 	current_process = new Process("kernel_idle", (void*)idle_thread);
     ready_queue = current_process;

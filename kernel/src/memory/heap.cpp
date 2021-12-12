@@ -1,5 +1,8 @@
 #include "heap.h"
 #include "arch/x86_64/paging/paging.h"
+#include "lib/memory.h"
+
+#include "lib/stdio.h"
 
 void* heapStart;
 void* heapEnd;
@@ -16,6 +19,7 @@ void InitialiseHeap(void* start_address, uint64_t size)
     {
         KernelDirectory.MapMemory((uint64_t)pos, 
             (paddr_t)PageFrameAllocator::SharedAllocator()->RequestPage());
+        memset(pos, 0, 0x1000);
         pos = (void*)((uint64_t)pos + 0x1000);
     }
 
@@ -33,10 +37,10 @@ void InitialiseHeap(void* start_address, uint64_t size)
     heap_init = 1;
 }
 
-void* alloc(size_t size)
+void* alloc(uint64_t size, uint64_t alignment)
 {
     // it is not a multiple of 0x10
-    if (size % 0x10 > 0)
+    if ((size % 0x10) > 0)
     { 
         size -= (size % 0x10);
         size += 0x10;
@@ -55,13 +59,11 @@ void* alloc(size_t size)
             if (currentSeg->length > size)
             {
                 currentSeg->Split(size);
-                currentSeg->free = 0;
-                return (void*)((uint64_t)currentSeg + sizeof(HeapSegmentHeader));
             }
 
-            if (currentSeg->length == size)
+            if (!(currentSeg->length < size))
             {
-                currentSeg->free = 0;
+                currentSeg->free = false;
                 return (void*)((uint64_t)currentSeg + sizeof(HeapSegmentHeader));
             }
         }
@@ -75,13 +77,13 @@ void* alloc(size_t size)
     }
 
     ExpandHeap(size);
-    return alloc(size);
+    return alloc(size, alignment);
 }
 
 void free(void* address)
 {
     HeapSegmentHeader* segment = (HeapSegmentHeader*)address - 1;
-    segment->free = 1;
+    segment->free = true;
     segment->CombineForward();
     segment->CombineBackward();
 }
@@ -90,7 +92,7 @@ void ExpandHeap(size_t length)
 {
     if (length % 0x1000) 
     {
-        length -= length % 0x1000;
+        length -= (length % 0x1000);
         length += 0x1000;
     }
 
@@ -101,10 +103,11 @@ void ExpandHeap(size_t length)
     {
         KernelDirectory.MapMemory((vaddr_t)heapEnd, 
             (paddr_t)PageFrameAllocator::SharedAllocator()->RequestPage());
+        memset(heapEnd, 0, 0x1000);
         heapEnd = (void*)((size_t)heapEnd + 0x1000);
     }
 
-    newSegment->free = 1;
+    newSegment->free = true;
     newSegment->last = LastHdr;
     LastHdr->next = newSegment;
     LastHdr = newSegment;
@@ -141,13 +144,11 @@ void HeapSegmentHeader::CombineForward()
 
 void HeapSegmentHeader::CombineBackward()
 {
-    if (last != nullptr && last->free) 
+    if ((last != nullptr) && last->free) 
     {
         last->CombineForward();
     }
 }
-
-#include "lib/stdio.h"
 
 HeapSegmentHeader* HeapSegmentHeader::Split(size_t size)
 {
@@ -156,15 +157,18 @@ HeapSegmentHeader* HeapSegmentHeader::Split(size_t size)
         return nullptr;
     }
 
-    int64_t splitSegLength = length - size - (sizeof(HeapSegmentHeader));
+    int64_t splitSegLength = ((int64_t)length) - size - (sizeof(HeapSegmentHeader));
     if (splitSegLength < 0x10) 
     {
         return nullptr;
     }
 
     HeapSegmentHeader* newSplitHdr = (HeapSegmentHeader*) ((size_t)this + size + sizeof(HeapSegmentHeader));
-    kprintf("New header: %x\n", newSplitHdr);
-    next->last = newSplitHdr; // Set the next segment's last segment to our new segment
+    if(next != nullptr)
+    {
+        next->last = newSplitHdr; // Set the next segment's last segment to our new segment
+    }
+    
     newSplitHdr->next = next; // Set the new segment's next segment to out original next segment
     next = newSplitHdr; // Set our new segment to the new segment
     newSplitHdr->last = this; // Set our new segment's last segment to the current segment
@@ -179,8 +183,6 @@ HeapSegmentHeader* HeapSegmentHeader::Split(size_t size)
 
     return newSplitHdr;
 }
-
-#include "lib/memory.h"
 
 void* operator new(unsigned long int size) { return (void*)kmalloc((uint64_t)size); }
 void* operator new[](unsigned long int size) { return (void*)kmalloc((uint64_t)size); }

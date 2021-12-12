@@ -6,7 +6,7 @@ BOOTLOADER_DIR = boot
 KERNEL_DIR = kernel
 BUILD_DIR := bin
 
-TARGET_BIOS = false
+TARGET_BIOS = true
 
 ifneq ($(TARGET_BIOS), true)
 
@@ -48,9 +48,10 @@ buildimg:
 run:
 	qemu-system-x86_64 \
 	-drive file=$(BUILD_DIR)/$(OS_NAME).img \
-	-m 512M \
+	-m 1G \
 	-cpu qemu64 \
 	-machine q35 \
+	-smp cores=4,threads=1,sockets=1 \
 	-drive if=pflash,format=raw,unit=0,file="$(OVMF_DIR)/OVMF_CODE-pure-efi.fd",readonly=on \
 	-drive if=pflash,format=raw,unit=1,file="$(OVMF_DIR)/OVMF_VARS-pure-efi.fd" \
 	-net none \
@@ -59,9 +60,10 @@ debug:
 	qemu-system-x86_64 \
 	-s \
 	-drive file=$(BUILD_DIR)/$(OS_NAME).img \
-	-m 512M \
+	-m 1G \
 	-cpu qemu64 \
 	-machine q35 \
+	-smp cores=4,threads=1,sockets=1 \
 	-drive if=pflash,format=raw,unit=0,file="$(OVMF_DIR)/OVMF_CODE-pure-efi.fd",readonly=on \
 	-drive if=pflash,format=raw,unit=1,file="$(OVMF_DIR)/OVMF_VARS-pure-efi.fd" \
 	-net none \
@@ -116,8 +118,10 @@ buildimg:
 run:
 	qemu-system-x86_64 \
 	-drive file=$(BUILD_DIR)/$(OS_NAME).img,format=raw \
+	-m 1G \
 	-cpu qemu64 \
-	-m 512M \
+	-machine q35 \
+	-smp cores=4,threads=1,sockets=1 \
 	-net none \
 	-rtc clock=host,base=localtime \
 
@@ -128,8 +132,10 @@ debug:
 	qemu-system-x86_64 \
 	-s \
 	-drive file=$(BUILD_DIR)/$(OS_NAME).img,format=raw \
+	-m 1G \
 	-cpu qemu64 \
-	-m 512M \
+	-machine q35 \
+	-smp cores=4,threads=1,sockets=1 \
 	-net none \
 	-d guest_errors,cpu_reset & \
 	gdb -ex "target remote localhost:1234" -ex "symbol-file kernel/bin/kernel.elf" \

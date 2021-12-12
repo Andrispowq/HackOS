@@ -11,6 +11,7 @@
 #include "arch/x86_64/paging/page_table_manager.h"
 
 extern uint8_t fromUEFI;
+extern PageTableManager KernelDirectory;
 
 FAT32Driver::FAT32Driver(Device* device, uint32_t part_start)
 	: device(device), PartitionStart(part_start)

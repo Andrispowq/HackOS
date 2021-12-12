@@ -85,6 +85,7 @@ paddr_t PageTableManager::PhysicalAddress(vaddr_t virtualAddress)
 
     PageTableEntry pt_entry = pt->entries[indices.index_P];
     uint64_t address = pt_entry.address << 12;
+
     return address;
 }
 

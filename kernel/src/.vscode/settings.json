@@ -1,14 +1,14 @@
 {
     "files.associations": {
-        "paging.h": "c",
-        "memory_map.h": "c",
-        "string.h": "c",
-        "page_table_manager.h": "c",
-        "screen.h": "c",
-        "stdio.h": "c",
-        "ports.h": "c",
-        "framebuffer.h": "c",
-        "idt.h": "c",
+        "paging.h": "cpp",
+        "memory_map.h": "cpp",
+        "string.h": "cpp",
+        "page_table_manager.h": "cpp",
+        "screen.h": "cpp",
+        "stdio.h": "cpp",
+        "ports.h": "cpp",
+        "framebuffer.h": "cpp",
+        "idt.h": "cpp",
         "cstdarg": "cpp",
         "cstdio": "cpp",
         "cstdint": "cpp"
