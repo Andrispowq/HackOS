@@ -138,7 +138,7 @@ void InitialiseIRQ()
         Display::SharedDisplay()->framebuffer.height);
 
     __outb(PIC1_DATA, 0b11111000);
-    __outb(PIC2_DATA, 0b11111111);
+    __outb(PIC2_DATA, 0b11101111);
 
     asm volatile("sti");
 }

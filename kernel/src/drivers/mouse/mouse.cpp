@@ -171,7 +171,7 @@ static void ProcessMousePacket()
 
 static void mouse_callback(Registers* regs)
 {
-    uint8_t status = __inb(0x64);
+    uint8_t status = __inb(0x60);
 
     ProcessMousePacket();
 

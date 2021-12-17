@@ -29,6 +29,10 @@ static uint8_t elf_check_file(Elf64_Ehdr* hdr)
 Elf64_Ehdr* LoadProgram(const char* name, uint64_t* baseAddress)
 {
 	Filesystem* drive_C = filesystems[0];
+	if(drive_C == nullptr)
+	{
+		return nullptr;
+	}
 
 	ActiveFile* file = drive_C->OpenFile(name); //Let's assume for now that we have a filesystem
 	if(file == nullptr) 

@@ -114,6 +114,7 @@ void command_mode(char* input)
             else
             {
 	            Filesystem* drive_C = filesystems[0];
+                if(drive_C == nullptr) return;
                 uint64_t count = drive_C->GetDirectoryEntryCount(working_dir);
 
                 if(count != 0)
@@ -147,6 +148,7 @@ void command_mode(char* input)
     else if(check_command(input, "ls"))
     {
 	    Filesystem* drive_C = filesystems[0];
+        if(drive_C == nullptr) return;
         uint64_t count = drive_C->GetDirectoryEntryCount(working_dir);
 
         for(uint64_t i = 0; i < count; i++)

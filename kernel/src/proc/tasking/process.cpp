@@ -33,6 +33,12 @@ void idle_thread()
 	while(true) asm("hlt");
 }
 
+void call_method(void(*rip)())
+{
+	rip();
+	_Kill();
+}
+
 Process::Process(const char* name, void* rip)
     : name((char*)name)
 {

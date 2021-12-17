@@ -26,7 +26,7 @@ void InitialiseDisplay(Framebuffer framebuffer, PSF1_FONT* font)
     uint64_t fb_size = framebuffer.width * framebuffer.height * 4;
     for(uint64_t i = fb_addr; i < fb_addr + fb_size + 0x1000; i += 0x1000)
     {
-        KernelDirectory.MapMemory(i, i, (uint64_t)PageTableFlags::Present | (uint64_t)PageTableFlags::Writable | (uint64_t)PageTableFlags::CacheDisabled);
+        KernelDirectory.MapMemory(i, i, (uint64_t)PageTableFlags::Present | (uint64_t)PageTableFlags::Writable | (uint64_t)PageTableFlags::CacheDisabled | (uint64_t)PageTableFlags::WriteThrough);
     }
 
     display.framebuffer = framebuffer;
