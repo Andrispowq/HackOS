@@ -8,6 +8,11 @@ extern uint8_t fromUEFI;
 
 void LocateFilesystemsFAT32(Device* device)
 {
+	if(!device)
+	{
+		return;
+	}
+
 	//The MBR is still at 0x0600, extract the boot partition's start LBA
     uint32_t* MBR = (uint32_t*)0x0600;
 
