@@ -98,7 +98,6 @@ namespace ACPI
                 
                 if (i < 300) 
                 {
-                    kprintf("Enabled ACPI\n");
                     return;
                 } 
                 else 

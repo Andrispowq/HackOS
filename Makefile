@@ -54,6 +54,9 @@ run:
 	-smp cores=4,threads=1,sockets=1 \
 	-drive if=pflash,format=raw,unit=0,file="$(OVMF_DIR)/OVMF_CODE-pure-efi.fd",readonly=on \
 	-drive if=pflash,format=raw,unit=1,file="$(OVMF_DIR)/OVMF_VARS-pure-efi.fd" \
+	-usb \
+	-device qemu-xhci,id=xhci \
+	-device usb-storage,bus=xhci.0,drive=stick \
 	-net none \
 
 debug:
@@ -66,6 +69,9 @@ debug:
 	-smp cores=4,threads=1,sockets=1 \
 	-drive if=pflash,format=raw,unit=0,file="$(OVMF_DIR)/OVMF_CODE-pure-efi.fd",readonly=on \
 	-drive if=pflash,format=raw,unit=1,file="$(OVMF_DIR)/OVMF_VARS-pure-efi.fd" \
+	-usb \
+	-device qemu-xhci,id=xhci \
+	-device usb-storage,bus=xhci.0,drive=stick \
 	-net none \
 	-d guest_errors,cpu_reset,int \
 	-no-reboot -no-shutdown & \
@@ -122,8 +128,15 @@ run:
 	-cpu qemu64 \
 	-machine q35 \
 	-smp cores=4,threads=1,sockets=1 \
+	-usb \
+	-device usb-ehci,id=ehci \
+	-device qemu-xhci,id=xhci \
+	
 	-net none \
 	-rtc clock=host,base=localtime \
+
+# ,if=none,id=stick
+# -device usb-storage,bus=xhci.0,drive=stick \
 
 install:
 	sudo dd if=bin/HackOS.img of=/dev/sdb
@@ -136,6 +149,9 @@ debug:
 	-cpu qemu64 \
 	-machine q35 \
 	-smp cores=4,threads=1,sockets=1 \
+	-usb \
+	-device usb-ehci,id=ehci \
+	-device qemu-xhci,id=xhci \
 	-net none \
 	-d guest_errors,cpu_reset & \
 	gdb -ex "target remote localhost:1234" -ex "symbol-file kernel/bin/kernel.elf" \

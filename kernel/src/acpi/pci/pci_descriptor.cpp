@@ -45,7 +45,8 @@ namespace PCI
         return (const char*)buf;
     }
 
-    const char* GetDeviceName(uint16_t vendorID, uint16_t deviceID){
+    const char* GetDeviceName(uint16_t vendorID, uint16_t deviceID)
+    {
         switch (vendorID)
         {
         case 0x8086: // Intel

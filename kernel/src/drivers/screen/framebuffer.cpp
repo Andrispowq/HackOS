@@ -1,4 +1,5 @@
 #include "framebuffer.h"
+#include "lib/memory.h"
 
 void Framebuffer::PutPixel(uint32_t x, uint32_t y, uint32_t colour)
 {
@@ -86,4 +87,9 @@ void Framebuffer::ClearMouseCursor(uint8_t* cursor, uint32_t x, uint32_t y)
             }
         }
     }
+}
+
+void Framebuffer::DrawBackbuffer()
+{
+    //memcpy(backbuffer, address, (bpp / 8) * width * height);
 }

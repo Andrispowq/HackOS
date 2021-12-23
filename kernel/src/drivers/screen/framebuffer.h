@@ -13,6 +13,8 @@ public:
     void DrawMouseCursor(uint8_t* cursor, uint32_t x, uint32_t y, uint32_t colour);
     void ClearMouseCursor(uint8_t* cursor, uint32_t x, uint32_t y);
 
+    void DrawBackbuffer();
+
     uint32_t* address;
     uint32_t width, height, bpp, pitch;
 };

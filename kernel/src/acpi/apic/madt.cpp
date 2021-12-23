@@ -54,12 +54,6 @@ namespace ACPI
 
         kprintf("Found %d cores\n", cores);
         kprintf("Local APIC address: 0x%x\n", lapic_ptr);
-        kprintf("I/O APIC address: 0x%x\n", ioapic_ptr);
-        kprintf("Processor IDs:\n");
-        for(size_t i = 0; i < cores; i++)
-        {
-            kprintf(" %x", lapic_ids[i]);
-        }
-        kprintf("\n");
+        kprintf("I/O APIC address: 0x%x\n\n", ioapic_ptr);
     }
 };
