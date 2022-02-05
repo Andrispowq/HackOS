@@ -773,22 +773,23 @@ int FAT32Driver::WriteFile(DirEntry fileMeta, uint64_t offset, void* buffer, uin
 			continue;
 		}
 
-		uint64_t toRead = (bytes + offset) - bytes_so_far;
-		if (toRead > ClusterSize)
+		uint64_t toWrite = (bytes + offset) - bytes_so_far;
+		if (toWrite > ClusterSize)
 		{
-			toRead = ClusterSize;
+			toWrite = ClusterSize;
 			WriteCluster(clus, buff);
 		}
 		else
 		{
 			uint8_t* temporary = new uint8_t[ClusterSize];
+			memset(temporary, 0, ClusterSize);
+			memcpy(temporary, buff, toWrite);
 			WriteCluster(clus, temporary);
-			memcpy(buff, temporary, toRead);
 			delete[] temporary;
 		}
 
 		buff += ClusterSize;
-		bytes_so_far += toRead;
+		bytes_so_far += toWrite;
 	}
 
 	ModifyDirectoryEntry(fileMeta.parentCluster, fileMeta.name, fileMeta);
