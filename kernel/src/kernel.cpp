@@ -50,6 +50,11 @@ void kernel_task()
 
     win_man->Update();
     win_man->Draw();
+    while(true)
+    {
+        Display::SharedDisplay()->DrawBackbuffer();
+        SleepFor(1);
+    }
 
     while(true) asm("hlt");
 }
