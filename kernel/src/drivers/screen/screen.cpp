@@ -29,6 +29,21 @@ void InitialiseDisplay(Framebuffer framebuffer, PSF1_FONT* font)
         KernelDirectory.MapMemory(i, i, (uint64_t)PageTableFlags::Present | (uint64_t)PageTableFlags::Writable | (uint64_t)PageTableFlags::CacheDisabled | (uint64_t)PageTableFlags::WriteThrough);
     }
 
+    uint64_t backbufferMemory = 0xD0000000;
+    for(uint64_t i = backbufferMemory; i < backbufferMemory + fb_size + 0x1000; i += 0x1000)
+    {
+        KernelDirectory.MapMemory(i, (uint64_t)PageFrameAllocator::SharedAllocator()->RequestPage());
+    }
+    memset((void*)backbufferMemory, 0, fb_size);
+
+    Framebuffer backbuffer;
+    backbuffer.address = (uint32_t*)backbufferMemory;
+    backbuffer.width = framebuffer.width;
+    backbuffer.height = framebuffer.height;
+    backbuffer.bpp = framebuffer.bpp;
+    backbuffer.pitch = framebuffer.pitch;
+    display.backbuffer = backbuffer;
+
     display.framebuffer = framebuffer;
     display.console.fontColour = 0xFF00FFFF;
     display.console.bgColour = 0xFF505050;
@@ -55,10 +70,15 @@ void printf_backspace()
     display.put_backspace();
 }
 
+void Display::DrawBackbuffer()
+{
+    memcpy(framebuffer.address, backbuffer.address, framebuffer.width * framebuffer.height * 4);
+}
+
 void Display::clear()
 {
-    uint32_t* addr = framebuffer.address;
-    uint32_t size = framebuffer.width * framebuffer.height * 4;
+    uint32_t* addr = backbuffer.address;
+    uint32_t size = backbuffer.width * backbuffer.height * 4;
     uint32_t colour = console.bgColour;
 
     memset(addr, colour, size);
@@ -81,10 +101,36 @@ int Display::puts(const char* str)
     return i;
 }
 
-void putchar_at(char character, uint32_t xOff, uint32_t yOff)
+void putchar_at_xy(Framebuffer fb, char character, uint32_t x, uint32_t y)
 {
-    uint32_t* addr = display.framebuffer.address;
-    uint32_t pitch = display.framebuffer.width;
+    uint32_t* addr = fb.address;
+    uint32_t pitch = fb.width;
+    
+    uint32_t charWidth = display.console.char_width;
+    uint32_t charHeight = display.console.char_height;
+
+    PSF1_FONT* font = display.font;
+
+    char* fontPtr = (char*)font->glyphBuffer + (character * font->psf1_Header->charsize);
+    for (uint32_t _y = y; _y < (y + charHeight); _y++)
+    {
+        for (uint32_t _x = x; _x < (x + charWidth); _x++)
+        {
+            if ((*fontPtr & (0b10000000 >> (_x - x))) > 0)
+            {
+                addr[_y * pitch + _x] = display.console.fontColour;
+            }
+
+        }
+
+        fontPtr++;
+    }
+}
+
+void putchar_at(Framebuffer fb, char character, uint32_t xOff, uint32_t yOff)
+{
+    uint32_t* addr = fb.address;
+    uint32_t pitch = fb.width;
     
     uint32_t charWidth = display.console.char_width;
     uint32_t charHeight = display.console.char_height;
@@ -100,17 +146,16 @@ void putchar_at(char character, uint32_t xOff, uint32_t yOff)
             {
                 addr[y * pitch + x] = display.console.fontColour;
             }
-
         }
 
         fontPtr++;
     }
 }
 
-void empty_char_at(uint32_t xOff, uint32_t yOff)
+void empty_char_at(Framebuffer fb, uint32_t xOff, uint32_t yOff)
 {
-    uint32_t* addr = display.framebuffer.address;
-    uint32_t pitch = display.framebuffer.width;
+    uint32_t* addr = fb.address;
+    uint32_t pitch = fb.width;
     
     uint32_t charWidth = display.console.char_width;
     uint32_t charHeight = display.console.char_height;
@@ -122,15 +167,13 @@ void empty_char_at(uint32_t xOff, uint32_t yOff)
         for (uint32_t x = xOff * charWidth; x < (xOff * charWidth + charWidth); x++)
         {
             addr[y * pitch + x] = display.console.bgColour;
-
         }
     }
 }
 
-void scroll_up()
+void scroll_up(Framebuffer fb)
 {
     Console con = display.console;
-    Framebuffer fb = display.framebuffer;
 
     uint32_t width = fb.width;
     uint32_t height = fb.height;
@@ -190,12 +233,12 @@ int Display::putc(char ch)
 
     if(to_put == 1)
     {
-        putchar_at(ch, x, y);
+        putchar_at(backbuffer, ch, x, y);
     }
 
     if(to_put == 2)
     {
-        empty_char_at(x - 1, y);
+        empty_char_at(backbuffer, x - 1, y);
     }
 
     if(new_x != -1)
@@ -221,7 +264,7 @@ int Display::putc(char ch)
         y += yOff;
         if(y >= height)
         {
-            scroll_up();
+            scroll_up(backbuffer);
             y = height - 1;
         }
     }

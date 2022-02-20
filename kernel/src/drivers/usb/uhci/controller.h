@@ -4,13 +4,15 @@
 #include "drivers/usb/controller.h"
 #include "drivers/usb/dev.h"
 
+#include "lib/data_structures/link.h"
+
 class UHCIController : public Controller
 {
 public:
     UHCIController() {}
     ~UHCIController() {}
 
-    virtual void Poll() override;
+    virtual void Poll() override {}
 
 public:
     uint32_t IOAddress;

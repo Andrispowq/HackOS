@@ -17,6 +17,8 @@ uint64_t kernelEnd = (uint64_t)&end;
 
 KernelInfo* kInfo;
 
+#include "drivers/screen/window_manager.h"
+
 extern "C" int kernel_main(KernelInfo* info)
 {
     kInfo = info;
@@ -32,8 +34,22 @@ void kernel_task()
 {
     kprintf("Finished the initialisation!\n");
     kprintf("Type 'help' for help!\n");
-    SleepFor(1000);
     kprintf("root@root:~/$ ");
+
+    WindowManager* win_man = new WindowManager();
+
+    Window* window = win_man->CreateWindow(400, 300, 600, 400);
+    Framebuffer drawBuffer = window->GetDrawBuffer();
+    drawBuffer.DrawRect(40, 40, 70, 70, 0xFFFF0000);
+    drawBuffer.DrawRect(130, 90, 40, 80, 0xFF0000FF);
+
+    Window* window2 = win_man->CreateWindow(700, 400, 900, 650);
+    Framebuffer drawBuffer2 = window2->GetDrawBuffer();
+    drawBuffer2.DrawRect(400, 200, 70, 70, 0xFF00FF00);
+    drawBuffer2.DrawRect(300, 80, 60, 90, 0xFF00FFFF);
+
+    win_man->Update();
+    win_man->Draw();
 
     while(true) asm("hlt");
 }

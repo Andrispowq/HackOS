@@ -76,6 +76,6 @@ typedef struct USBDevReq
     uint16_t value;
     uint16_t index;
     uint16_t len;
-} PACKED UsbDevReq;
+} __attribute__((packed)) UsbDevReq;
 
 #endif

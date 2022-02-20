@@ -16,9 +16,9 @@ void Framebuffer::DrawRect(uint32_t x, uint32_t y, uint32_t width, uint32_t heig
     uint32_t x_end = x + width;
     uint32_t y_end = y + height;
 
-    for(uint32_t _y = x; _y < y_end; _y++)
+    for(uint32_t _y = y; _y < y_end; _y++)
     {
-        for(uint32_t _x = y; _x < x_end; _x++)
+        for(uint32_t _x = x; _x < x_end; _x++)
         {
             PutPixel(_x, _y, colour);
         }
@@ -87,9 +87,4 @@ void Framebuffer::ClearMouseCursor(uint8_t* cursor, uint32_t x, uint32_t y)
             }
         }
     }
-}
-
-void Framebuffer::DrawBackbuffer()
-{
-    //memcpy(backbuffer, address, (bpp / 8) * width * height);
 }
