@@ -50,10 +50,14 @@ void kernel_task()
 
     win_man->Update();
     win_man->Draw();
+    uint32_t start = tick;
     while(true)
     {
         Display::SharedDisplay()->DrawBackbuffer();
+        //kprintf("R");
+        //kprintf("edraw took: %dms\n", tick - start);
         SleepFor(1);
+        tick = start;
     }
 
     while(true) asm("hlt");
