@@ -6,7 +6,7 @@ BOOTLOADER_DIR = boot
 KERNEL_DIR = kernel
 BUILD_DIR := bin
 
-TARGET_BIOS = true
+TARGET_BIOS = false
 
 ifneq ($(TARGET_BIOS), true)
 
@@ -55,8 +55,8 @@ run:
 	-drive if=pflash,format=raw,unit=0,file="$(OVMF_DIR)/OVMF_CODE-pure-efi.fd",readonly=on \
 	-drive if=pflash,format=raw,unit=1,file="$(OVMF_DIR)/OVMF_VARS-pure-efi.fd" \
 	-usb \
+	-device usb-ehci,id=ehci \
 	-device qemu-xhci,id=xhci \
-	-device usb-storage,bus=xhci.0,drive=stick \
 	-net none \
 
 debug:
@@ -70,8 +70,8 @@ debug:
 	-drive if=pflash,format=raw,unit=0,file="$(OVMF_DIR)/OVMF_CODE-pure-efi.fd",readonly=on \
 	-drive if=pflash,format=raw,unit=1,file="$(OVMF_DIR)/OVMF_VARS-pure-efi.fd" \
 	-usb \
+	-device usb-ehci,id=ehci \
 	-device qemu-xhci,id=xhci \
-	-device usb-storage,bus=xhci.0,drive=stick \
 	-net none \
 	-d guest_errors,cpu_reset,int \
 	-no-reboot -no-shutdown & \
