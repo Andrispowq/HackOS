@@ -6,7 +6,7 @@ BOOTLOADER_DIR = boot
 KERNEL_DIR = kernel
 BUILD_DIR := bin
 
-TARGET_BIOS = false
+TARGET_BIOS = true
 
 ifneq ($(TARGET_BIOS), true)
 

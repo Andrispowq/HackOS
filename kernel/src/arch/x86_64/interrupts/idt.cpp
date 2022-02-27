@@ -13,6 +13,7 @@ static void DefaultExceptionHandler(Registers* registers)
     kprintf("Recieved interrupt #%x with error code %x on the default handler!\n", 
         registers->int_no, registers->err_code);
     kprintf("RIP: %x, RSP: %x\n", registers->rip, registers->rsp);
+    Display::SharedDisplay()->DrawBackbuffer();
     asm("cli; hlt");
 }
 
@@ -89,6 +90,9 @@ void InitialiseIDT()
     idtr.SetGate(IRQ13, IDT_TA_InterruptGate, (uint64_t)irq13);
     idtr.SetGate(IRQ14, IDT_TA_InterruptGate, (uint64_t)irq14);
     idtr.SetGate(IRQ15, IDT_TA_InterruptGate, (uint64_t)irq15);
+
+    idtr.SetGate(0x80, IDT_TA_InterruptGate, (uint64_t)isr128);
+    RegisterInterruptHandler(0x80, DefaultExceptionHandler);
 
     for(uint8_t i = 0; i < 32; i++)
     {

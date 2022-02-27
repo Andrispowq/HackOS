@@ -18,6 +18,7 @@ uint64_t kernelEnd = (uint64_t)&end;
 KernelInfo* kInfo;
 
 #include "drivers/screen/window_manager.h"
+#include "arch/x86_64/syscall/syscall.h"
 
 extern "C" int kernel_main(KernelInfo* info)
 {
@@ -35,6 +36,13 @@ void kernel_task()
     kprintf("Finished the initialisation!\n");
     kprintf("Type 'help' for help!\n");
     kprintf("root@root:~/$ ");
+
+    InitialiseSyscalls();
+
+    const char* text = "Hello there!\n";
+    //__asm__ __volatile__("int $0x80");
+    MakeSyscall(0, (uint64_t)text, 0, 0, 0, 0);
+    Display::SharedDisplay()->DrawBackbuffer();
 
     WindowManager* win_man = new WindowManager();
 

@@ -24,11 +24,11 @@ namespace PCI
         if (pciDeviceHeader->DeviceID == 0) return;
         if (pciDeviceHeader->DeviceID == 0xFFFF) return;
 
-        kprintf("Found function (%s: %s, %s, %s)\n", 
+        /*kprintf("Found function (%s: %s, %s, %s)\n", 
             GetVendorName(pciDeviceHeader->VendorID),
             DeviceClasses[pciDeviceHeader->Class],
             GetSubclassName(pciDeviceHeader->Class, pciDeviceHeader->Subclass), 
-            GetProgIFName(pciDeviceHeader->Class, pciDeviceHeader->Subclass, pciDeviceHeader->ProgIF));
+            GetProgIFName(pciDeviceHeader->Class, pciDeviceHeader->Subclass, pciDeviceHeader->ProgIF));*/
 
         switch (pciDeviceHeader->Class)
         {

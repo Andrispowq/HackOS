@@ -93,6 +93,16 @@ __set_idt:
 isr_common_stub:
 	PUSHALL
 
+    ;xor     rax, rax
+    ;mov     ax, ds              ; Lower 16-bits of rax = ds.
+    ;push    rax                 ; save the data segment descriptor
+;
+    ;mov     ax, 0x10            ; load the kernel data segment descriptor
+    ;mov     ds, ax
+    ;mov     es, ax
+    ;mov     fs, ax
+    ;mov     gs, ax
+
     mov     rdi, rsp
     sub     rsp, 0x28
 
@@ -100,12 +110,29 @@ isr_common_stub:
 	call    ISRHandler
     add     rsp, 0x28
 
+    ;pop     rbx                      ; reload the original data segment descriptor
+    ;mov     ds, bx
+    ;mov     es, bx
+    ;mov     fs, bx
+    ;mov     gs, bx
+
     POPALL
 
+    sti
 	iretq
 
 irq_common_stub:
     PUSHALL
+
+    ;xor     rax, rax
+    ;mov     ax, ds              ; Lower 16-bits of rax = ds.
+    ;push    rax                 ; save the data segment descriptor
+;
+    ;mov     ax, 0x10            ; load the kernel data segment descriptor
+    ;mov     ds, ax
+    ;mov     es, ax
+    ;mov     fs, ax
+    ;mov     gs, ax
 
     mov     rdi, rsp
     sub     rsp, 0x28
@@ -114,8 +141,15 @@ irq_common_stub:
     call    IRQHandler
     add     rsp, 0x28
 
+    ;pop     rbx                      ; reload the original data segment descriptor
+    ;mov     ds, bx
+    ;mov     es, bx
+    ;mov     fs, bx
+    ;mov     gs, bx
+
 	POPALL
 
+    sti
 	iretq
 
 ; We don't get information about which interrupt was caller
@@ -177,8 +211,11 @@ global irq13
 global irq14
 global irq15
 
+global isr128
+
 %macro ISR_NOERR 1
 isr%1:
+    cli
     push    0
     push    %1
     jmp     isr_common_stub
@@ -186,15 +223,17 @@ isr%1:
 
 %macro ISR_ERR 1
 isr%1:
+    cli
     push    %1
     jmp     isr_common_stub
 %endmacro
 
 %macro IRQ 1
 irq%1:
-	push 0
-	push (%1 + 32)
-	jmp irq_common_stub
+    cli
+	push    0
+	push    (%1 + 32)
+	jmp     irq_common_stub
 %endmacro
 
 ; 0: Divide By Zero Exception
@@ -310,3 +349,6 @@ IRQ 12
 IRQ 13
 IRQ 14
 IRQ 15
+
+; 128: aka. int 0x80, the syscall handler
+ISR_NOERR 128
