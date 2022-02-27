@@ -17,7 +17,7 @@ namespace AHCI
     #define HBA_PxCMD_FRE 0x0010
     #define HBA_PxCMD_ST 0x0001
     #define HBA_PxCMD_FR 0x4000
-
+    
     PortType CheckPortType(HBAPort* Port)
     {
         uint32_t SataStatus = Port->SataStatus;
@@ -198,8 +198,12 @@ namespace AHCI
             }
         }
 
-        memcpy(Buffer, (void*)tempBuffer, SectorCount * 512);
-        PageFrameAllocator::SharedAllocator()->FreePages((void*)tempBuffer, SectorCount / 8);
+        memcpy(Buffer, (const void*)tempBuffer, SectorCount * 512);
+
+        for(uint32_t i = 0; i < (SectorCount / 8) + 1; i++)
+        {
+            PageFrameAllocator::SharedAllocator()->FreePages((void*)KernelDirectory.PhysicalAddress(tempBuffer + i * 0x1000), 1);
+        }
 
         return true;
     }
@@ -216,10 +220,19 @@ namespace AHCI
         HBACommandTable* CommandTable = (HBACommandTable*)(CommandHeader->CommandTableBaseAddress);
         memset(CommandTable, 0, sizeof(HBACommandTable) + (CommandHeader->PRDTLength - 1) * sizeof(HBAPRDTEntry));
 
-        uint64_t buffAddress = (uint64_t)CurrentDirectory->PhysicalAddress((uint64_t)Buffer) + ((uint64_t)Buffer & 0xFFF);
+        tempBuffer = (uint64_t)0x200000000000;
+        for(uint32_t i = 0; i < (SectorCount / 8) + 1; i++)
+        {
+            KernelDirectory.MapMemory(tempBuffer + i * 0x1000,
+                (uint64_t)PageFrameAllocator::SharedAllocator()->RequestPage());
+        }
 
-        CommandTable->PRDTEntry[0].DataBaseAddress = (uint32_t)buffAddress;
-        CommandTable->PRDTEntry[0].DataBaseAddressUpper = (uint32_t)(buffAddress >> 32);
+        uint64_t physTempBuffer = KernelDirectory.PhysicalAddress(tempBuffer);
+
+        memcpy((void*)tempBuffer, Buffer, SectorCount * 512);
+
+        CommandTable->PRDTEntry[0].DataBaseAddress = (uint32_t)physTempBuffer;
+        CommandTable->PRDTEntry[0].DataBaseAddressUpper = (uint32_t)(physTempBuffer >> 32);
         CommandTable->PRDTEntry[0].ByteCount = (SectorCount << 9) - 1; // 512 bytes per sector
         CommandTable->PRDTEntry[0].InterruptOnCompletion = 1;
 
@@ -264,6 +277,11 @@ namespace AHCI
             {
                 return false;
             }
+        }
+
+        for(uint32_t i = 0; i < (SectorCount / 8) + 1; i++)
+        {
+            PageFrameAllocator::SharedAllocator()->FreePages((void*)KernelDirectory.PhysicalAddress(tempBuffer + i * 0x1000), 1);
         }
 
         return true;

@@ -162,7 +162,7 @@ namespace AHCI
         PortType AHCIPortType;
         uint8_t PortNumber;
 
-        uint64_t tempBuffer;
+        uint64_t tempBuffer = 0;
     };
 
     class AHCIDevice : public Device

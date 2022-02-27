@@ -39,12 +39,11 @@ void kernel_task()
 
     InitialiseSyscalls();
 
-    const char* text = "Hello there!\n";
-    const char* text2 = "Hello there2!\n";
-    //__asm__ __volatile__("int $0x80");
-    syscall_kprintf(text);
-    MakeSyscall(0, (uint64_t)text2, 0, 0, 0, 0);
-    Display::SharedDisplay()->DrawBackbuffer();
+    char buff[512];
+
+    void* file = (void*)syscall_fopen("fs0:/USR/BIN/USERTEST.ELF", 0);
+    int ret = syscall_fread(buff, 1, 512, file);
+    syscall_fclose(file);
 
     WindowManager* win_man = new WindowManager();
 

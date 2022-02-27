@@ -42,6 +42,7 @@ public:
 
 public:
     size_t seek_position;
+    size_t fs_index = -1;
 };
 
 class Filesystem
