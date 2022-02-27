@@ -129,6 +129,7 @@ namespace AHCI
     }
 
     //THIS IS PROBLEMATIC!!!!!!!!!!!
+    //These two functions need a continous amount of physical pages. The long-term solution will be to allocate 1 page, load 8 sectors, and repeat!!!!
     bool Port::Read(uint64_t Sector, void* Buffer, uint32_t SectorCount)
     {
         HBAPortPtr->InterruptStatus = (uint32_t) -1; // Clear pending interrupt bits

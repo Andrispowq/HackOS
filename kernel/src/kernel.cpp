@@ -18,7 +18,6 @@ uint64_t kernelEnd = (uint64_t)&end;
 KernelInfo* kInfo;
 
 #include "drivers/screen/window_manager.h"
-#include "arch/x86_64/syscall/syscall.h"
 
 extern "C" int kernel_main(KernelInfo* info)
 {
@@ -31,19 +30,30 @@ extern "C" int kernel_main(KernelInfo* info)
     while(true) asm("hlt");
 }
 
+void libc_task()
+{
+    uint64_t addr;
+    Elf64_Ehdr* hdr = LoadProgram("~/USR/BIN/LIBC", &addr);
+    if(hdr == nullptr)
+    {
+        return;
+    }
+
+    PrepareProgram(hdr, addr);
+
+    int(*entry_point)() = (int(*)())hdr->e_entry;
+    int res = entry_point();
+    kprintf("libc returned with 0x%x!\n", res);
+    _Kill();
+}
+
 void kernel_task()
 {
     kprintf("Finished the initialisation!\n");
     kprintf("Type 'help' for help!\n");
     kprintf("root@root:~/$ ");
 
-    InitialiseSyscalls();
-
-    char buff[512];
-
-    void* file = (void*)syscall_fopen("fs0:/USR/BIN/USERTEST.ELF", 0);
-    int ret = syscall_fread(buff, 1, 512, file);
-    syscall_fclose(file);
+    AddProcess(new Process("libc", (void*)libc_task));
 
     WindowManager* win_man = new WindowManager();
 

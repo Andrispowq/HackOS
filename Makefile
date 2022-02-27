@@ -44,6 +44,7 @@ buildimg:
 	mcopy -i $(BUILD_DIR)/$(OS_NAME).img $(KERNEL_DIR)/bin/kernel.elf ::
 	mcopy -i $(BUILD_DIR)/$(OS_NAME).img util/fonts/zap-light16.psf ::
 	mcopy -i $(BUILD_DIR)/$(OS_NAME).img util/usertest/usertest.elf ::/USR/BIN
+	mcopy -i $(BUILD_DIR)/$(OS_NAME).img util/libc/libc ::/USR/BIN
 
 run:
 	qemu-system-x86_64 \
@@ -113,6 +114,7 @@ buildimg:
 	mmd -i $(BUILD_DIR)/HackOS_FAT.img ::/USR
 	mmd -i $(BUILD_DIR)/HackOS_FAT.img ::/USR/BIN
 	mcopy -i $(BUILD_DIR)/HackOS_FAT.img util/usertest/usertest.elf ::/USR/BIN
+	mcopy -i $(BUILD_DIR)/HackOS_FAT.img util/libc/libc ::/USR/BIN
 
 	dd if=$(BUILD_DIR)/mbr.bin of=$(BUILD_DIR)/$(OS_NAME).img bs=512 seek=0 count=1
 	dd if=$(BUILD_DIR)/bootloader.bin of=$(BUILD_DIR)/$(OS_NAME).img bs=512 seek=1 count=1

@@ -14,6 +14,8 @@
 #include "proc/tasking/process.h"
 #include "shell/shell.h"
 
+#include "arch/x86_64/syscall/syscall.h"
+
 bool fromUEFI = 0;
 extern PageTableManager KernelDirectory;
 
@@ -177,6 +179,8 @@ void InitialiseKernel(struct KernelInfo* info)
 
     InitialiseFilesystem();
     InitialiseShell();
+
+    InitialiseSyscalls();
 
     InitialiseIRQ();
     InitialiseTasking();

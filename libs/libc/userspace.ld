@@ -1,6 +1,6 @@
 OUTPUT_FORMAT(elf64-x86-64)
 ENTRY(_start)
-. = 0x100000000;
+. = 0x1000000;
 
 SECTIONS
 {
