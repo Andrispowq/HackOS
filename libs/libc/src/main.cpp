@@ -11,5 +11,6 @@ int main(int argc, char* argv[])
 
 extern "C" int _entry()
 {
-    return main(0, nullptr);
+    int ret = main(0, nullptr);
+    syscall_exit(ret);
 }

@@ -132,7 +132,7 @@ uint64_t kmalloc_int(uint64_t size, int align, uint64_t* phys_addr)
         if (phys_addr != 0)
         {
             uint64_t phys = KernelDirectory.PhysicalAddress((uint64_t)addr);
-            *phys_addr = phys + (uint64_t)addr & 0xFFF;
+            *phys_addr = (phys + ((uint64_t)addr & 0xFFF));
         }
 
         return (uint64_t)addr;

@@ -12,6 +12,8 @@ extern "C" uint64_t MakeSyscall(uint64_t syscall, uint64_t p0, uint64_t p1, uint
 #define DECL_SYSCALL4(fn,p1,p2,p3,p4) uint64_t syscall_##fn(p1,p2,p3,p4);
 #define DECL_SYSCALL5(fn,p1,p2,p3,p4,p5) uint64_t syscall_##fn(p1,p2,p3,p4,p5);
 
+DECL_SYSCALL1(exit, int)
+
 DECL_SYSCALL1(kprintf, const char*)
 DECL_SYSCALL0(kprintf_backspace)
 
