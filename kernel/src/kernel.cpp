@@ -40,8 +40,10 @@ void kernel_task()
     InitialiseSyscalls();
 
     const char* text = "Hello there!\n";
+    const char* text2 = "Hello there2!\n";
     //__asm__ __volatile__("int $0x80");
-    MakeSyscall(0, (uint64_t)text, 0, 0, 0, 0);
+    syscall_kprintf(text);
+    MakeSyscall(0, (uint64_t)text2, 0, 0, 0, 0);
     Display::SharedDisplay()->DrawBackbuffer();
 
     WindowManager* win_man = new WindowManager();
