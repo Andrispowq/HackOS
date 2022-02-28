@@ -19,3 +19,5 @@ DEFN_SYSCALL1(fclose, 6, void*)
 
 DEFN_SYSCALL3(kmalloc_int, 7, uint64_t, int, uint64_t*)
 DEFN_SYSCALL1(free, 8, void*)
+
+DEFN_SYSCALL0(kread, 9);

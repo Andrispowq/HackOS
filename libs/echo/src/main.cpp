@@ -8,12 +8,12 @@
 
 int main(int argc, char* argv[])
 {
-    printf("Hello world!\n");
+    char* kinput = (char*)syscall_kread();
+    while(kinput[0] == 0)
+    {
+        char* kinput = (char*)syscall_kread();
+    }
 
-    int* ptr = (int*)malloc(4);
-    printf("Ptr: 0x%x\n", ptr);
-    *ptr = 0xDEADBEEF;
-    free(ptr); 
-
-    return 0x123;
+    printf("Input: %s\n", kinput);
+    return 0;
 }

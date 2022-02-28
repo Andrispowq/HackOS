@@ -34,4 +34,6 @@ DECL_SYSCALL1(fclose, void*)
 DECL_SYSCALL3(kmalloc_int, uint64_t, int, uint64_t*)
 DECL_SYSCALL1(kfree, void*)
 
+DECL_SYSCALL0(kread)
+
 #endif

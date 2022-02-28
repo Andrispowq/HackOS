@@ -24,12 +24,21 @@ DEFN_SYSCALL1(fclose, 6, void*)
 DEFN_SYSCALL3(kmalloc_int, 7, uint64_t, int, uint64_t*)
 DEFN_SYSCALL1(kfree, 8, void*)
 
+DEFN_SYSCALL0(kread, 9)
+
 void exit(int code)
 {
     _Kill();
 }
 
-static void* syscalls[9] =
+extern char system_input[256];
+
+char* kread()
+{
+    return system_input;
+}
+
+static void* syscalls[10] =
 {
     (void*)&exit,
 
@@ -42,10 +51,12 @@ static void* syscalls[9] =
     (void*)&fclose,
 
     (void*)&kmalloc_int,
-    (void*)&kfree
+    (void*)&kfree,
+
+    (void*)&kread
 };
 
-uint64_t num_syscalls = 9;
+uint64_t num_syscalls = 10;
 
 static void syscall_handler(Registers* registers)
 {

@@ -19,6 +19,8 @@ KernelInfo* kInfo;
 
 #include "drivers/screen/window_manager.h"
 
+char system_input[256];
+
 extern "C" int kernel_main(KernelInfo* info)
 {
     kInfo = info;
@@ -36,10 +38,6 @@ void kernel_task()
     kprintf("Type 'help' for help!\n");
     kprintf("root@root:~/$ ");
 
-    //LoadProgramTask("~/USR/BIN/USERTEST.ELF");
-    //SleepFor(100);
-    LoadProgramTask("~/USR/BIN/LIBC");
-
     WindowManager* win_man = new WindowManager();
 
     Window* window = win_man->CreateWindow(400, 300, 600, 400);
@@ -54,11 +52,18 @@ void kernel_task()
 
     win_man->Update();
     win_man->Draw();
+
+    memset(system_input, 0, 256);
+
+    //LoadProgramTask("~/USR/BIN/USERTEST.ELF");
+    //SleepFor(100);
+    LoadProgramTask("~/USR/BIN/LIBC");
+
     uint32_t start = tick;
     while(true)
     {
         Display::SharedDisplay()->DrawBackbuffer();
-        SleepFor(1);
+        SleepFor(10);
         tick = start;
     }
 
@@ -67,6 +72,8 @@ void kernel_task()
 
 void user_input(char* input)
 {
+    strcpy(system_input, input);
+
     if (strcmp(input, "shutdown") == 0) 
     {
         kprintf("Stopping the CPU. Bye!\n");
