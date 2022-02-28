@@ -20,7 +20,7 @@ extern "C" void StartProcess_FirstTime(uint64_t new_stack, uint64_t pml4);
 class Process
 {
 public:
-    Process(const char* name, void* rip);
+    Process(const char* name, void* rip, void* func_parameter = nullptr);
     ~Process();
 
     void Notify(int signal);

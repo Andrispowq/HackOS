@@ -31,10 +31,10 @@ $(OBJ_DIR)/%.o: $(SRC_DIR)/%.asm
 	@ echo !==== COMPILING $^
 	@ mkdir -p $(@D)
 	$(ASM) $(ASM_FLAGS) $^ -o $@
-	 
+
 link:
 	@ echo !==== LINKING
-	$(LD) $(LDFLAGS) -o $(BIN_DIR)/libc $(OBJS)
+	ar rcs $(BIN_DIR)/libc.a $(OBJS)
 
 # cleaning
 clean:

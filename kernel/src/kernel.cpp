@@ -30,30 +30,15 @@ extern "C" int kernel_main(KernelInfo* info)
     while(true) asm("hlt");
 }
 
-void libc_task()
-{
-    uint64_t addr;
-    Elf64_Ehdr* hdr = LoadProgram("~/USR/BIN/LIBC", &addr);
-    if(hdr == nullptr)
-    {
-        return;
-    }
-
-    PrepareProgram(hdr, addr);
-
-    int(*entry_point)() = (int(*)())hdr->e_entry;
-    int res = entry_point();
-    kprintf("libc returned with 0x%x!\n", res);
-    _Kill();
-}
-
 void kernel_task()
 {
     kprintf("Finished the initialisation!\n");
     kprintf("Type 'help' for help!\n");
     kprintf("root@root:~/$ ");
 
-    AddProcess(new Process("libc", (void*)libc_task));
+    //LoadProgramTask("~/USR/BIN/USERTEST.ELF");
+    //SleepFor(100);
+    LoadProgramTask("~/USR/BIN/LIBC");
 
     WindowManager* win_man = new WindowManager();
 
@@ -73,8 +58,6 @@ void kernel_task()
     while(true)
     {
         Display::SharedDisplay()->DrawBackbuffer();
-        //kprintf("R");
-        //kprintf("edraw took: %dms\n", tick - start);
         SleepFor(1);
         tick = start;
     }

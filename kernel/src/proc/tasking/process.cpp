@@ -39,7 +39,7 @@ void call_method(void(*rip)())
 	_Kill();
 }
 
-Process::Process(const char* name, void* rip)
+Process::Process(const char* name, void* rip, void* func_parameter)
     : name((char*)name)
 {
     pid = ++next_pid;
@@ -72,7 +72,7 @@ Process::Process(const char* name, void* rip)
 	*--_stack = rbp; //rbp
 	*--_stack = 0; //rsp
 	*--_stack = 0; //rsi
-	*--_stack = 0; //rdi
+	*--_stack = (uint64_t)func_parameter; //rdi -> we can have 1 parameter, which is put here
 	_stack -= 32; //16 * 16 bytes -> 32 * 8 bytes
 	memset(_stack, 0, 256);
 	rsp = (uint64_t)_stack;
@@ -192,7 +192,7 @@ void _Kill()
         while(1) asm volatile("hlt");
     }
 
-	kprintf("Killing process %s (%d)\n", current_process->name, current_process->pid);
+	//kprintf("Killing process %s (%d)\n", current_process->name, current_process->pid);
 
 	StartTask(0);
 	kfree(current_process->pageTable);

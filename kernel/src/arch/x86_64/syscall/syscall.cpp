@@ -13,7 +13,7 @@
 
 DEFN_SYSCALL1(exit, 0, int)
 
-DEFN_SYSCALL1(kprintf, 1, const char*)
+DEFN_SYSCALL2(kprintf, 1, const char*, va_list)
 DEFN_SYSCALL0(kprintf_backspace, 2)
 
 DEFN_SYSCALL2(fopen, 3, const char*, int)
@@ -21,12 +21,15 @@ DEFN_SYSCALL4(fread, 4, void*, int, int, void*)
 DEFN_SYSCALL4(fwrite, 5, void*, int, int, void*)
 DEFN_SYSCALL1(fclose, 6, void*)
 
+DEFN_SYSCALL3(kmalloc_int, 7, uint64_t, int, uint64_t*)
+DEFN_SYSCALL1(kfree, 8, void*)
+
 void exit(int code)
 {
     _Kill();
 }
 
-static void* syscalls[7] =
+static void* syscalls[9] =
 {
     (void*)&exit,
 
@@ -36,10 +39,13 @@ static void* syscalls[7] =
     (void*)&fopen,
     (void*)&fread,
     (void*)&fwrite,
-    (void*)&fclose
+    (void*)&fclose,
+
+    (void*)&kmalloc_int,
+    (void*)&kfree
 };
 
-uint64_t num_syscalls = 7;
+uint64_t num_syscalls = 9;
 
 static void syscall_handler(Registers* registers)
 {

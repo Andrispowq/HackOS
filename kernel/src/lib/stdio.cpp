@@ -54,6 +54,78 @@ const char* string_from_double(double value, uint8_t decimalPlaces)
     return doubleTo_StringOutput;
 }
 
+void kprintf_vargs(const char* format, va_list args)
+{
+    Display* curr_display = Display::SharedDisplay();
+
+    const char* traverse;
+    char buffer[30];
+    char* string;
+    uint64_t index;
+    double d_index;
+
+    for(traverse = format; *traverse != 0; traverse++)
+    {
+        while(*traverse != '%')
+        {
+            if(*traverse == 0)
+                goto end;
+            curr_display->putc(*traverse);
+            traverse++;
+        }
+
+        traverse++;
+
+        switch (*traverse)
+        {
+        case 'c':
+            index = va_arg(args, int64_t);
+            curr_display->putc(index);
+            break;
+
+        case 's':
+            string = va_arg(args, char*);
+            curr_display->puts(string);
+            break;
+
+        case 'd':
+            index = va_arg(args, int64_t);
+            if(index < 0)
+            {
+                index =  -index;
+                curr_display->putc('-');
+            }
+
+            memset(buffer, 0, 30);
+            itoa((uint8_t*)buffer, 'd', index);
+
+            curr_display->puts(buffer);
+            break;
+
+        case 'x':
+            index = va_arg(args, int64_t);
+
+            memset(buffer, 0, 30);
+            itoa((uint8_t*)buffer, 'x', index);
+
+            curr_display->puts(buffer);
+            break;
+
+        case 'f':
+            d_index = va_arg(args, double);
+
+            curr_display->puts(string_from_double(d_index, 8));
+            break;
+        
+        default:
+            break;
+        }
+    }
+
+end:
+    return;
+}
+
 void kprintf(const char* format, ...) 
 {
     Display* curr_display = Display::SharedDisplay();

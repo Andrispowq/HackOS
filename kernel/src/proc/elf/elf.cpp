@@ -89,3 +89,30 @@ void PrepareProgram(Elf64_Ehdr* header, uint64_t baseAddress)
 		}
 	}
 }
+
+#include "proc/tasking/process.h"
+#include "lib/data_structures/vector.h"
+#include "arch/x86_64/timer/pit.h"
+
+void program_task(const char* name)
+{
+	uint64_t addr;
+    Elf64_Ehdr* hdr = LoadProgram(name, &addr);
+    if(hdr == nullptr)
+    {
+        return;
+    }
+
+    PrepareProgram(hdr, addr);
+
+    int(*entry_point)() = (int(*)())hdr->e_entry;
+    int res = entry_point();
+    kprintf("Program (%s) returned with 0x%x!\n", name, res);
+    _Kill();
+}
+
+void LoadProgramTask(const char* name)
+{
+	AddProcess(new Process(name, (void*)program_task, (void*)name));
+    SleepFor(100);
+}

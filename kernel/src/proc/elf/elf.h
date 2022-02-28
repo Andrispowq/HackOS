@@ -91,4 +91,6 @@ enum Elf_Type
 Elf64_Ehdr* LoadProgram(const char* name, uint64_t* baseAddress);
 void PrepareProgram(Elf64_Ehdr* header, uint64_t baseAddress);
 
+void LoadProgramTask(const char* name);
+
 #endif
