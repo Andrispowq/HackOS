@@ -13,7 +13,7 @@ int main(int argc, char* argv[])
 {
     char buff[128] = { 0 };
 
-    void* file = (void*)syscall_fopen("fs0:/USR/hello.txt", 1 /*O_CREAT*/);
+    void* file = (void*)syscall_fopen("fs0:/USR/HELLO_2.TXT", 1 /*O_CREAT*/);
     syscall_fread(buff, 128, 1, file);
     if(buff[0] == 0)
     {

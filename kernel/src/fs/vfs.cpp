@@ -53,7 +53,7 @@ void* fopen(const char* path, int flags)
         int last_index = -1;
         for(size_t i = 0; i < to_search_length; i++)
         {
-            if(path[i] == '/')
+            if(to_search[i] == '/')
             {
                 last_index = i;
             }

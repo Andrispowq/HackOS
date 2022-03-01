@@ -1,0 +1,2 @@
+This is an example file put under USR
+The contents of this file are checked to see if the file API works.
