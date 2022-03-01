@@ -48,6 +48,24 @@ void* fopen(const char* path, int flags)
     }
 
     ActiveFile* file = fs->OpenFile(to_search);
+    if((file == nullptr) && ((flags & O_CREAT) == O_CREAT))
+    {
+        int last_index = -1;
+        for(size_t i = 0; i < to_search_length; i++)
+        {
+            if(path[i] == '/')
+            {
+                last_index = i;
+            }
+        }
+
+        char* path = new char[last_index + 1];
+        memset(path, 0, last_index + 1);
+        memcpy(path, to_search, last_index);
+        
+        file = fs->CreateFile(path, &to_search[last_index + 1], ARCHIVE);
+    }
+
     file->fs_index = fs_index;
     return (void*)file;
 }

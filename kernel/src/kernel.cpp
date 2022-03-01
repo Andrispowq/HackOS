@@ -57,7 +57,7 @@ void kernel_task()
 
     //LoadProgramTask("~/USR/BIN/USERTEST.ELF");
     //SleepFor(100);
-    LoadProgramTask("~/USR/BIN/LIBC");
+    LoadProgramTask("~/USR/BIN/TEST");
 
     uint32_t start = tick;
     while(true)

@@ -642,8 +642,7 @@ int FAT32Driver::OpenFile(const char* filePath, DirEntry* fileMeta)
 		return -1;
 	}
 
-	GetClusterFromFilePath(filePath, fileMeta);
-	return 0;
+	return GetClusterFromFilePath(filePath, fileMeta);
 }
 
 int FAT32Driver::CreateFile(const char* filePath, DirEntry* fileMeta)
