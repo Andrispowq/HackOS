@@ -34,6 +34,8 @@ extern "C" int kernel_main(KernelInfo* info)
 
 void kernel_task()
 {
+    user_input("clear");
+
     kprintf("Finished the initialisation!\n");
     kprintf("Type 'help' for help!\n");
     kprintf("root@root:~/$ ");
@@ -55,8 +57,6 @@ void kernel_task()
 
     memset(system_input, 0, 256);
 
-    //LoadProgramTask("~/USR/BIN/USERTEST.ELF");
-    //SleepFor(100);
     LoadProgramTask("~/USR/BIN/TEST");
 
     uint32_t start = tick;

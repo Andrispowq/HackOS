@@ -41,7 +41,7 @@ public:
     virtual uint32_t GetAttributes() const = 0;
 
 public:
-    size_t seek_position;
+    size_t seek_position = 0;
     size_t fs_index = -1;
 };
 

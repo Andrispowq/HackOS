@@ -666,12 +666,18 @@ int FAT32Driver::CreateFile(const char* filePath, DirEntry* fileMeta)
 		return retVal;
 	}
 
+	//Not the function to create a directory
 	if ((parentInfo.attributes & FILE_DIRECTORY) != FILE_DIRECTORY)
 	{
 		return -2;
 	}
 
-	DirectoryAdd(active_cluster, *fileMeta);
+	retVal = DirectoryAdd(active_cluster, *fileMeta);
+	if(retVal != 0)
+	{
+		return -1;
+	}
+
 	return DirectorySearch(fileMeta->name, active_cluster, fileMeta);
 }
 

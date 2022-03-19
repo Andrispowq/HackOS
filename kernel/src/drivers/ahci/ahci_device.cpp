@@ -241,7 +241,7 @@ namespace AHCI
 
         CommandFIS->FISType = FIS_TYPE_REG_H2D;
         CommandFIS->CommandControl = 1; // command
-        CommandFIS->Command = ATA_CMD_READ_DMA_EX;
+        CommandFIS->Command = ATA_CMD_WRITE_DMA_EX;
 
         CommandFIS->LBA0 = (uint8_t)(Sector);
         CommandFIS->LBA1 = (uint8_t)(Sector >> 8);

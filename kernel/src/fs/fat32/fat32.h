@@ -15,7 +15,7 @@ struct FAT32_ActiveFile : public ActiveFile
     virtual uint32_t GetAttributes() const override;
 
 	DirEntry entry;
-	const char* path;
+	const char* path = nullptr;
 };
 
 class FAT32 : public Filesystem

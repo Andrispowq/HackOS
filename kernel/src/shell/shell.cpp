@@ -44,6 +44,8 @@ void shell_command(char* input)
     kprintf("root@root:%s$ ", working_dir);
 }
 
+ActiveFile* openFile = nullptr;
+
 void command_mode(char* input)
 {
     if(check_command(input, "help"))
@@ -159,6 +161,68 @@ void command_mode(char* input)
                 kprintf("%s/ ", file->GetName());
             else
                 kprintf("%s ", file->GetName());
+        }
+
+        kprintf("\n");
+        state = COMMAND_MODE;
+    }
+    else if(check_short_command(input, "open ", 5))
+    {
+        if(strlen(input) > 5)
+        {
+            const char* arg = input + 5;
+            size_t len = strlen(working_dir);
+
+            size_t totalLength = len + strlen((char*)arg) + 1;
+            char* totalPath = new char[totalLength + 1];
+            memset(totalPath, 0, totalLength + 1);
+            memcpy(totalPath, working_dir, len);
+            totalPath[len] = '/';
+            memcpy(&totalPath[len + 1], arg, strlen((char*)arg));
+
+	        Filesystem* drive_C = filesystems[0];
+            if(drive_C == nullptr) return;
+
+            if(openFile != nullptr)
+            {
+                drive_C->CloseFile(openFile);
+            }
+
+            openFile = drive_C->OpenFile(totalPath);
+
+            delete totalPath;
+        }
+
+        kprintf("\n");
+        state = COMMAND_MODE;
+    }
+    else if(check_command(input, "close"))
+    {
+	    Filesystem* drive_C = filesystems[0];
+        if(drive_C == nullptr) return;
+
+        if(openFile != nullptr)
+        {
+            drive_C->CloseFile(openFile);
+        }
+
+        kprintf("\n");
+        state = COMMAND_MODE;
+    }
+    else if(check_command(input, "read"))
+    {
+	    Filesystem* drive_C = filesystems[0];
+        if(drive_C == nullptr) return;
+
+        char buff[512];
+        
+        if(openFile != nullptr)
+        {
+            int ret = drive_C->Read(openFile, buff, 512);
+            if(ret == 0)
+            {
+                kprintf(buff);
+            }
         }
 
         kprintf("\n");

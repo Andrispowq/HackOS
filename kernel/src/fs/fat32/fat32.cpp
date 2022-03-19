@@ -83,6 +83,7 @@ ActiveFile* FAT32::OpenFile(const char* path)
 	strcpy(ptr, (char*)path);
 
 	FAT32_ActiveFile* file = new FAT32_ActiveFile();
+	file->seek_position = 0;
 	file->path = ptr;
 	file->entry = entry;
 
@@ -111,7 +112,12 @@ ActiveFile* FAT32::CreateFile(const char* path, const char* name, permissions_t 
 	entry.cluster = 0;
 	entry.attributes = attributes;
 	entry.size = size;
-	driver->CreateFile(path, &entry);
+	int ret = driver->CreateFile(path, &entry);
+
+	if(ret != 0)
+	{
+		return nullptr;
+	}
 
 	size_t pathLen = strlen((char*)path);
 	size_t fnameLen = strlen((char*)name);
