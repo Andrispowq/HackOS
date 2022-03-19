@@ -32,6 +32,8 @@ extern "C" int kernel_main(KernelInfo* info)
     while(true) asm("hlt");
 }
 
+#include "drivers/mouse/mouse.h"
+
 void kernel_task()
 {
     user_input("clear");
@@ -56,7 +58,6 @@ void kernel_task()
     win_man->Draw();
 
     memset(system_input, 0, 256);
-
     LoadProgramTask("~/USR/BIN/TEST");
 
     uint32_t start = tick;
@@ -64,6 +65,12 @@ void kernel_task()
     {
         Display::SharedDisplay()->DrawBackbuffer();
         SleepFor(10);
+
+        if(GetMouseButton(2))
+        {
+            user_input("shutdown");
+        }
+
         tick = start;
     }
 

@@ -4,9 +4,9 @@
 
 int main(int argc, char* argv[]);
 
-extern "C" int _entry()
+extern "C" int _entry(int argc, char* argv[])
 {
-    int ret = main(0, nullptr);
+    int ret = main(argc, argv);
     syscall_exit(ret);
 }
 

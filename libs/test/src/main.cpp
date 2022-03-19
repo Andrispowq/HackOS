@@ -11,6 +11,11 @@ const char* _file_contents = "This is an example file put under USR/\nThe conten
 
 int main(int argc, char* argv[])
 {
+    for(int i = 0; i < argc; i++)
+    {
+        printf("%i: %s\n", i, argv[i]);
+    }
+
     char buff[128] = { 0 };
 
     void* file = (void*)syscall_fopen("fs0:/USR/HELLO_2.TXT", 1 /*O_CREAT*/);

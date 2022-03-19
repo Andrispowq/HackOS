@@ -105,8 +105,11 @@ void program_task(const char* name)
 
     PrepareProgram(hdr, addr);
 
-    int(*entry_point)() = (int(*)())hdr->e_entry;
-    int res = entry_point();
+	int argc = 2;
+	char* argv[] = { (char*)name, "random_value" };
+
+    int(*entry_point)(int, char*[]) = (int(*)(int, char*[]))hdr->e_entry;
+    int res = entry_point(argc, argv);
     kprintf("Program (%s) returned with 0x%x!\n", name, res);
     _Kill();
 }

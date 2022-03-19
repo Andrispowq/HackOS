@@ -42,7 +42,7 @@ static void* syscalls[10] =
 {
     (void*)&exit,
 
-    (void*)&kprintf,
+    (void*)&kprintf_vargs,
     (void*)&kprintf_backspace,
 
     (void*)&fopen,
