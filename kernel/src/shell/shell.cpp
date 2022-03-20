@@ -89,59 +89,71 @@ void command_mode(char* input)
             const char* arg = input + 3;
             size_t len = strlen(working_dir);
 
-            if(strcmp((char*)arg, ".") == 0)
-            {
-                //Nothing to do
-            }
-            else if(strcmp((char*)arg, "..") == 0)
-            {
-                if(strcmp((char*)working_dir, "~") == 0)
-                {
-                    //Root doesn't have an upper directory
-                }
-                else
-                {
-                    size_t last_dash = 0;
-                    for(size_t i = 0; i < len; i++)
+	        Filesystem* drive_C = filesystems[0];
+            if(drive_C == nullptr) return;
+
+            char fileNamePart[256];
+	        uint16_t start = 0;
+	        for (uint32_t iterator = 1; arg[iterator - 1] != 0; iterator++)
+	        {
+	        	if (arg[iterator] == '/' || arg[iterator] == 0)
+	        	{
+	        		memset(fileNamePart, 0, 256);
+	        		memcpy(fileNamePart, (void*)((uint64_t)arg + start), iterator - start);
+
+			        start = iterator + 1;
+	        		uint64_t count = drive_C->GetDirectoryEntryCount(working_dir);
+                    if(count != 0)
                     {
-                        if(working_dir[i] == '/')
+                        for(uint64_t i = 0; i < count; i++)
                         {
-                            last_dash = i;
+                            ActiveFile* file = drive_C->GetFile(working_dir, i);
+                            if(strcmp((char*)file->GetName(), (char*)fileNamePart) == 0)
+                            {
+                                if((file->GetAttributes() & 0x10) != 0x10)
+                                {
+                                    kprintf("Tried to enter a non-directory!\n");
+                                    break;
+                                }
+                                if(strcmp((char*)fileNamePart, ".") == 0)
+                                {
+                                    //Do nothing
+                                }
+                                else if(strcmp((char*)fileNamePart, "..") == 0)
+                                {
+                                    if(strcmp((char*)working_dir, "~") == 0)
+                                    {
+                                        //Root doesn't have an upper directory
+                                    }
+                                    else
+                                    {
+                                        size_t last_dash = 0;
+                                        for(size_t i = 0; i < len; i++)
+                                        {
+                                            if(working_dir[i] == '/')
+                                            {
+                                                last_dash = i;
+                                            }
+                                        }
+                                        working_dir[last_dash] = 0;
+                                    }
+                                }
+                                else
+                                {
+                                    strcpy(working_dir, file->GetPath());
+                                }
+
+                                break;
+                            }
                         }
                     }
-
-                    working_dir[last_dash] = 0;
-                }
-            }
-            else
-            {
-	            Filesystem* drive_C = filesystems[0];
-                if(drive_C == nullptr) return;
-                uint64_t count = drive_C->GetDirectoryEntryCount(working_dir);
-
-                if(count != 0)
-                {
-                    for(uint64_t i = 0; i < count; i++)
+                    else
                     {
-                        ActiveFile* file = drive_C->GetFile(working_dir, i);
-
-                        if((file->GetAttributes() & 0x10) != 0x10)
-                        {
-                            kprintf("Tried to enter a non-directory!\n");
-                        }
-                        else if(strcmp((char*)file->GetName(), (char*)arg) == 0)
-                        {
-                            strcpy(working_dir, file->GetPath());
-                        }
+                        kprintf("ERROR: In a non-directory!\n");
                     }
-                }
-                else
-                {
-                    kprintf("ERROR: In a non-directory!\n");
-                }
-            }
+	            }
+	        }     
         }
-
     }
     else if(check_command(input, "wd"))
     {
@@ -157,10 +169,20 @@ void command_mode(char* input)
         {
             ActiveFile* file = drive_C->GetFile(working_dir, i);
 
+            if(file->GetAttributes() & HIDDEN)
+            {
+                kprintf("[");
+            }
+
             if(file->GetAttributes() & 0x10)
                 kprintf("%s/ ", file->GetName());
             else
                 kprintf("%s ", file->GetName());
+
+            if(file->GetAttributes() & HIDDEN)
+            {
+                kprintf("]");
+            }
         }
 
         kprintf("\n");
