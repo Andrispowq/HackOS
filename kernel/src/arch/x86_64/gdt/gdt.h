@@ -3,7 +3,7 @@
 
 #include "lib/stdint.h"
 
-#define GDT_ENTRIES 10
+#define GDT_ENTRIES 8
 
 struct GDTGate
 {
@@ -28,6 +28,6 @@ public:
 extern "C" void __gdt_flush(uint64_t gdtr);
 extern "C" void __tss_flush(uint64_t tss);
 
-void InitialiseGDT();
+void InitialiseGDT(bool fromUEFI);
 
 #endif

@@ -19,33 +19,38 @@ void GDTR::SetGate(uint8_t number, uint64_t base, uint32_t limit, uint8_t access
 void GDTR::Flush()
 {
     __gdt_flush((uint64_t)this);
-    __tss_flush(0x40);
+    __tss_flush(0x28); 
 }
 
 static GDTGate gates[GDT_ENTRIES];
 static TSS_Struct tss;
 
-void InitialiseGDT()
+void InitialiseGDT(bool fromUEFI)
 {
     GDTR gdtr;
     gdtr.offset = gates;
     gdtr.limit = sizeof(GDTGate) * GDT_ENTRIES - 1;
 
-    uint64_t rsp = (uint64_t)kmalloc(4096);
-    tss.ist1_lo = uint32_t(rsp & 0xFFFFFFFF);
-    tss.ist1_hi = uint32_t((rsp >> 32) & 0xFFFFFFFF);
-    tss.rsp0_lo = uint32_t(rsp & 0xFFFFFFFF);
-    tss.rsp0_hi = uint32_t((rsp >> 32) & 0xFFFFFFFF);
+    memset(&tss, 0, sizeof(TSS_Struct));
+    /*uint64_t kernel_stack = kmalloc(4096); //Let's allocate some memory for the user stack
+    uint64_t user_stack = kmalloc(4096); //Let's allocate some memory for the user stack
+    tss.rsp[0] = kernel_stack;
+    tss.rsp[2] = user_stack;*/
 
     gdtr.SetGate(0, 0, 0, 0, 0);                                // Null segment
     gdtr.SetGate(1, 0, 0, 0x9A, 0xA0);                          // Code segment
     gdtr.SetGate(2, 0, 0, 0x92, 0xA0);                          // Data segment
-    gdtr.SetGate(3, 0, 0, 0, 0);                                // Null segment
+    gdtr.SetGate(3, 0, 0, 0xFA, 0xA0);                          // User mode code segment
     gdtr.SetGate(4, 0, 0, 0xF2, 0xA0);                          // User mode data segment
-    gdtr.SetGate(5, 0, 0, 0xFA, 0xA0);                          // User mode code segment
-    gdtr.SetGate(6, 0, 0, 0x92, 0xA0);                          // OVMF data segment
-    gdtr.SetGate(7, 0, 0, 0x9A, 0xA0);                          // OVMF code segment
-    gdtr.SetGate(8, (uint64_t)&tss, sizeof(tss), 0x89, 0x40);   // TSS
+    gdtr.SetGate(5, (uint64_t)&tss, sizeof(tss), 0x89, 0x40);   // TSS
+    gdtr.SetGate(6, 0, 0, 0, 0);                                // OVMF data segment
+    gdtr.SetGate(7, 0, 0, 0, 0);                                // OVMF code segment
+
+    if(fromUEFI)
+    {
+        gdtr.SetGate(6, 0, 0, 0x92, 0xA0);                          // OVMF data segment
+        gdtr.SetGate(7, 0, 0, 0x9A, 0xA0);                          // OVMF code segment
+    }
 
     gdtr.Flush();
 }

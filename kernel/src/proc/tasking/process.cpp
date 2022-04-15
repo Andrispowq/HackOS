@@ -30,13 +30,7 @@ void idle_thread()
 {
     EnableTasking();
 	__enabled = 1;
-	while(true) asm("hlt");
-}
-
-void call_method(void(*rip)())
-{
-	rip();
-	_Kill();
+	while(true); //asm("hlt");
 }
 
 Process::Process(const char* name, void* rip, void* func_parameter)
@@ -281,13 +275,17 @@ void Schedule()
 void InitialiseTasking()
 {
     // Relocate the stack so we know where it is
-    //MoveStack((void*)0x000700000000000, 0x2000);
+	// This will become the kernel stack
+    MoveStack((void*)0x000700000000000, 0x2000);
 
 	current_process = new Process("kernel_idle", (void*)idle_thread);
     ready_queue = current_process;
 
 	__AddProcess(new Process("task_confirm", (void*)task_confirm));
 	__AddProcess(new Process("kernel", (void*)kernel_task));
+
+    uint64_t old_stack_pointer; 
+    asm volatile("mov %%rsp, %0" : "=r" (old_stack_pointer));
 	__exec();
 
 	kprintf("Failed to start tasking!");
@@ -304,7 +302,7 @@ void MoveStack(void* new_stack_start, uint64_t size)
         i -= 0x1000)
     {
         uint64_t addr = (uint64_t)PageFrameAllocator::SharedAllocator()->RequestPage();
-        CurrentDirectory->MapMemory(i, addr);
+        CurrentDirectory->MapMemory(i, addr, 0x3);
     }
 
     // Flush the TLB by reading and writing the page directory address again.

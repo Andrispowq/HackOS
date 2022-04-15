@@ -26,18 +26,6 @@ DEFN_SYSCALL1(kfree, 8, void*)
 
 DEFN_SYSCALL0(kread, 9)
 
-void exit(int code)
-{
-    _Kill();
-}
-
-extern char system_input[256];
-
-char* kread()
-{
-    return system_input;
-}
-
 static void* syscalls[10] =
 {
     (void*)&exit,
@@ -74,4 +62,5 @@ static void syscall_handler(Registers* registers)
 void InitialiseSyscalls()
 {
     RegisterInterruptHandler(0x80, syscall_handler);
+    SetupSysret();
 }

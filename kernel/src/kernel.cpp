@@ -36,7 +36,8 @@ extern "C" int kernel_main(KernelInfo* info)
 
 void kernel_task()
 {
-    user_input("clear");
+    //user_input("clear");
+    shell_command("clear");
 
     kprintf("Finished the initialisation!\n");
     kprintf("Type 'help' for help!\n");
@@ -63,6 +64,8 @@ void kernel_task()
 
     memset(system_input, 0, 256);
     LoadProgramTask("~/USR/BIN/TEST");
+    SleepFor(100);
+    LoadProgramTask("~/USR/BIN/SHELL");
 
     uint32_t start = tick;
     while(true)
@@ -114,7 +117,7 @@ void user_input(char* input)
     }
     else
     {
-        shell_command(input);   
+        //shell_command(input);   
     }
 }
 

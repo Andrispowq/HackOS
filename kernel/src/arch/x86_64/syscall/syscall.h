@@ -7,10 +7,13 @@
 #include "lib/string.h"
 #include "lib/memory.h"
 
+#include "syscall_defs.h"
+
 #include <stdarg.h>
 
 extern "C" uint64_t MakeSyscall(uint64_t syscall, uint64_t p0, uint64_t p1, uint64_t p2, uint64_t p3, uint64_t p4);
 extern "C" uint64_t ExecuteSyscall(uint64_t p0, uint64_t p1, uint64_t p2, uint64_t p3, uint64_t p4, uint64_t addr);
+extern "C" void SetupSysret();
 
 void InitialiseSyscalls();
 

@@ -129,12 +129,8 @@ void InitialiseDisplay(KernelInfo* info)
 {
     fromUEFI = 1 - info->booted_from_BIOS;
 
-    if(fromUEFI)
-    {
-        asm("cli");
-        InitialiseGDT();
-    }
-
+    asm("cli");
+    InitialiseGDT(fromUEFI);
     _map = MemoryMap(info->memMap, info->memMapEntries);
 
     InitialiseIDT();
