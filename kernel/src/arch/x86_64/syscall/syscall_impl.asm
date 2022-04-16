@@ -37,13 +37,16 @@ SetupSysret:
 	ret
 
 JumpToUserspace:
-    mov     ax, 0x23      ; 0x20 is the offset in the GDT to our data segment
+    mov     ax, 0x20 | 3  ; 0x20 is the offset in the GDT to our data segment
     mov     ds, ax        ; Load all data segment selectors
     mov     es, ax
     mov     fs, ax
     mov     gs, ax
 
-    mov     rcx, rdi ; set the new rip
-    mov     rsp, rsi ; set the new stack
-    mov     r11, 0x202 ; rflags, enable intrerrupts
-    o64     sysret ; to userspace and beyond
+    mov     rax, rsi ;new rsp
+	push    0x20 | 3 ; data selector
+	push    rax ; current esp
+	pushf
+	push    0x18 | 3;  code selector (ring 3 code with bottom 2 bits set for ring 3)
+	push    rdi ; instruction address to return to
+	iretq

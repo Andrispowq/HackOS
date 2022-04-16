@@ -45,7 +45,7 @@ struct xmm_reg
 
 struct Registers
 {
-    //uint64_t ds;
+    uint64_t ds;
     xmm_reg xmm[16];
     uint64_t rdi, rsi, rbp, useless, rbx, rdx, rcx, rax;
     uint64_t r8, r9, r10, r11, r12, r13, r14, r15;

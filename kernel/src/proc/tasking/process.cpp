@@ -30,7 +30,7 @@ void idle_thread()
 {
     EnableTasking();
 	__enabled = 1;
-	while(true); //asm("hlt");
+	while(true) asm("hlt");
 }
 
 Process::Process(const char* name, void* rip, void* func_parameter)
@@ -39,15 +39,17 @@ Process::Process(const char* name, void* rip, void* func_parameter)
     pid = ++next_pid;
     state = PROCESS_STATE_ALIVE;
 	this->rip = (uint64_t)rip;
+
+	bool isUser = false;
     
     next = nullptr;
     stack = (uint64_t*)kmalloc(STACK_SIZE);
     uint64_t* _stack = (uint64_t*)((void*)stack + 4096);
     uint64_t rbp = (uint64_t)_stack;
-	*--_stack = 0x10; //ss
+	*--_stack = isUser ? 0x23 : 0x10; //ss
 	*--_stack = (uint64_t)(_stack); //stack
 	*--_stack = 0x0000000000000202; //rflags
-	*--_stack = 0x8; //cs
+	*--_stack = isUser ? 0x1B : 0x8; //cs
 	*--_stack = (uint64_t)rip; //rip
 	*--_stack = 0; //err_code
 	*--_stack = 0; //int_no
@@ -69,6 +71,7 @@ Process::Process(const char* name, void* rip, void* func_parameter)
 	*--_stack = (uint64_t)func_parameter; //rdi -> we can have 1 parameter, which is put here
 	_stack -= 32; //16 * 16 bytes -> 32 * 8 bytes
 	memset(_stack, 0, 256);
+	*--_stack = isUser ? 0x23 : 0x10; //ds
 	rsp = (uint64_t)_stack;
 
 	memset(working_dir, 0, 256);
@@ -231,6 +234,11 @@ void Kill(uint64_t pid)
 	}
 }
 
+void hello()
+{
+	while(true);
+}
+
 void __exec()
 {
     CurrentDirectory = current_process->pageTable;
@@ -283,9 +291,6 @@ void InitialiseTasking()
 
 	__AddProcess(new Process("task_confirm", (void*)task_confirm));
 	__AddProcess(new Process("kernel", (void*)kernel_task));
-
-    uint64_t old_stack_pointer; 
-    asm volatile("mov %%rsp, %0" : "=r" (old_stack_pointer));
 	__exec();
 
 	kprintf("Failed to start tasking!");

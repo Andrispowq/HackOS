@@ -47,9 +47,25 @@ __set_idt:
     movdqa  [rsp + 2 * 16], xmm2
     movdqa  [rsp + 1 * 16], xmm1
     movdqa  [rsp + 0 * 16], xmm0
+
+    xor     rax, rax
+    mov     ax, ds              ; Lower 16-bits of rax = ds.
+    push    rax                 ; save the data segment descriptor
+
+    mov     ax, 0x10            ; load the kernel data segment descriptor
+    mov     ds, ax
+    mov     es, ax
+    mov     fs, ax
+    mov     gs, ax
 %endmacro
 
 %macro POPALL 0
+    pop     rbx                      ; reload the original data segment descriptor
+    mov     ds, bx
+    mov     es, bx
+    mov     fs, bx
+    mov     gs, bx
+
     movdqa  xmm15, [rsp + 15 * 16]
     movdqa  xmm14, [rsp + 14 * 16]
     movdqa  xmm13, [rsp + 13 * 16]
@@ -93,28 +109,12 @@ __set_idt:
 isr_common_stub:
 	PUSHALL
 
-    ;xor     rax, rax
-    ;mov     ax, ds              ; Lower 16-bits of rax = ds.
-    ;push    rax                 ; save the data segment descriptor
-;
-    ;mov     ax, 0x10            ; load the kernel data segment descriptor
-    ;mov     ds, ax
-    ;mov     es, ax
-    ;mov     fs, ax
-    ;mov     gs, ax
-
     mov     rdi, rsp
     sub     rsp, 0x28
 
     cld
 	call    ISRHandler
     add     rsp, 0x28
-
-    ;pop     rbx                      ; reload the original data segment descriptor
-    ;mov     ds, bx
-    ;mov     es, bx
-    ;mov     fs, bx
-    ;mov     gs, bx
 
     POPALL
 
@@ -124,28 +124,12 @@ isr_common_stub:
 irq_common_stub:
     PUSHALL
 
-    ;xor     rax, rax
-    ;mov     ax, ds              ; Lower 16-bits of rax = ds.
-    ;push    rax                 ; save the data segment descriptor
-;
-    ;mov     ax, 0x10            ; load the kernel data segment descriptor
-    ;mov     ds, ax
-    ;mov     es, ax
-    ;mov     fs, ax
-    ;mov     gs, ax
-
     mov     rdi, rsp
     sub     rsp, 0x28
 
     cld
     call    IRQHandler
     add     rsp, 0x28
-
-    ;pop     rbx                      ; reload the original data segment descriptor
-    ;mov     ds, bx
-    ;mov     es, bx
-    ;mov     fs, bx
-    ;mov     gs, bx
 
 	POPALL
 

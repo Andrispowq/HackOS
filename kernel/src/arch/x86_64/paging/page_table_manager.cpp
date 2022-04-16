@@ -9,7 +9,7 @@ static void SetEntry(PageTableEntry* entry, PageTableFlagBits flags)
 {
     entry->present = (flags & (uint64_t)PageTableFlags::Present) >> 0;
     entry->writeable = (flags & (uint64_t)PageTableFlags::Writable) >> 1;
-    entry->user_access = (flags & (uint64_t)PageTableFlags::User) >> 2;
+    entry->user_access = 1;//(flags & (uint64_t)PageTableFlags::User) >> 2;
     entry->write_through = (flags & (uint64_t)PageTableFlags::WriteThrough) >> 3;
     entry->cache_disabled = (flags & (uint64_t)PageTableFlags::CacheDisabled) >> 4;
     entry->execution_disabled = (flags & (uint64_t)PageTableFlags::ExecutionDisabled) >> 63;

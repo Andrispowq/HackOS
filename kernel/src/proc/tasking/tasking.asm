@@ -45,6 +45,12 @@ global StartProcess_FirstTime
 %endmacro
 
 %macro POPALL 0
+    pop     rbx                      ; reload the original data segment descriptor
+    mov     ds, bx
+    mov     es, bx
+    mov     fs, bx
+    mov     gs, bx
+
     movdqa  xmm15, [rsp + 15 * 16]
     movdqa  xmm14, [rsp + 14 * 16]
     movdqa  xmm13, [rsp + 13 * 16]

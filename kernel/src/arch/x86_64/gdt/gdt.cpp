@@ -19,7 +19,7 @@ void GDTR::SetGate(uint8_t number, uint64_t base, uint32_t limit, uint8_t access
 void GDTR::Flush()
 {
     __gdt_flush((uint64_t)this);
-    __tss_flush(0x28); 
+    __tss_flush(0x28 | 3); 
 }
 
 static GDTGate gates[GDT_ENTRIES];
