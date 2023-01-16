@@ -39,6 +39,8 @@ int main(int argc, char* argv[])
     memset(working_dir, 0, 256);
     strcpy(working_dir, "~/");
 
+    uint64_t winID = syscall_create_window(200, 200, 0);
+
     char* input = nullptr;
     while(true)
     {
@@ -52,6 +54,8 @@ int main(int argc, char* argv[])
 
         process_command(input);
     }
+
+    syscall_destroy_window(winID);
 
     return 0;
 }

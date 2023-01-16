@@ -107,7 +107,7 @@ uint64_t malloc_int(uint64_t size, int align, uint64_t* phys_addr)
 
 void free(void* ptr)
 {
-    syscall_free(ptr);
+    syscall_kfree(ptr);
 }
 
 uint64_t malloc_a(uint64_t size)

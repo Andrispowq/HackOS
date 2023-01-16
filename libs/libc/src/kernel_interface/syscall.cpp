@@ -18,6 +18,9 @@ DEFN_SYSCALL4(fwrite, 5, void*, int, int, void*)
 DEFN_SYSCALL1(fclose, 6, void*)
 
 DEFN_SYSCALL3(kmalloc_int, 7, uint64_t, int, uint64_t*)
-DEFN_SYSCALL1(free, 8, void*)
+DEFN_SYSCALL1(kfree, 8, void*)
 
-DEFN_SYSCALL0(kread, 9);
+DEFN_SYSCALL0(kread, 9)
+
+DEFN_SYSCALL3(create_window, 10, uint32_t, uint32_t, uint32_t) 
+DEFN_SYSCALL1(destroy_window, 11, uint64_t)

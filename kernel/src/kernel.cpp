@@ -17,8 +17,6 @@ uint64_t kernelEnd = (uint64_t)&end;
 
 KernelInfo* kInfo;
 
-#include "drivers/screen/window_manager.h"
-
 char system_input[256];
 
 extern "C" int kernel_main(KernelInfo* info)
@@ -33,6 +31,9 @@ extern "C" int kernel_main(KernelInfo* info)
 }
 
 #include "fs/vfs.h"
+#include "drivers/screen/window_manager.h"
+
+extern WindowManager* KernelWindowManager;
 
 void kernel_task()
 {
@@ -43,21 +44,6 @@ void kernel_task()
     kprintf("Type 'help' for help!\n");
     kprintf("root@root:~/$ ");
 
-    WindowManager* win_man = new WindowManager();
-
-    Window* window = win_man->CreateWindow(400, 300, 600, 400);
-    Framebuffer drawBuffer = window->GetDrawBuffer();
-    drawBuffer.DrawRect(40, 40, 70, 70, 0xFFFF0000);
-    drawBuffer.DrawRect(130, 90, 40, 80, 0xFF0000FF);
-
-    Window* window2 = win_man->CreateWindow(700, 400, 900, 650);
-    Framebuffer drawBuffer2 = window2->GetDrawBuffer();
-    drawBuffer2.DrawRect(400, 200, 70, 70, 0xFF00FF00);
-    drawBuffer2.DrawRect(300, 80, 60, 90, 0xFF00FFFF);
-
-    win_man->Update();
-    win_man->Draw();
-
     void* ptr = fopen("fs0:/USR/HELLO_2.TXT", O_CREAT);
     fwrite((void*)"Hello", 6, 1, ptr);
     fclose(ptr);
@@ -65,12 +51,16 @@ void kernel_task()
     memset(system_input, 0, 256);
     LoadProgramTask("~/USR/BIN/TEST");
     SleepFor(100);
-    LoadProgramTask("~/USR/BIN/SHELL");
+    //LoadProgramTask("~/USR/BIN/SHELL");
 
     uint32_t start = tick;
     while(true)
     {
+        Display::SharedDisplay()->clear();
+        KernelWindowManager->Update();
+        KernelWindowManager->Draw();
         Display::SharedDisplay()->DrawBackbuffer();
+
         SleepFor(10);
         tick = start;
     }
@@ -117,7 +107,7 @@ void user_input(char* input)
     }
     else
     {
-        //shell_command(input);   
+        shell_command(input);   
     }
 }
 

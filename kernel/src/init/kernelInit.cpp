@@ -16,8 +16,11 @@
 
 #include "arch/x86_64/syscall/syscall.h"
 
+#include "drivers/screen/window_manager.h"
+
 bool fromUEFI = 0;
 extern PageTableManager KernelDirectory;
+extern WindowManager* KernelWindowManager;
 
 void InitialiseRSDP(struct KernelInfo* info)
 {
@@ -175,6 +178,8 @@ void InitialiseKernel(struct KernelInfo* info)
 
     InitialiseFilesystem();
     InitialiseShell();
+
+    KernelWindowManager = new WindowManager();
 
     InitialiseSyscalls();
 

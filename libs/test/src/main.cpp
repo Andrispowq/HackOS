@@ -11,6 +11,9 @@ const char* _file_contents = "This is an example file put under USR/\nThe conten
 
 int main(int argc, char* argv[])
 {
+    uint64_t winID = syscall_create_window(200, 200, 0x1);
+    //syscall_destroy_window(winID);
+
     for(int i = 0; i < argc; i++)
     {
         printf("%i: %s\n", i, argv[i]);

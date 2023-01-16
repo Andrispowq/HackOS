@@ -3,15 +3,21 @@
 #include "lib/memory.h"
 #include "screen.h"
 
+#include "drivers/mouse/mouse.h"
+
 extern void putchar_at_xy(Framebuffer fb, char character, uint32_t x, uint32_t y);
 
 static const char* window_title = "Untitled Window";
 static const uint32_t navbar_height = 30; 
 
+static uint64_t next_window_ID = 1;
+
 Window::Window()
     : startX(0), startY(0), sizeX(200), sizeY(200), fullscreen(false),
     resizable(false)
 {
+    ID = next_window_ID++;
+
     strcpy(title, window_title);
 
     Framebuffer mainFramebuffer = Display::SharedDisplay()->framebuffer;
@@ -31,8 +37,25 @@ Window::~Window()
     delete[] drawArea.address;
 }
 
+#include "lib/stdio.h"
 void Window::Update()
 {
+    float closeButtonX = (startX + sizeX) - 25;
+    float closeButtonY = startY + 5;
+    float closeButtonSize = 20;
+
+    float mx = ((GetMouseX() + 1.0) / 2.0) * Display::SharedDisplay()->framebuffer.width;
+    float my = ((GetMouseY() + 1.0) / 2.0) * Display::SharedDisplay()->framebuffer.height;
+    if(GetMouseButton(0) == 1)
+    {
+        if((mx >= closeButtonX) && (mx <= closeButtonX + closeButtonSize))
+        {
+            if((my >= closeButtonY) && (my <= closeButtonY + closeButtonSize))
+            {
+                toBeClosed = true;
+            }
+        }
+    }
 }
 
 void Window::Draw(Framebuffer* framebuffer)

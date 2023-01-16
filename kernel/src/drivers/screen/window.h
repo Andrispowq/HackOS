@@ -15,6 +15,10 @@ public:
     void Draw(Framebuffer* framebuffer);
 
     //Getters
+    uint64_t GetWindowID() const { return ID; }
+
+    bool ShouldBeClosed() const { return toBeClosed; }
+
     uint32_t GetStartX() const { return startX; }
     uint32_t GetStartY() const { return startY; }
 
@@ -54,6 +58,10 @@ public:
     void SetCursorGrabbed(bool cursor_grabbed) { this->cursor_grabbed = cursor_grabbed; }
 
 private:
+    bool toBeClosed = false;
+
+    uint64_t ID = 0;
+
     uint32_t startX = 0, startY = 0;
     uint32_t sizeX = 600, sizeY = 400;
     bool fullscreen = false;

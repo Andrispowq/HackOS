@@ -26,7 +26,10 @@ DEFN_SYSCALL1(kfree, 8, void*)
 
 DEFN_SYSCALL0(kread, 9)
 
-static void* syscalls[10] =
+DEFN_SYSCALL3(create_window, 10, uint32_t, uint32_t, uint32_t) 
+DEFN_SYSCALL1(destroy_window, 11, uint64_t)
+
+static void* syscalls[12] =
 {
     (void*)&exit,
 
@@ -41,10 +44,13 @@ static void* syscalls[10] =
     (void*)&kmalloc_int,
     (void*)&kfree,
 
-    (void*)&kread
+    (void*)&kread,
+
+    (void*)&create_window,
+    (void*)&destroy_window
 };
 
-uint64_t num_syscalls = 10;
+uint64_t num_syscalls = 12;
 
 static void syscall_handler(Registers* registers)
 {

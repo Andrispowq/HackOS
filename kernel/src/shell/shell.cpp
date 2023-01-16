@@ -4,6 +4,9 @@
 #include "fs/filesystem.h"
 #include "lib/data_structures/vector.h"
 
+#include "fs/vfs.h"
+#include "proc/elf/elf.h"
+
 int check_command(char* cmd, const char* text);
 int check_short_command(char* cmd, const char* text, int length);
 
@@ -194,13 +197,14 @@ void command_mode(char* input)
         {
             const char* arg = input + 5;
             size_t len = strlen(working_dir);
+            size_t arg_len = strlen((char*)arg);
 
-            size_t totalLength = len + strlen((char*)arg) + 1;
+            size_t totalLength = len + 1 + arg_len;
             char* totalPath = new char[totalLength + 1];
             memset(totalPath, 0, totalLength + 1);
             memcpy(totalPath, working_dir, len);
             totalPath[len] = '/';
-            memcpy(&totalPath[len + 1], arg, strlen((char*)arg));
+            memcpy(&totalPath[len + 1], arg, arg_len);
 
 	        Filesystem* drive_C = filesystems[0];
             if(drive_C == nullptr) return;
@@ -249,6 +253,32 @@ void command_mode(char* input)
 
         kprintf("\n");
         state = COMMAND_MODE;
+    }
+    else if(check_short_command(input, "./", 2))
+    {
+        const char* arg = input + 2;
+        size_t len = strlen(working_dir);
+        size_t arg_len = strlen((char*)arg);
+
+        size_t totalLength = len + 1 + arg_len;
+        char* totalPath = new char[totalLength + 1];
+        memset(totalPath, 0, totalLength + 1);
+        memcpy(totalPath, working_dir, len);
+        totalPath[len] = '/';
+        memcpy(&totalPath[len + 1], arg, arg_len);
+        
+        Filesystem* drive_C = filesystems[0];
+        if(drive_C == nullptr) return;
+
+        ActiveFile* file = drive_C->OpenFile(totalPath);
+        if(file == nullptr) return;
+
+        if((file->GetAttributes() & DIRECTORY) != DIRECTORY)
+        {
+            LoadProgramTask(totalPath);            
+        }
+
+        delete totalPath;
     }
     else
     {
