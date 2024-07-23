@@ -34,7 +34,7 @@ uint64_t free_mem_addr;
 
 void loader_main(struct FramebufferInfo* info)
 {
-    free_mem_addr = &end;
+    free_mem_addr = (uint64_t)&end;
 
     //Initialise the Interrupt Descriptor Table, and paging
     MemoryMapEntry* entries = GetMemoryRegions();
@@ -57,7 +57,7 @@ void loader_main(struct FramebufferInfo* info)
     RSDP1* rsdp = FindRSDP(&version);
 
     //Load in the font file, loaded at 0x6000
-    PSF1_FONT* font = LoadFont(0x6000);
+    PSF1_FONT* font = LoadFont((void*)0x6000);
     
     //Initialise the display
     init_display(info, font);
@@ -70,7 +70,7 @@ void loader_main(struct FramebufferInfo* info)
 
     //Read the kernel, which is 128 sectors long (now), and starts at the 130th sector
     uint64_t kernelMemory;
-    Elf64_Ehdr* header = LoadProgram(0x20000, &kernelMemory);
+    Elf64_Ehdr* header = LoadProgram((void*)0x20000, &kernelMemory);
     if(!header)
     {
         kprintf("ELF header not supported!\n");

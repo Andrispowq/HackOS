@@ -1,5 +1,8 @@
 #include "idt.h"
 
+idt_gate_t idt[IDT_ENTRIES];
+idt_register_t idt_reg;
+
 void SetIDTGate(uint8_t entry, uint8_t flags, uint64_t handler) 
 {
     idt[entry].offset0 = (uint16_t)(handler & 0x000000000000FFFF);

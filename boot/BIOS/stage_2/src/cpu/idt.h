@@ -24,8 +24,8 @@ typedef struct
 
 #define IDT_ENTRIES 256
 
-idt_gate_t idt[IDT_ENTRIES];
-idt_register_t idt_reg;
+extern idt_gate_t idt[IDT_ENTRIES];
+extern idt_register_t idt_reg;
 
 void SetIDTGate(uint8_t entry, uint8_t flags, uint64_t handler);
 void SetIDT();
