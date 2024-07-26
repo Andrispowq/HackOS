@@ -8,11 +8,58 @@
 #include "drivers/mouse/mouse.h"
 #include "drivers/screen/screen.h"
 
+/* To print the message which defines every exception */
+const char* exception_messages[] = 
+{
+    "Division By Zero",
+    "Debug",
+    "Non Maskable Interrupt",
+    "Breakpoint",
+    "Into Detected Overflow",
+    "Out of Bounds",
+    "Invalid Opcode",
+    "No Coprocessor",
+
+    "Double Fault",
+    "Coprocessor Segment Overrun",
+    "Bad TSS",
+    "Segment Not Present",
+    "Stack Fault",
+    "General Protection Fault",
+    "Page Fault",
+    "Unknown Interrupt",
+
+    "Coprocessor Fault",
+    "Alignment Check",
+    "Machine Check",
+    "Reserved",
+    "Reserved",
+    "Reserved",
+    "Reserved",
+    "Reserved",
+
+    "Reserved",
+    "Reserved",
+    "Reserved",
+    "Reserved",
+    "Reserved",
+    "Reserved",
+    "Reserved",
+    "Reserved"
+};
+
 static void DefaultExceptionHandler(Registers* registers)
 {
     kprintf("Recieved interrupt #%x with error code %x on the default handler!\n", 
         registers->int_no, registers->err_code);
-    kprintf("RIP: %x, RSP: %x\n", registers->rip, registers->rsp);
+    kprintf("Exception: %s\n", exception_messages[registers->int_no]);
+    kprintf("RIP: %x, RSP: %x, RBP: %x\n", registers->rip, registers->rsp, registers->rbp);
+    kprintf("RAX: %x, RBX: %x, RCX: %x, RDX: %x\n", registers->rax, registers->rbx, registers->rcx, registers->rdx);
+    kprintf("RDI: %x, RSI: %x, RFLAGS: %x, DS: %x\n", registers->rdi, registers->rsi, registers->rflags, registers->ds);
+    kprintf("CS: %x, SS: %x\n", registers->cs, registers->ss);
+    kprintf("R8: %x, R9: %x, R10: %x, R11: %x\n", registers->r8, registers->r9, registers->r10, registers->r11);
+    kprintf("R12: %x, R13: %x, R14: %x, R15: %x\n", registers->r12, registers->r13, registers->r14, registers->r15);
+
     Display::SharedDisplay()->DrawBackbuffer();
     asm("cli; hlt");
 }
@@ -162,6 +209,7 @@ extern "C"
         else
         {
             kprintf("Recieved interrupt without a handler: %d\n", r->int_no);
+            kprintf("Description: %s\n", exception_messages[r->int_no]);
             while(1) asm("hlt");
         }
     }
@@ -187,43 +235,3 @@ void RegisterInterruptHandler(uint8_t index, isr_t handler)
 {
     interrupt_handlers[index] = handler;
 }
-
-/* To print the message which defines every exception */
-const char* exception_messages[] = 
-{
-    "Division By Zero",
-    "Debug",
-    "Non Maskable Interrupt",
-    "Breakpoint",
-    "Into Detected Overflow",
-    "Out of Bounds",
-    "Invalid Opcode",
-    "No Coprocessor",
-
-    "Double Fault",
-    "Coprocessor Segment Overrun",
-    "Bad TSS",
-    "Segment Not Present",
-    "Stack Fault",
-    "General Protection Fault",
-    "Page Fault",
-    "Unknown Interrupt",
-
-    "Coprocessor Fault",
-    "Alignment Check",
-    "Machine Check",
-    "Reserved",
-    "Reserved",
-    "Reserved",
-    "Reserved",
-    "Reserved",
-
-    "Reserved",
-    "Reserved",
-    "Reserved",
-    "Reserved",
-    "Reserved",
-    "Reserved",
-    "Reserved",
-    "Reserved"
-};

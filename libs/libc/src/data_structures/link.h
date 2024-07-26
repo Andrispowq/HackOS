@@ -1,7 +1,7 @@
 #ifndef LINK_H
 #define LINK_H
 
-#include "lib/stdint.h"
+#include "stdint.h"
 
 typedef struct Link
 {

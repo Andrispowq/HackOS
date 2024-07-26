@@ -24,3 +24,6 @@ DEFN_SYSCALL0(kread, 9)
 
 DEFN_SYSCALL3(create_window, 10, uint32_t, uint32_t, uint32_t) 
 DEFN_SYSCALL1(destroy_window, 11, uint64_t)
+
+DEFN_SYSCALL1(get_window_buffer, 12, uint64_t)
+DEFN_SYSCALL2(set_window_title, 13, uint64_t, const char*)

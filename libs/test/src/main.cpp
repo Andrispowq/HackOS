@@ -2,6 +2,7 @@
 #include "stdint.h"
 
 #include "kernel_interface/syscall.h"
+#include "framebuffer/framebuffer.h"
 
 #include "memory.h"
 #include "string.h"
@@ -12,7 +13,16 @@ const char* _file_contents = "This is an example file put under USR/\nThe conten
 int main(int argc, char* argv[])
 {
     uint64_t winID = syscall_create_window(200, 200, 0x1);
-    //syscall_destroy_window(winID);
+    Framebuffer* fb = (Framebuffer*)syscall_get_window_buffer(winID);
+    if(!fb)
+    {
+        printf("ERROR");
+        syscall_destroy_window(winID);
+        return 1;
+    }
+    
+    syscall_set_window_title(winID, "Yo yo yo whats up");
+    //fb->DrawRect(10, 10, 20, 20, 0xFFFF00FF);
 
     for(int i = 0; i < argc; i++)
     {

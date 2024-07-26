@@ -2,44 +2,58 @@
 #include "stdint.h"
 
 #include "kernel_interface/syscall.h"
+#include "screen/screen.h"
+#include "file/file.h"
 
 #include "memory.h"
 #include "string.h"
 #include "stdio.h"
 
-int check_command(char* cmd, const char* text);
-int check_short_command(char* cmd, const char* text, int length);
-
 char working_dir[256];
 
-void process_command(char* input)
+uint64_t initialise_window()
 {
-    if(check_command(input, "help"))
+    uint64_t winID = syscall_create_window(200, 200, 0);
+    syscall_set_window_title(winID, "Shell32.exe");
+    return winID;
+}
+
+Framebuffer* initialise_buffer(uint64_t winID)
+{
+    Framebuffer* fb = (Framebuffer*)syscall_get_window_buffer(winID);
+    fb->Clear(0xFFFFFFFF);
+    return fb;
+}
+
+PSF1_FONT* load_font()
+{
+    ActiveFile* file = (ActiveFile*)syscall_fopen("fs0:/UTIL/FONTS/zap-light16.psf", 0x2);
+    if(file == 0)
     {
-        printf("This is the HackOS help panel!\nCurrently implemented commands:\n");
-        printf("\t- clear: Clears the console\n");
-        printf("\t- page: Allocates 4096 bytes of page-aligned memory (kmalloc test)\n");
-        printf("\t- calc: Enters calculator mode, which is currently not functioning\n");
-        printf("\t- print <arg>: Prints <arg> to the console\n");
-        printf("\t- print <var>: Prints <val> to the console, if it's a kernel variable\n");
-        printf("\t- shutdown: Halts the CPU, causing the computer to shut down\n");
-        printf("\t- restart: Restarts the computer (only works on Virtual Machines)\n");
-        printf("\t- help: displays this menu\n");
-    }
-    else if(check_command(input, "quit"))
-    {
-        syscall_exit(0);
+        return 0;
     }
 
-    printf("root@root:%s$ ", working_dir);
+    PSF1_FONT* font = (PSF1_FONT*)malloc(file->GetSize());
+    syscall_fread(font, 1, file->GetSize(), file);
+    syscall_fclose(file);
+
+    return font;
 }
 
 int main(int argc, char* argv[])
 {
+    printf("Yo kernel whats up\n");
+
     memset(working_dir, 0, 256);
     strcpy(working_dir, "~/");
 
-    uint64_t winID = syscall_create_window(200, 200, 0);
+    uint64_t winID = initialise_window();
+    Framebuffer* fb = initialise_buffer(winID);
+    PSF1_FONT* font = load_font();
+
+    InitialiseDisplay(fb, font);
+    
+    /*Display::SharedDisplay()->puts("Hello");
 
     char* input = nullptr;
     while(true)
@@ -50,28 +64,15 @@ int main(int argc, char* argv[])
             continue;
         }
 
-        printf("Recieved command %s\n", input);
+        if(input[0] == 'q')
+        {
+            break;
+        }
 
-        process_command(input);
+        Display::SharedDisplay()->putc(input[0]);
     }
 
-    syscall_destroy_window(winID);
+    syscall_destroy_window(winID);*/
 
     return 0;
-}
-
-int check_command(char* cmd, const char* text)
-{
-    return strcmp(cmd, (char*)text) == 0;
-}
-
-int check_short_command(char* cmd, const char* text, int length)
-{
-    int i;
-    for (i = 0; cmd[i] == text[i] && i < length; i++);
-
-    if(i == length)
-        return 1;
-    else 
-        return 0;
 }

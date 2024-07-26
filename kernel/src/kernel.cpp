@@ -49,9 +49,9 @@ void kernel_task()
     fclose(ptr);
 
     memset(system_input, 0, 256);
-    LoadProgramTask("~/USR/BIN/TEST");
-    SleepFor(100);
-    //LoadProgramTask("~/USR/BIN/SHELL");
+    LoadProgramTask("~/USR/BIN/SHELL");
+    
+    //LoadProgramTask("~/USR/BIN/TEST");
 
     uint32_t start = tick;
     while(true)

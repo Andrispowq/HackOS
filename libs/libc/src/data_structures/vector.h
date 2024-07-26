@@ -1,10 +1,8 @@
 #ifndef VECTOR_H
 #define VECTOR_H
 
-#include "lib/memory.h"
-#include "lib/string.h"
-
-#include "memory/heap.h"
+#include "memory.h"
+#include "string.h"
 
 #define VECTOR_DEFAULT_SIZE 2
 

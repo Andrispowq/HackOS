@@ -117,5 +117,4 @@ void program_task(const char* name)
 void LoadProgramTask(const char* name)
 {
 	AddProcess(new Process(name, (void*)program_task, (void*)name));
-    SleepFor(100);
 }

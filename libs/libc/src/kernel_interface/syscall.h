@@ -31,4 +31,7 @@ DECL_SYSCALL0(kread)
 DECL_SYSCALL3(create_window, uint32_t, uint32_t, uint32_t) //width, height, flags
 DECL_SYSCALL1(destroy_window, uint64_t) //windowID
 
+DECL_SYSCALL1(get_window_buffer, uint64_t) //windowID
+DECL_SYSCALL2(set_window_title, uint64_t, const char*) //windowID, title
+
 #endif

@@ -4,6 +4,8 @@
 #include "lib/stdint.h"
 #include "lib/font/font.h"
 
+#include "lib/data_structures/vector.h"
+
 #include "drivers/screen/framebuffer.h"
 
 #define COLOUR(r, g, b, a) ((a << 24) | (r << 16) | (g << 8) | b)
@@ -31,6 +33,7 @@ public:
 public:
     static Display* s_Display;
 	Console console;
+    
     Framebuffer framebuffer;
     Framebuffer backbuffer;
     PSF1_FONT* font;

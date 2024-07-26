@@ -41,3 +41,23 @@ void destroy_window(uint64_t ID)
 {
     KernelWindowManager->DestroyWindowByID(ID);
 }
+
+void* get_window_buffer(uint64_t ID)
+{
+    Window* window = KernelWindowManager->GetWindow(ID);
+    if(window)
+    {
+        return window->GetDrawBuffer();
+    }
+
+    return nullptr;
+}
+
+void set_window_title(uint64_t ID, const char* title)
+{
+    Window* window = KernelWindowManager->GetWindow(ID);
+    if(window)
+    {
+        window->SetTitle(title);
+    }
+}

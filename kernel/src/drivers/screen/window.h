@@ -39,7 +39,7 @@ public:
 
     const char* GetTitle() const { return title; }
 
-    Framebuffer GetDrawBuffer() { return drawArea; }
+    Framebuffer* GetDrawBuffer() { return drawArea; }
 
     //Setters
     void MoveWindow(uint32_t x, uint32_t y);
@@ -75,7 +75,7 @@ private:
     uint32_t cursorX = 0, cursorY = 0;
     char title[30];
 
-    Framebuffer drawArea;
+    Framebuffer* drawArea;
 };
 
 #endif

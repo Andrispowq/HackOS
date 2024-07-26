@@ -1,7 +1,7 @@
 #ifndef FONT_H
 #define FONT_H
 
-#include "lib/stdint.h"
+#include "stdint.h"
 
 #define PSF1_MAGIC0 0x36
 #define PSF1_MAGIC1 0x04

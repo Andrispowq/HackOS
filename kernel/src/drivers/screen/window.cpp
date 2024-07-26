@@ -25,16 +25,18 @@ Window::Window()
     uint32_t size_y = fullscreen ? sizeY : (sizeY - navbar_height);
     uint32_t* drawPointer = new uint32_t[sizeX * size_y];
     memset(drawPointer, 0, sizeX * size_y * sizeof(uint32_t));
-    drawArea.address = drawPointer;
-    drawArea.bpp = mainFramebuffer.bpp;
-    drawArea.width = sizeX;
-    drawArea.height = size_y;
-    drawArea.pitch = sizeX * (drawArea.bpp / 8);
+    drawArea = new Framebuffer();
+    drawArea->address = drawPointer;
+    drawArea->bpp = mainFramebuffer.bpp;
+    drawArea->width = sizeX;
+    drawArea->height = size_y;
+    drawArea->pitch = sizeX * (drawArea->bpp / 8);
 }
 
 Window::~Window()
 {
-    delete[] drawArea.address;
+    delete[] drawArea->address;
+    delete drawArea;
 }
 
 #include "lib/stdio.h"
@@ -93,7 +95,7 @@ void Window::Draw(Framebuffer* framebuffer)
     {
         for(size_t x = 0; x < sizeX; x++)
         {
-            framebuffer->PutPixel(x + startX, y + startY + navbar_height, drawArea.GetPixel(x, y));
+            framebuffer->PutPixel(x + startX, y + startY + navbar_height, drawArea->GetPixel(x, y));
         }
     }
 
@@ -118,14 +120,14 @@ void Window::ResizeWindow(uint32_t x, uint32_t y)
 
     Framebuffer mainFramebuffer = Display::SharedDisplay()->framebuffer;
 
-    delete[] drawArea.address;
+    delete[] drawArea->address;
     uint32_t size_y = fullscreen ? sizeY : (sizeY - navbar_height);
     uint32_t* drawPointer = new uint32_t[sizeX * size_y];
-    drawArea.address = drawPointer;
-    drawArea.bpp = mainFramebuffer.bpp;
-    drawArea.width = sizeX;
-    drawArea.height = size_y;
-    drawArea.pitch = sizeX * (drawArea.bpp / 8);
+    drawArea->address = drawPointer;
+    drawArea->bpp = mainFramebuffer.bpp;
+    drawArea->width = sizeX;
+    drawArea->height = size_y;
+    drawArea->pitch = sizeX * (drawArea->bpp / 8);
 }
 
 void Window::SetCursorPosiiton(uint32_t x, uint32_t y)

@@ -19,6 +19,7 @@ public:
     void Draw();
 
     Window* CreateWindow(uint32_t startX, uint32_t startY, uint32_t sizeX, uint32_t sizeY);
+    Window* GetWindow(uint64_t ID);
     void DestroyWindow(Window* window);
     void DestroyWindowByID(uint64_t ID);
 

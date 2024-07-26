@@ -39,10 +39,12 @@ buildimg:
 	mmd -i $(BUILD_DIR)/$(OS_NAME).img ::/EFI/BOOT
 	mmd -i $(BUILD_DIR)/$(OS_NAME).img ::/USR
 	mmd -i $(BUILD_DIR)/$(OS_NAME).img ::/USR/BIN
+	mmd -i $(BUILD_DIR)/$(OS_NAME).img ::/UTIL
+	mmd -i $(BUILD_DIR)/$(OS_NAME).img ::/UTIL/FONTS
 	mcopy -i $(BUILD_DIR)/$(OS_NAME).img $(BOOT_EFI) ::/EFI/BOOT
 	mcopy -i $(BUILD_DIR)/$(OS_NAME).img $(KERNEL_DIR)/startup.nsh ::
 	mcopy -i $(BUILD_DIR)/$(OS_NAME).img $(KERNEL_DIR)/bin/kernel.elf ::
-	mcopy -i $(BUILD_DIR)/$(OS_NAME).img util/fonts/zap-light16.psf ::
+	mcopy -i $(BUILD_DIR)/$(OS_NAME).img util/fonts/zap-light16.psf ::/UTIL/FONTS
 	mcopy -i $(BUILD_DIR)/$(OS_NAME).img util/usertest/usertest.elf ::/USR/BIN
 	mcopy -i $(BUILD_DIR)/$(OS_NAME).img hello.txt ::/USR
 	mcopy -i $(BUILD_DIR)/$(OS_NAME).img util/libc/test ::/USR/BIN
@@ -115,8 +117,11 @@ buildimg:
 	mmd -i $(BUILD_DIR)/HackOS_FAT.img ::/SYSTEM
 	mmd -i $(BUILD_DIR)/HackOS_FAT.img ::/USR
 	mmd -i $(BUILD_DIR)/HackOS_FAT.img ::/USR/BIN
+	mmd -i $(BUILD_DIR)/HackOS_FAT.img ::/UTIL
+	mmd -i $(BUILD_DIR)/HackOS_FAT.img ::/UTIL/FONTS
 	mcopy -i $(BUILD_DIR)/HackOS_FAT.img util/usertest/usertest.elf ::/USR/BIN
 	mcopy -i $(BUILD_DIR)/HackOS_FAT.img hello.txt ::/USR
+	mcopy -i $(BUILD_DIR)/HackOS_FAT.img util/fonts/zap-light16.psf ::/UTIL/FONTS
 	mcopy -i $(BUILD_DIR)/HackOS_FAT.img util/libc/test ::/USR/BIN
 	mcopy -i $(BUILD_DIR)/HackOS_FAT.img util/libc/shell ::/USR/BIN
 

@@ -46,6 +46,11 @@ void Framebuffer::DrawRect(uint32_t x, uint32_t y, uint32_t width, uint32_t heig
     }
 }
 
+void Framebuffer::Clear(uint32_t colour)
+{
+    DrawRect(0, 0, width, height, colour);
+}
+
 bool MouseDrawn = false;
 uint32_t MouseCursorBuffer[16 * 16];
 uint32_t MouseCursorBufferAfter[16 * 16];

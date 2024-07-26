@@ -51,6 +51,19 @@ Window* WindowManager::CreateWindow(uint32_t startX, uint32_t startY, uint32_t s
     return window;
 }
 
+Window* WindowManager::GetWindow(uint64_t ID)
+{
+    for(size_t i = 0; i < windows.size(); i++)
+    {
+        if(windows[i]->GetWindowID() == ID)
+        {
+            return windows[i];
+        }
+    }
+
+    return nullptr;
+}
+
 void WindowManager::DestroyWindow(Window* window)
 {
     for(size_t i = 0; i < windows.size(); i++)
