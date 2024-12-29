@@ -210,6 +210,7 @@ extern "C"
         {
             kprintf("Recieved interrupt without a handler: %d\n", r->int_no);
             kprintf("Description: %s\n", exception_messages[r->int_no]);
+            Display::SharedDisplay()->DrawBackbuffer();
             while(1) asm("hlt");
         }
     }

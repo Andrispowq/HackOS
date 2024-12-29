@@ -18,7 +18,7 @@ public:
     Device() {}
     virtual ~Device() {};
 
-    virtual DeviceType GetType() = 0;
+    virtual DeviceType GetType() const = 0;
 
     virtual void Read(uint64_t LBA, void* buffer, uint64_t size) = 0;
     virtual void Write(uint64_t LBA, void* buffer, uint64_t size) = 0;

@@ -184,5 +184,5 @@ void InitialiseKernel(struct KernelInfo* info)
     InitialiseSyscalls();
 
     InitialiseIRQ();
-    InitialiseTasking();
+    //InitialiseTasking();
 }

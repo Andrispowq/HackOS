@@ -27,6 +27,8 @@ extern "C" int kernel_main(KernelInfo* info)
     InitialiseDisplay(info);
     InitialiseKernel(info);
 
+    Display::SharedDisplay()->DrawBackbuffer();
+
     while(true) asm("hlt");
 }
 
