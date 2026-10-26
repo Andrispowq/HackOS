@@ -1,7 +1,45 @@
-# Files to ignore
-**.o
-**.bin
-**.tmp
-**.elf
+# Build products (including extensionless userspace programs).
+/bin/
+/kernel/bin/
+/kernel/bin-int/
+/boot/BIOS/mbr/bin/
+/boot/BIOS/stage_1/bin/
+/boot/BIOS/stage_2/bin/
+/boot/BIOS/stage_2/bin-int/
+/boot/UEFI/gnu-efi/x86_64/
+/libs/*/bin/
+/libs/*/bin-int/
+*.o
+*.a
+*.so
+*.d
+*.bin
+*.elf
+*.efi
+*.efi.debug
+*.tmp
 
+# Required input: no corresponding source/build rule is present in this tree.
 !util/usertest/usertest.elf
+
+# Copied programs and compiled host utilities.
+/util/libc/shell
+/util/libc/test
+/util/tools/initrd_creator/init_rd_creator
+/util/tools/initrd_creator/init_rd_reader
+/util/tools/bindump/bindump
+
+# Known local disk images and emulator diagnostics. Keep firmware/font inputs.
+/ext2.img
+/initrd.img
+/util/tools/initrd_creator/initrd.img
+/out.txt
+/qemu.log
+
+# Local toolchain workspace and editor/OS debris.
+/.toolchain/
+.DS_Store
+._*
+*~
+*.swp
+*.swo
