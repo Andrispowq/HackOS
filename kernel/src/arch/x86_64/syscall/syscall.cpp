@@ -61,12 +61,13 @@ static void syscall_handler(Registers* registers)
 {
     if(registers->rax >= num_syscalls) //For now lets call this kprintf
     {
+        registers->rax = (uint64_t)-1;
         return;
     }
 
     void* function = syscalls[registers->rax];
 
-    uint64_t ret = ExecuteSyscall(registers->rdi, registers->rsi, registers->rdx, registers->rcx, registers->rbx, (uint64_t)function);    
+    uint64_t ret = ExecuteSyscall(registers->rdi, registers->rsi, registers->rdx, registers->rcx, registers->r8, (uint64_t)function);
     registers->rax = ret;
 }
 

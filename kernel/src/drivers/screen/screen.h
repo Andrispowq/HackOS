@@ -37,6 +37,7 @@ public:
     Framebuffer framebuffer;
     Framebuffer backbuffer;
     PSF1_FONT* font;
+    bool dirty;
 };
 
 /* Public kernel API */

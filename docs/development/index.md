@@ -29,7 +29,7 @@ Changes that cross component boundaries need coordinated updates:
 - Loader handoff structures and memory-type interpretation across BIOS, EFI,
   and the kernel.
 - Disk offsets across the image recipe, MBR, and BIOS readers.
-- Register layouts across interrupt assembly, scheduling assembly, and C++.
+- Register layouts across interrupt assembly and the C++ scheduler.
 - Syscall numbers, registers, and object layouts across the kernel and libc.
 - Font, framebuffer, and pixel-format assumptions across loaders and drawing code.
 
@@ -41,7 +41,8 @@ it already exists.
 
 Run `make -C tests test` for the independent host, boot-asset, and early BIOS
 checks. Run `make -C tests build-images FIRMWARE=bios` and the corresponding
-`test-qemu` target for full builds and kernel milestones; repeat with `uefi`.
+`test-qemu` and `test-shell` targets for boot milestones, interactive input and
+task lifecycle checks; repeat with `uefi`.
 The [testing guide](testing.md) includes container commands and explains failure
 reports and the limits of host coverage.
 

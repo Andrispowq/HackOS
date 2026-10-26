@@ -48,9 +48,12 @@ heap pages are not necessarily physically contiguous.
 ## PS/2 input
 
 The [keyboard driver](../../kernel/src/drivers/keyboard/keyboard.cpp) reads
-scancodes from port `0x60`, tracks modifier state, echoes characters, and
-maintains a line buffer. Enter dispatches the line to the kernel's `user_input`
-function, which handles power commands or forwards it to the shell.
+translated set-1 scancodes from port `0x60`. Its allocation-free decoder tracks
+both Shift keys and Caps Lock, bounds-checks make/break codes, and handles or
+ignores extended sequences. Decoded characters enter a 255-character FIFO. The
+shell thread drains it with interrupts briefly disabled, edits a bounded line,
+and dispatches commands on Enter. Overflow discards input instead of executing
+a truncated command. The keyboard layout is US ASCII.
 
 The [mouse driver](../../kernel/src/drivers/mouse/mouse.cpp) configures the PS/2
 controller, assembles packets, updates position/buttons, and draws the cursor.

@@ -15,9 +15,10 @@ docker compose up --build bios
 ```
 
 Open [the console](http://localhost:6080/vnc.html?autoconnect=true&resize=scale).
-It shows the kernel's initialization output. Click inside it to send keyboard
-and mouse input; the normal screen-update loop and interactive shell task are
-still disabled with tasking, so this is not yet a complete desktop or shell.
+It shows initialization output followed by the kernel shell. Click inside it
+and try `help`, `ls`, `ps` or `print tick`. Input uses the US keyboard layout.
+The shell and loaded programs run as ring-0 tasks; the window desktop and isolated
+userspace remain unfinished.
 The first image build compiles
 GCC and Binutils from source and takes considerably longer than later cached
 builds. Source changes are picked up when the service starts again.

@@ -2,9 +2,9 @@
 
 [System index](index.md) · [Memory](memory.md) · [Interrupts](interrupts.md)
 
-HackOS has the pieces of a program runtime, but it does not yet run isolated
-userspace processes. Tasking startup is disabled, new processes select kernel
-privilege, and program segments are loaded through the kernel address space.
+HackOS runs preemptive kernel threads and an interactive kernel shell. All tasks
+remain in ring 0 and share `KernelDirectory`; there is no isolated userspace yet.
+Only trusted programs should be loaded.
 
 ## ELF loading
 
@@ -14,8 +14,8 @@ first filesystem and checks for little-endian x86-64 ELF64 executable files.
 fields through `KernelDirectory`, and copies file data to those addresses.
 
 `program_task` calls the ELF entry point as a function with an `argc`/`argv`
-pair, prints its result, and kills the current task. `LoadProgramTask` wraps that
-function in a new `Process`. The kernel startup smoke path also directly calls
+pair. `LoadProgramTask` owns a copy of the path and permits one loaded ELF
+program at a time, since the program linker scripts use the same addresses. The kernel startup smoke path also directly calls
 the retained `USERTEST.ELF` entry.
 
 The loader validates ELF version, header sizes, aligned program-header tables,
@@ -28,22 +28,56 @@ programs.
 
 ## Processes and scheduling
 
-[Process](../../kernel/src/proc/tasking/process.cpp) holds register/stack state,
-a page-table reference, a name/PID, state, and a link to another process.
-Construction prepares an interrupt-return frame and clones the current page
-tables, but `isUser` is hard-coded to `false`.
+[Process](../../kernel/src/proc/tasking/process.cpp) owns its name and a 16 KiB
+kernel stack. It references the shared kernel page tables without owning or
+cloning them. `InitialiseTasking` creates the idle and shell tasks before IRQs
+are enabled. Idle keeps the original boot stack; its first timer interrupt
+captures its context.
 
-`InitialiseTasking` relocates the initial stack and creates idle, confirmation,
-and kernel tasks. Its call in kernel initialization is commented out. The PIT
-can call `Schedule` once scheduling is enabled, and
-[tasking.asm](../../kernel/src/proc/tasking/tasking.asm) saves/restores context
-and switches CR3.
+Each new thread starts through a trampoline with SysV stack alignment and a
+synthetic interrupt frame. Returning from the entry function terminates the
+thread. IRQ0 saves the current frame and selects the next live task from a
+null-terminated queue, wrapping to idle at the end. The interrupt epilogue
+restores that task's frame. Vector `0x81` provides a ring-0 voluntary yield.
+There is no compiler-frame-pointer walk or CR3 switch.
 
-The task-switch code assumes compiler frame pointers and a specific interrupt
-stack shape. Its frame skip matches the interrupt stub's 32-byte call area,
-and XMM11 is restored correctly. Scheduling remains disabled: process termination,
-initial frame construction, floating-point control state and page-table ownership
-need guest tests before enabling general scheduling.
+Exit marks the current task as a zombie and yields without returning. Killing
+another task marks it as a zombie so it cannot be selected again. Idle unlinks
+and deletes zombies only after execution has left their stacks. Stack and name
+storage are freed once; the shared page tables stay alive. Program-owned file
+handles, heap allocations and windows still require explicit cleanup by the
+program; automatic resource tracking is future work.
+
+The scheduler runs only on the bootstrap CPU. Nested `PreemptionGuard` scopes
+protect shared heap, console, shell commands and program loading while allowing
+hardware IRQ delivery. Queue operations use short interrupt-disabled sections.
+Do not sleep, yield or exit inside a preemption guard. These guards are not SMP
+locks. `SleepFor` waits on PIT ticks and does not remove a task from the ready queue.
+
+## Interactive kernel shell
+
+The shell thread consumes decoded PS/2 characters and refreshes the display when
+console output changes. Keyboard IRQs only decode and enqueue input. The console
+stays visible; the experimental window application in `libs/shell` is not started
+automatically.
+
+| Command | Behavior |
+| --- | --- |
+| `help`, `clear` | Show commands or clear the console |
+| `print <text>` | Print literal text, including percent signs |
+| `print tick`, `print time`, `print date` | Show the monotonic tick count or RTC |
+| `ps`, `kill <pid>` | List tasks or stop a program; idle and shell are protected |
+| `ls`, `wd`, `cd <path>` | Browse the first filesystem; `~` is its root |
+| `open <path>`, `read`, `close` | Open a file, read up to 512 bytes, close it |
+| `./<program>` | Launch a trusted ELF program, for example `./USR/BIN/TEST` |
+| `shutdown`, `restart` | Use the existing platform power-management paths |
+
+Input uses the US keyboard layout, including Shift and Caps Lock. Backspace edits
+the current line. Enter submits it. Lines longer than 255 characters are discarded;
+a queue overflow also discards input and requires Enter before a fresh command.
+There is no history, tab completion or interactive userspace terminal yet.
+Power management and the example window programs remain hardware-dependent and
+experimental.
 
 ## Syscalls
 
@@ -69,9 +103,9 @@ share numbered calls through `int 0x80`.
 | 13 | Set window title |
 
 `MakeSyscall` puts the call number in RAX and arguments in RDI, RSI, RDX, RCX,
-and R8. The dispatcher reads its fifth argument from RBX instead of R8; that
-mismatch must be resolved before five-argument calls are added. Results return
-through the saved RAX value.
+and R8. The dispatcher uses the same registers and aligns the stack before
+calling the C++ implementation. Results return through saved RAX; unknown syscall
+numbers return `-1`.
 
 Vector `0x80` currently uses the ordinary privilege-0 interrupt-gate flags, so
 it is not a usable ring-3 entry point. `SetupSysret` configures some MSRs, but
@@ -80,6 +114,9 @@ up. The assembly `JumpToUserspace` helper is preparatory rather than the normal
 execution path.
 
 The API passes raw pointers, `va_list`, and kernel objects across the boundary.
+In particular, the kernel and libc `ActiveFile` declarations must have matching
+virtual destructors, method order and fields. A cross-translation-unit host test
+and a guest file-I/O probe exercise this ABI.
 Actual userspace support needs pointer validation/copying, file and window
 handles, per-process resources, a kernel entry stack, and an explicit error ABI.
 
@@ -96,6 +133,6 @@ interactive loop commented out. It is distinct from the
 [libs/test](../../libs/test/) is an example application exercising arguments,
 windows, and file I/O; it is not an automated test suite.
 
-The [testing plan](../development/testing.md) starts with ELF validation and
-context-switch checks before adding ring-3 isolation tests. The remaining
+The [test suite](../development/testing.md) exercises ELF validation, register
+preservation, shell input, task exit and reclamation on both firmware paths. The remaining
 implementation work is prioritized in [TODO](../TODO.md).

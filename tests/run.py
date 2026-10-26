@@ -20,7 +20,7 @@ SOURCES = [
     "kernel/src/fs/fat32/fat32driver.cpp",
     "boot/BIOS/stage_2/src/libc/memory.c", "boot/BIOS/stage_2/src/libc/string.c",
     "libs/libc/src/memory.cpp", "libs/libc/src/string.cpp",
-    *[f"tests/host/{s}.cpp" for s in ("adapters", "main", "library_tests", "graphics_tests", "fs_tests", "elf_tests", "bios_tests", "user_tests")],
+    *[f"tests/host/{s}.cpp" for s in ("adapters", "main", "library_tests", "graphics_tests", "fs_tests", "elf_tests", "bios_tests", "user_tests", "input_tests", "file_abi_provider", "file_abi_consumer", "syscall_tests")],
 ]
 
 
@@ -73,8 +73,11 @@ def compile_host(directory, sanitizers):
         (directory/"compile.log").write_text("\n".join(log))
         require_success(r, f"compile {source}")
         objects.append(obj)
-    for prefix,folder,source in [(prefix,folder,s) for prefix,folder in [("","kernel/src/lib"),("hackos_user_","libs/libc/src")]
-                                 for s in ("_memory","_string")]:
+    assembly_sources = [(prefix,folder,s) for prefix,folder in [("","kernel/src/lib"),("hackos_user_","libs/libc/src")]
+                        for s in ("_memory","_string")]
+    assembly_sources += [("", "kernel/src/arch/x86_64/syscall", "syscall_impl"),
+                         ("", "tests/fixtures", "syscall_target")]
+    for prefix,folder,source in assembly_sources:
         obj = directory/(prefix+source+".o")
         args = ["nasm", "-f", "macho64" if sys.platform=="darwin" else "elf64"]
         symbol_prefix = ("_" if sys.platform=="darwin" else "") + prefix

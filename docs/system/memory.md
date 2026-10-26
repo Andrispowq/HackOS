@@ -67,7 +67,10 @@ The heap begins at virtual address `0x0000100000000000` with 16 mapped pages.
 It uses linked `HeapSegmentHeader` records, rounds requests to 16-byte sizes,
 splits sufficiently large free segments, and coalesces neighbors on free.
 `ExpandHeap` maps more physical frames when no segment can satisfy a request.
-Global C++ `new` and `delete` route through `kmalloc` and `kfree`.
+Global C++ `new` and `delete` route through `kmalloc` and `kfree`. Heap mutation
+is protected from task preemption by nested guards; hardware IRQs stay enabled.
+These guards assume a single scheduling CPU. Kernel threads share page tables
+and idle frees an exited thread's stack only after switching away from it.
 
 Page alignment is not currently preserved by the post-initialization
 `kmalloc_int` path: it calls `alloc(size)` without the requested alignment, and

@@ -1,4 +1,5 @@
 #include "idt.h"
+#include "proc/tasking/process.h"
 
 #include "arch/x86_64/ports.h"
 #include "lib/stdio.h"
@@ -139,7 +140,7 @@ void InitialiseIDT()
     idtr.SetGate(IRQ15, IDT_TA_InterruptGate, (uint64_t)irq15);
 
     idtr.SetGate(0x80, IDT_TA_InterruptGate, (uint64_t)isr128);
-    RegisterInterruptHandler(0x80, DefaultExceptionHandler);
+    idtr.SetGate(0x81, IDT_TA_InterruptGate, (uint64_t)isr129);
 
     for(uint8_t i = 0; i < 32; i++)
     {
@@ -199,8 +200,9 @@ static isr_t interrupt_handlers[256];
 
 extern "C"
 {
-    void ISRHandler(Registers* r) 
+    Registers* ISRHandler(Registers* r)
     {
+        if (r->int_no == 0x81) return Schedule(r);
         if (interrupt_handlers[r->int_no] != 0)
         {
             isr_t handler = interrupt_handlers[r->int_no];
@@ -213,9 +215,10 @@ extern "C"
             Display::SharedDisplay()->DrawBackbuffer();
             while(1) asm("hlt");
         }
+        return r;
     }
     
-    void IRQHandler(Registers* regs) 
+    Registers* IRQHandler(Registers* regs)
     {
         if (interrupt_handlers[regs->int_no] != 0) 
         {
@@ -229,6 +232,7 @@ extern "C"
         }
         
         __outb(PIC1_COMMAND, PIC_EOI);
+        return regs->int_no == IRQ0 ? Schedule(regs) : regs;
     }
 }
 

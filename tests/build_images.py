@@ -24,6 +24,8 @@ def build(firmware):
         files = require_success(command(["git", "-c", f"safe.directory={ROOT}", "ls-files", "--cached", "--others", "--exclude-standard", "-z"]), "list source inputs").split("\0")
         for name in filter(None, files):
             path = Path(name)
+            if not (ROOT / path).is_file():
+                continue  # Tracked files may have been deleted in the working tree.
             if path.parts[0] in ("tests", ".github", "docs") or name.endswith(".img"):
                 continue
             destination = work / path

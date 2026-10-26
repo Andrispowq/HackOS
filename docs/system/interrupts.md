@@ -21,21 +21,27 @@ and interrupt stack behavior before these descriptors can be used safely.
 ## Exception entry and dispatch
 
 [interrupts.asm](../../kernel/src/arch/x86_64/interrupts/interrupts.asm) supplies
-the entry stubs. Their saved frame must match the packed `Registers` structure
+the entry stubs. Their saved frame must match the 16-byte-aligned `Registers` structure
 in [idt.h](../../kernel/src/arch/x86_64/interrupts/idt.h), including general
-registers, XMM storage, vector/error fields, and the CPU return frame.
+registers, a 512-byte FXSAVE area, vector/error fields, and the CPU return frame.
+The full frame is 704 bytes; static assertions pin important offsets.
 
 [idt.cpp](../../kernel/src/arch/x86_64/interrupts/idt.cpp) installs gates and a
 handler table. `RegisterInterruptHandler` associates a vector with a C++
 callback; `ISRHandler` dispatches exceptions/software interrupts and
-`IRQHandler` dispatches hardware IRQs and sends end-of-interrupt notifications.
+`IRQHandler` dispatches hardware IRQs and sends end-of-interrupt notifications
+exactly once before selecting the next task on IRQ0. Both handlers return the
+frame pointer for the assembly epilogue to restore. Vector `0x81` yields without
+sending a PIC notification.
 
 Page-fault reporting lives in [paging.cpp](../../kernel/src/arch/x86_64/paging/paging.cpp).
 `InitPaging` registers `PageFaultHandler` through the callback table, preserving
-the vector-14 assembly entry. XMM saves use unaligned moves, the C++ call stack
-is aligned for SysV, and XMM11 is restored to its own register. `iretq` restores
-the interrupted interrupt-enable state; the epilogue does not enable interrupts
-early. Error-code and no-error-code vectors use matching stubs.
+the vector-14 assembly entry. `fxsave64`/`fxrstor64` preserve x87 registers and
+control state, MXCSR and XMM0–15. The FXSAVE area and C++ call stack are aligned
+to 16 bytes. `cld` makes C++ handlers safe when an interrupted task had DF set;
+`iretq` restores that task's flags, including DF and the interrupt-enable bit.
+Error-code and no-error-code vectors use matching stubs. AVX/XSAVE state is not
+supported by this context format.
 
 ## Hardware IRQs
 
@@ -51,15 +57,15 @@ drivers before unmasking their IRQs and executing `sti`.
 
 An IRQ handler runs in interrupt context. Long operations, allocations, shell
 commands, or waiting for other interrupts complicate reentrancy and scheduling.
-The current keyboard path calls command handling directly; moving that work to
-an input queue is a useful next step.
+The keyboard path only decodes scancodes and queues characters; the shell thread
+handles commands and display updates.
 
 ## PIT and RTC
 
 [pit.cpp](../../kernel/src/arch/x86_64/timer/pit.cpp) programs the PIT at 1,000 Hz
-during normal initialization. The callback increments `tick` and
-`timeSinceBoot`. If scheduling is enabled, it acknowledges the PIC and switches
-tasks through `Schedule`.
+during normal initialization. The callback increments a volatile 64-bit `tick`.
+The IRQ dispatcher acknowledges the PIC and then calls `Schedule`; the counter
+is never reset by the shell.
 
 `SleepFor` and `SleepForSeconds` wait for timer progress with `hlt`; they are not
 a scheduler-backed sleep queue. They depend on timer interrupts continuing to
@@ -68,10 +74,12 @@ from CMOS and supplies dates/times used by the shell and FAT metadata.
 
 ## Assembly contracts to preserve
 
-Task switching also consumes the interrupt register frame and walks compiler
-frame pointers. Changing the layout, stack alignment, XMM save/restore code,
-optimization, or frame-pointer flags requires reviewing both interrupt and
-task-switch assembly. QEMU's configured core count does not mean the kernel
-has started or scheduled work on secondary processors.
+Task switching consumes the same interrupt frame as ordinary interrupt return.
+Changing its layout, stack alignment or FPU state requires coordinated C++ and
+NASM changes. The scheduler does not depend on compiler frame-pointer walking.
+QEMU's configured core count does not mean the kernel has started or scheduled
+work on secondary processors.
 
-See [TODO](../TODO.md) for interrupt-entry and task-switch repairs.
+The [guest regression](../development/testing.md) checks general registers,
+XMM0–15, x87 state, MXCSR and flags while actual task switches occur. Ring-3
+transitions, deliberate exceptions and AVX state need separate coverage.

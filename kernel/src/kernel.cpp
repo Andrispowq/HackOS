@@ -6,12 +6,12 @@
 #include "acpi/fadt.h"
 #include "proc/tasking/process.h"
 
-extern uint32_t tick;
-extern double timeSinceBoot;
+#include "drivers/keyboard/keyboard.h"
+#include "shell/line_buffer.h"
+#include "arch/x86_64/interrupts/guard.h"
 
 extern uint32_t kernel_start, end;
 
-uint64_t initial_rsp;
 uint64_t kernelStart = (uint64_t)&kernel_start;
 uint64_t kernelEnd = (uint64_t)&end;
 
@@ -22,14 +22,13 @@ char system_input[256];
 extern "C" int kernel_main(KernelInfo* info)
 {
     kInfo = info;
-   	asm volatile("mov %%rsp, %0" : "=r" (initial_rsp));
 
     InitialiseDisplay(info);
     InitialiseKernel(info);
 
     Display::SharedDisplay()->DrawBackbuffer();
 
-    while(true) asm("hlt");
+    while (true) { ReapExitedProcesses(); asm volatile("hlt" ::: "memory"); }
 }
 
 #include "fs/vfs.h"
@@ -37,41 +36,60 @@ extern "C" int kernel_main(KernelInfo* info)
 
 extern WindowManager* KernelWindowManager;
 
-void kernel_task()
+void kernel_task(void*)
 {
-    //user_input("clear");
-    shell_command("clear");
-
-    kprintf("Finished the initialisation!\n");
-    kprintf("Type 'help' for help!\n");
-    kprintf("root@root:~/$ ");
-
-    void* ptr = fopen("fs0:/USR/HELLO_2.TXT", O_CREAT);
-    fwrite((void*)"Hello", 6, 1, ptr);
-    fclose(ptr);
-
-    memset(system_input, 0, 256);
-    LoadProgramTask("~/USR/BIN/SHELL");
-    
-    //LoadProgramTask("~/USR/BIN/TEST");
-
-    uint32_t start = tick;
-    while(true)
+    kprintf("\nHackOS kernel shell. Type 'help' for commands.\n");
+    shell_command((char*)"");
+    LineBuffer line;
+    bool discardLine = false;
+    for (;;)
     {
-        Display::SharedDisplay()->clear();
-        KernelWindowManager->Update();
-        KernelWindowManager->Draw();
-        Display::SharedDisplay()->DrawBackbuffer();
-
+        char ch;
+        for (;;)
+        {
+            KeyboardRead result = ReadKeyboard(ch);
+            if (result == KeyboardRead::Empty) break;
+            if (result == KeyboardRead::Overflow)
+            {
+                line.Reset();
+                discardLine = true;
+                kprintf("\nKeyboard queue overflow; press Enter to start a new command.\n");
+                continue;
+            }
+            if (discardLine)
+            {
+                if (ch == '\n') { discardLine = false; shell_command((char*)""); }
+                continue;
+            }
+            switch (line.Push(ch))
+            {
+            case LineBuffer::Echo: kprintf("%c", ch); break;
+            case LineBuffer::Erase: kprintf_backspace(); break;
+            case LineBuffer::Submit:
+                kprintf("\n");
+                user_input(line.Text());
+                line.Reset();
+                break;
+            case LineBuffer::Overflow:
+                kprintf("\nCommand too long (maximum 255 characters).\n");
+                line.Reset();
+                shell_command((char*)"");
+                break;
+            default: break;
+            }
+        }
+        {
+            PreemptionGuard guard;
+            auto display = Display::SharedDisplay();
+            if (display->dirty) display->DrawBackbuffer();
+        }
         SleepFor(10);
-        tick = start;
     }
-
-    while(true) asm("hlt");
 }
 
 void user_input(char* input)
 {
+    PreemptionGuard guard;
     strcpy(system_input, input);
 
     if (strcmp(input, "shutdown") == 0) 

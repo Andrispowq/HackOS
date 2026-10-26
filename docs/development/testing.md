@@ -17,8 +17,10 @@ make -C tests test
 python3 tests/run.py host --case memory_compare
 make -C tests build-images FIRMWARE=bios
 make -C tests test-qemu FIRMWARE=bios
+make -C tests test-shell FIRMWARE=bios
 make -C tests build-images FIRMWARE=uefi
 make -C tests test-qemu FIRMWARE=uefi
+make -C tests test-shell FIRMWARE=uefi
 ```
 
 `test` runs host tests, asset checks, and the BIOS MBR/stage-1 probe. The full
@@ -59,6 +61,8 @@ sanitizers; there is no automatic downgrade.
 | VFS and registration | Volume selection, path translation, missing files/volumes, invalid indices/handles, create/read/write/close dispatch, error propagation, slot reuse |
 | FAT32 | Small, empty, long-name and cross-cluster files; seeked reads; enumeration; rewrite/create/delete persistence; partial writes, EOF, empty-file growth, zero-fill, directory extension, invalid BPBs and cyclic chains |
 | ELF | Identity, malformed/truncated headers, program-header bounds, filesystem loading, segment copying and BSS zeroing |
+| Keyboard and line input | Make/break bounds, Shift/Caps Lock, punctuation, extended/Pause sequences, FIFO wrap/overflow, editing and command-length limits |
+| ABI | Kernel/libc `ActiveFile` virtual calls from separate translation units, interrupt-frame offsets, real syscall-bridge assembly alignment and five arguments |
 
 Memory/string functions are required to follow standard C semantics. A
 nonstandard `memset`, `memcmp`, `strncmp`, or `strcpy` is a failure, even if
@@ -118,7 +122,7 @@ the production image packager, and verifies fixed-LBA bytes and FAT contents.
 UEFI checks include the PE machine and `EFI/BOOT/BOOTX64.EFI`. Missing fresh
 images are reported as **blocked** with a failing exit status.
 
-There are two distinct emulator checks:
+The emulator checks cover different layers:
 
 - `python3 tests/run.py bios-chain` boots the real MBR and stage 1, which must
   reach a test-only stage-2 payload at `0x8000`. That payload writes to QEMU's
@@ -144,13 +148,44 @@ Its labels imitate kernel milestones; its report is
 explicitly separate under `qemu-harness`. It is not evidence of kernel boot or
 IRQ delivery.
 
+## Interactive shell and task regressions
+
+`python3 tests/qemu_shell.py --firmware bios` (or `uefi`) starts the actual image
+with a private QMP socket and sends QEMU keyboard events. It checks editing,
+literal percent signs, overlong-command rejection, directory changes, file reads,
+repeated close, task listing and the monotonic clock. Console characters are
+captured through port `0xe9`; a framebuffer screenshot is saved as `screen.ppm`.
+
+The runner builds small guest programs against the image's real libc and copies
+them into a disposable image. The ABI probe calls the kernel-created `ActiveFile`
+virtual methods, reads a file, allocates/frees memory, checks unknown-syscall
+failure, and prints a floating-point argument through `int 0x80`. Its assembly
+routine checks general registers, XMM0–15, x87 data/control state, MXCSR, CF and
+DF across timer preemption. A test-only linker alias to the kernel's scheduler
+counter proves switches happened during that routine; there are no production
+test entry points.
+
+Three probe launches test repeated syscall exit and stack reuse. A missing program
+exercises the task-entry return trampoline. A spinning program verifies that the
+shell stays responsive, rejects a second fixed-address ELF, protects idle/shell,
+handles an unknown PID, and kills another task. Finally GDB checks that idle has
+reaped all five terminated tasks, only idle/shell remain, and both reference
+`KernelDirectory`. Each awaited milestone has a timeout. QEMU is stopped on
+failure, and the source image and firmware variables remain untouched.
+
+Reports, console/debugger logs, guest binaries, the disposable image and screenshot
+live in `tests/out/qemu-shell-bios/` or `qemu-shell-uefi/`. These tests exercise
+ring-0 threads, not privilege transitions or automatic cleanup of every resource
+a program might leave open. They do not establish physical-PC compatibility.
+
 ## GitHub Actions
 
 [The workflow](../../.github/workflows/tests.yml) runs on pushes, pull requests,
 and manual dispatch. Three independent jobs run host tests, asset checks, and
 the BIOS-chain probe. Two further jobs build and boot BIOS and UEFI with matrix
 fail-fast disabled. The firmware jobs also exercise the public parallel build
-command and check the Compose configuration. A failed host test does not
+command, check the Compose configuration, and run the interactive shell/task
+regressions for each firmware. A failed host test does not
 suppress firmware diagnostics.
 
 Containers use a digest-pinned Ubuntu base, Clang/LLVM 18, and source-pinned GCC
@@ -173,7 +208,6 @@ split/coalesce tests, allocation failure injection, paging ownership, and shared
 boot-info layout checks. Keep intended behavior explicit for APIs whose EOF,
 partial-I/O, or failure contracts are still undefined.
 
-Guest-side assertions and a serial/debug channel would enable deliberate faults,
-timer register-state checks, PS/2 input, disk-write persistence, and controlled framebuffer
-scenes. Ring-3 isolation, syscall pointer validation, and process teardown tests
-must follow implementation of the userspace boundary.
+Extend guest tests with deliberate faults, disk-write persistence, controlled
+framebuffer scenes, and automatic program-resource cleanup. Ring-3 isolation and
+syscall pointer validation must follow implementation of the userspace boundary.

@@ -30,27 +30,12 @@ __set_idt:
     push    rsi
     push    rdi
 
-    sub     rsp, 256
-    movdqu  [rsp + 15 * 16], xmm15
-    movdqu  [rsp + 14 * 16], xmm14
-    movdqu  [rsp + 13 * 16], xmm13
-    movdqu  [rsp + 12 * 16], xmm12
-    movdqu  [rsp + 11 * 16], xmm11
-    movdqu  [rsp + 10 * 16], xmm10
-    movdqu  [rsp + 9 * 16], xmm9
-    movdqu  [rsp + 8 * 16], xmm8
-    movdqu  [rsp + 7 * 16], xmm7
-    movdqu  [rsp + 6 * 16], xmm6
-    movdqu  [rsp + 5 * 16], xmm5
-    movdqu  [rsp + 4 * 16], xmm4
-    movdqu  [rsp + 3 * 16], xmm3
-    movdqu  [rsp + 2 * 16], xmm2
-    movdqu  [rsp + 1 * 16], xmm1
-    movdqu  [rsp + 0 * 16], xmm0
-
     xor     rax, rax
     mov     ax, ds              ; Lower 16-bits of rax = ds.
     push    rax                 ; save the data segment descriptor
+
+    sub     rsp, 512
+    fxsave64 [rsp]
 
     mov     ax, 0x10            ; load the kernel data segment descriptor
     mov     ds, ax
@@ -60,29 +45,13 @@ __set_idt:
 %endmacro
 
 %macro POPALL 0
+    fxrstor64 [rsp]
+    add     rsp, 512
     pop     rbx                      ; reload the original data segment descriptor
     mov     ds, bx
     mov     es, bx
     mov     fs, bx
     mov     gs, bx
-
-    movdqu  xmm15, [rsp + 15 * 16]
-    movdqu  xmm14, [rsp + 14 * 16]
-    movdqu  xmm13, [rsp + 13 * 16]
-    movdqu  xmm12, [rsp + 12 * 16]
-    movdqu  xmm11, [rsp + 11 * 16]
-    movdqu  xmm10, [rsp + 10 * 16]
-    movdqu  xmm9, [rsp + 9 * 16]
-    movdqu  xmm8, [rsp + 8 * 16]
-    movdqu  xmm7, [rsp + 7 * 16]
-    movdqu  xmm6, [rsp + 6 * 16]
-    movdqu  xmm5, [rsp + 5 * 16]
-    movdqu  xmm4, [rsp + 4 * 16]
-    movdqu  xmm3, [rsp + 3 * 16]
-    movdqu  xmm2, [rsp + 2 * 16]
-    movdqu  xmm1, [rsp + 1 * 16]
-    movdqu  xmm0, [rsp + 0 * 16]
-    add     rsp, 256
 
     pop     rdi
     pop     rsi
@@ -110,12 +79,10 @@ isr_common_stub:
 	PUSHALL
 
     mov     rdi, rsp
-    ; Registers stays unchanged; reserve 32 bytes with SysV call alignment.
-    sub     rsp, 0x20
 
     cld
 	call    ISRHandler
-    add     rsp, 0x20
+    mov     rsp, rax
 
     POPALL
 
@@ -125,12 +92,10 @@ irq_common_stub:
     PUSHALL
 
     mov     rdi, rsp
-    ; Registers stays unchanged; reserve 32 bytes with SysV call alignment.
-    sub     rsp, 0x20
 
     cld
     call    IRQHandler
-    add     rsp, 0x20
+    mov     rsp, rax
 
 	POPALL
 
@@ -196,6 +161,7 @@ global irq14
 global irq15
 
 global isr128
+global isr129
 
 %macro ISR_NOERR 1
 isr%1:
@@ -336,3 +302,6 @@ IRQ 15
 
 ; 128: aka. int 0x80, the syscall handler
 ISR_NOERR 128
+
+; Ring-0 voluntary yield; no PIC EOI is required.
+ISR_NOERR 129

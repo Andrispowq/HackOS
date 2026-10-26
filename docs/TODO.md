@@ -21,8 +21,8 @@ more devices.
   controlled failure when translating unmapped addresses.
 - [ ] Honor heap alignment requests and audit DMA buffers for physical
   contiguity. Test heap splitting, coalescing, exhaustion and allocation failure.
-- [ ] Test deliberate exceptions and floating-point control-state preservation.
-  Review the TSS and initial process frames before enabling scheduling.
+- [ ] Test deliberate exceptions and recovery. Extend context preservation to
+  XSAVE/AVX before enabling those CPU features; finish the TSS for ring-3 entry.
 
 ## Storage and filesystems
 
@@ -43,19 +43,20 @@ more devices.
   validated ELF ranges alone do not make physical destinations safe.
 - [ ] Complete TSS/kernel entry stacks and deliberate ring-3 entry.
 - [ ] Choose and finish the syscall mechanism, permit intended user entry and
-  reconcile argument registers, including the fifth-argument mismatch.
+  establish a stable handle-based ABI instead of exposing kernel objects.
 - [ ] Validate/copy user buffers and remove exposed kernel objects.
-- [ ] Test context switching, initial stack frames, task exit and resource
-  cleanup before enabling `InitialiseTasking()` in normal startup.
+- [ ] Track program-owned files, allocations and windows for automatic cleanup
+  on exit or kill. Add blocking waits, priorities and broader scheduler stress tests.
 - [ ] Replace binary-only `usertest.elf` with a source-built fixture.
-- [ ] Move shell work and long operations out of keyboard interrupt context.
+- [ ] Add shell history/completion and a terminal input API for programs.
+  Integrate the window manager without clearing console output.
 
 ## Tests and development
 
 - [ ] Extend host tests to the real heap and physical allocator, with failure
   injection and sparse-memory fixtures; keep the hardware adapters explicit.
-- [ ] Add guest assertions for exceptions, PS/2 input, disk persistence and
-  controlled framebuffer scenes. Test timer return state beyond repeated ticks.
+- [ ] Add guest assertions for exceptions, disk persistence and controlled
+  framebuffer scenes. Expand keyboard layouts and overflow stress coverage.
 - [ ] Add native amd64/arm64 container build checks and Windows/macOS launch
   checks. Keep full ASan+UBSan on native x86-64 CI.
 - [ ] Lock package snapshots and image timestamps if byte-identical build

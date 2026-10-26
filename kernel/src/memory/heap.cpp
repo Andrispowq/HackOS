@@ -1,3 +1,4 @@
+#include "arch/x86_64/interrupts/guard.h"
 #include "heap.h"
 #include "arch/x86_64/paging/paging.h"
 #include "lib/memory.h"
@@ -39,6 +40,7 @@ void InitialiseHeap(void* start_address, uint64_t size)
 
 void* alloc(uint64_t size, uint64_t alignment)
 {
+    PreemptionGuard guard;
     // it is not a multiple of 0x10
     if ((size % 0x10) > 0)
     { 
@@ -82,6 +84,7 @@ void* alloc(uint64_t size, uint64_t alignment)
 
 void free(void* address)
 {
+    PreemptionGuard guard;
     HeapSegmentHeader* segment = (HeapSegmentHeader*)address - 1;
     segment->free = true;
     segment->CombineForward();

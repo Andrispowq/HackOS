@@ -1,3 +1,4 @@
+#include "arch/x86_64/interrupts/guard.h"
 #include "stdio.h"
 #include "stdint.h"
 #include "string.h"
@@ -56,6 +57,7 @@ const char* string_from_double(double value, uint8_t decimalPlaces)
 
 void kprintf_vargs(const char* format, va_list args)
 {
+    PreemptionGuard guard;
     Display* curr_display = Display::SharedDisplay();
 
     const char* traverse;

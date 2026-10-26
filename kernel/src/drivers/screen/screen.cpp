@@ -1,4 +1,5 @@
 #include "screen.h"
+#include "arch/x86_64/interrupts/guard.h"
 
 #include "arch/x86_64/ports.h"
 #include "arch/x86_64/paging/paging.h"
@@ -72,11 +73,15 @@ void printf_backspace()
 
 void Display::DrawBackbuffer()
 {
+    PreemptionGuard guard;
+    dirty = false;
     memcpy(framebuffer.address, backbuffer.address, (uint64_t)framebuffer.pitch * framebuffer.height * 4);
 }
 
 void Display::clear()
 {
+    PreemptionGuard guard;
+    dirty = true;
     backbuffer.Clear(console.bgColour);
 }
 
@@ -177,83 +182,36 @@ void scroll_up(Framebuffer fb)
     fb.DrawRect(0, fb.height - rows, fb.width, rows, display.console.bgColour);
 }
 
-int Display::putc(char ch) 
+int Display::putc(char ch)
 {
-    int xOff = 0;
-    int yOff = 0;
-    int new_x = -1;
-    int new_y = -1;
-    int to_put = 0; //0 -> no output, 1 -> put before offseting, 2 -> put after offseting
-
-    uint32_t x = display.console.current_x;
-    uint32_t y = display.console.current_y;
-    uint32_t width = display.console.con_width;
-    uint32_t height = display.console.con_height;
-
-    if(ch == '\n')
+    PreemptionGuard guard;
+    dirty = true;
+    // QEMU's optional debug console mirrors text independently of the framebuffer.
+    asm volatile("outb %0, $0xe9" :: "a"((uint8_t)ch));
+    uint32_t& x = console.current_x;
+    uint32_t& y = console.current_y;
+    uint32_t width = console.con_width, height = console.con_height;
+    if (!width || !height) return 0;
+    if (ch == '\n') { x = 0; ++y; }
+    else if (ch == '\r') x = 0;
+    else if (ch == '\b')
     {
-        new_x = 0;
-        yOff = 1;
+        if (x) --x;
+        else if (y) { --y; x = width - 1; }
+        else return 0;
+        empty_char_at(backbuffer, x, y);
     }
-    else if(ch == '\r')
+    else if (ch == '\t')
     {
-        new_x = 0;
-    }
-    else if(ch == '\t')
-    {
-        xOff = 4;
-    }
-    else if (ch == 0x08)
-    {
-        xOff = -1;
-        to_put = 2;
+        do { putc(' '); } while (console.current_x % 4);
+        return 0;
     }
     else
     {
-        xOff = 1;
-        to_put = 1;
-    }
-
-    if(to_put == 1)
-    {
+        empty_char_at(backbuffer, x, y);
         putchar_at(backbuffer, ch, x, y);
+        if (++x == width) { x = 0; ++y; }
     }
-
-    if(to_put == 2)
-    {
-        empty_char_at(backbuffer, x - 1, y);
-    }
-
-    if(new_x != -1)
-    {
-        x = new_x;
-    }
-    if(new_y != -1)
-    {
-        y = new_y;
-    }
-    
-    if(xOff != 0)
-    {
-        x += xOff;
-        if(x >= width)
-        {
-            x = (width - x);
-            yOff++;
-        }
-    }
-    if(yOff != 0)
-    {
-        y += yOff;
-        if(y >= height)
-        {
-            scroll_up(backbuffer);
-            y = height - 1;
-        }
-    }
-
-    display.console.current_x = x;
-    display.console.current_y = y;
-
+    if (y >= height) { scroll_up(backbuffer); y = height - 1; }
     return 0;
 }

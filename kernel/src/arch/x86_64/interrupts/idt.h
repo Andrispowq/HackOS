@@ -37,21 +37,20 @@
 #define ICW1_ICW4 0x01
 #define ICW4_8086 0x01
 
-struct xmm_reg
+// Must match PUSHALL/POPALL in interrupts.asm, including the FXSAVE area.
+struct alignas(16) Registers
 {
-    uint64_t low;
-    uint64_t high;
-};
-
-struct Registers
-{
+    uint8_t fx[512];
     uint64_t ds;
-    xmm_reg xmm[16];
     uint64_t rdi, rsi, rbp, useless, rbx, rdx, rcx, rax;
     uint64_t r8, r9, r10, r11, r12, r13, r14, r15;
     uint64_t int_no, err_code;
     uint64_t rip, cs, rflags, rsp, ss;
-} __attribute__((packed));
+};
+static_assert(sizeof(Registers) == 704);
+static_assert(__builtin_offsetof(Registers, ds) == 512);
+static_assert(__builtin_offsetof(Registers, int_no) == 648);
+static_assert(__builtin_offsetof(Registers, rip) == 664);
 
 struct IDTGate
 {
@@ -79,8 +78,8 @@ void InitialiseIRQ();
 
 extern "C"
 {
-    void ISRHandler(Registers* regs);
-    void IRQHandler(Registers* regs);
+    Registers* ISRHandler(Registers* regs);
+    Registers* IRQHandler(Registers* regs);
 }
 
 typedef void (*isr_t)(Registers*);
@@ -146,6 +145,7 @@ extern "C"
 
     /* syscall handler */
     extern void isr128();
+    extern void isr129();
 }
 
 #endif

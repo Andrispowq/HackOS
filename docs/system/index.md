@@ -18,7 +18,8 @@ flowchart TD
     Heap --> Devices[ACPI, PCI and storage]
     Devices --> FS[FAT32 and VFS]
     FS --> Services[Program smoke code, shell, windows and syscalls]
-    Services --> IRQ[Enable timer and PS/2 IRQs]
+    Services --> Tasks[Create idle and kernel shell tasks]
+    Tasks --> IRQ[Enable timer and PS/2 IRQs]
 ```
 
 ## Source layout
@@ -39,9 +40,9 @@ flowchart TD
 
 ## Kernel startup
 
-The entry point is [kernel_main](../../kernel/src/kernel.cpp). It saves the
-initial stack pointer, calls `InitialiseDisplay` and `InitialiseKernel`, copies
-the backbuffer to the display, and enters a `hlt` loop.
+The entry point is [kernel_main](../../kernel/src/kernel.cpp). It calls
+`InitialiseDisplay` and `InitialiseKernel`, copies the backbuffer to the display,
+and becomes the idle task. Idle reclaims exited task stacks and halts between IRQs.
 
 [kernelInit.cpp](../../kernel/src/init/kernelInit.cpp) divides initialization
 into two phases:
@@ -52,16 +53,16 @@ into two phases:
 2. `InitialiseKernel` creates the heap, initializes device/filesystem registries,
    discovers ACPI/PCI devices, adds an ATA device, locates FAT32 on `devices[0]`,
    runs the program-loading smoke path, creates shell/window state, registers
-   syscalls, and enables IRQs.
+   syscalls, creates idle/shell tasks, and enables IRQs.
 
 `InitialiseFilesystem` currently attempts to load and call `USERTEST.ELF`.
 It is executable smoke code in the startup path, not a filesystem mount routine
 or an automated test runner.
 
-The separate `kernel_task` function contains a window-update loop and launches
-the userspace shell. It depends on `InitialiseTasking`, whose startup call is
-commented out. A successful kernel entry therefore does not imply that this
-loop or the userspace shell is running.
+The separate `kernel_task` function runs the interactive kernel shell. It drains
+the keyboard queue, executes commands outside interrupt context, and refreshes
+the console when output changes. The experimental userspace window shell is not
+launched automatically. All scheduled tasks remain in ring 0.
 
 ## Important boundaries
 

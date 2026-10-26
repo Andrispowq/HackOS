@@ -14,10 +14,11 @@ experimental code, not a claim that every device or boot path currently works.
 The [documentation index](docs/index.md) links to the system and development
 guides. Keep those pages consistent with changes to component contracts.
 
-Userspace is unfinished: `InitialiseTasking()` is commented out in
-`kernel/src/init/kernelInit.cpp`, `Process` hard-codes `isUser = false`, and the
-ELF loader maps segments through `KernelDirectory` and calls their entry points
-directly. Do not describe this as working isolated ring-3 process execution.
+Tasking is enabled for ring-0 kernel threads. Idle reaps exited tasks and
+`kernel_task` runs the interactive PS/2 shell. All tasks share `KernelDirectory`;
+only one fixed-address ELF program may run at a time. Do not describe this as
+working isolated ring-3 execution. See `docs/system/userspace.md` for lifecycle,
+preemption guards and shell commands.
 
 ## Where to look
 
@@ -87,8 +88,9 @@ numbers differ; the kernel uses `booted_from_BIOS` to select interpretation.
 
 `kernel_main` initializes display/GDT/IDT/paging, then heap, devices/filesystems,
 ACPI/PCI, filesystem/program smoke code, shell, windows, syscalls and IRQs.
-It draws the backbuffer and halts in a loop. The separate `kernel_task` contains
-the window-update loop and shell-program launch, but tasking is currently disabled.
+Tasking is initialized before IRQs are enabled. `kernel_main` becomes idle and
+reclaims zombie stacks; `kernel_task` drains queued keyboard input and refreshes
+the console. It does not launch the experimental userspace window shell.
 
 ## Build and validation
 
@@ -121,6 +123,8 @@ the window-update loop and shell-program launch, but tasking is currently disabl
 - For boot changes, test BIOS and UEFI separately in QEMU using the existing
   `q35` device topology. Check ELF class, machine, entry point, and load segments
   with target `readelf`, and compare BIOS payload sizes to the table above.
+  Run `tests/qemu_shell.py --firmware bios` and `--firmware uefi` after fresh
+  image builds for interactive input, ABI, register-state and task-lifecycle checks.
   Use a disposable image for FAT32 write tests and a copied OVMF VARS file.
 - Screen output is graphical; `-nographic` alone does not expose the framebuffer
   as a text console. Use a graphical QEMU window or VNC for visual smoke checks.
@@ -131,9 +135,11 @@ the window-update loop and shell-program launch, but tasking is currently disabl
 
 Keep changes local to the subsystem being worked on and follow its existing
 formatting. Preserve freestanding assumptions, x86-64 calling conventions,
-interrupt-frame layouts, linker addresses and NASM/C symbol names. Scheduler
-assembly walks frame pointers, so changing optimization/frame-pointer flags
-requires reviewing that code. Syscall numbers and argument conventions must
+interrupt-frame layouts, linker addresses and NASM/C symbol names. Interrupt
+handlers return a saved `Registers*`; the shared epilogue restores it with
+FXRSTOR and IRETQ. Preserve the 704-byte frame and SysV/FXSAVE alignment. Never
+yield, sleep or exit inside a `PreemptionGuard`; these single-CPU guards are not
+SMP locks. Syscall numbers and argument conventions must
 stay synchronized between `kernel/src/arch/x86_64/syscall/` and
 `libs/libc/src/kernel_interface/`.
 

@@ -17,4 +17,8 @@ void kprintf(const char*, ...) {}
 void GetTimeRTC(struct tm* value) { *value = {124, 0, 2, 3, 4, 6}; }
 Process::Process(const char*, void*, void*) { test_abort("scheduler invoked in host test"); }
 uint64_t AddProcess(Process*) { test_abort("scheduler invoked in host test"); return 0; }
-void _Kill() { test_abort("scheduler invoked in host test"); }
+[[noreturn]] void _Kill() { test_abort("scheduler invoked in host test"); __builtin_unreachable(); }
+
+void DisablePreemption() {}
+void EnablePreemption() {}
+bool IsRunning(uint64_t) { return false; }

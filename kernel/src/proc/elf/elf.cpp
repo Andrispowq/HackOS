@@ -1,3 +1,4 @@
+#include "arch/x86_64/interrupts/guard.h"
 #include "elf.h"
 
 #include "lib/memory.h"
@@ -107,27 +108,32 @@ void PrepareProgram(Elf64_Ehdr* header, uint64_t baseAddress)
 #include "lib/data_structures/vector.h"
 #include "arch/x86_64/timer/pit.h"
 
-void program_task(const char* name)
+static uint64_t program_pid;
+
+void program_task(void* parameter)
 {
-	uint64_t addr;
-    Elf64_Ehdr* hdr = LoadProgram(name, &addr);
-    if(hdr == nullptr)
+    const char* name = (const char*)parameter;
+    int (*entry)(int, char*[]);
     {
-        return;
+        PreemptionGuard guard;
+        uint64_t address;
+        Elf64_Ehdr* header = LoadProgram(name, &address);
+        if (!header) { kprintf("Cannot load program: %s\n", name); return; }
+        PrepareProgram(header, address);
+        entry = (int (*)(int, char*[]))header->e_entry;
+        kfree(header);
     }
-
-    PrepareProgram(hdr, addr);
-
-	int argc = 2;
-	char* argv[] = { (char*)name, "random_value" };
-
-    int(*entry_point)(int, char*[]) = (int(*)(int, char*[]))hdr->e_entry;
-    int res = entry_point(argc, argv);
-    kprintf("Program (%s) returned with 0x%x!\n", name, res);
-    _Kill();
+    char* argv[] = { (char*)name, nullptr };
+    entry(1, argv);
+    // TaskTrampoline handles programs that return normally.
 }
 
 void LoadProgramTask(const char* name)
 {
-	AddProcess(new Process(name, (void*)program_task, (void*)name));
+    PreemptionGuard guard;
+    // Fixed-address ELF programs cannot coexist in the shared address space.
+    if (IsRunning(program_pid)) { kprintf("A program is already running.\n"); return; }
+    auto process = new Process(name, (void*)program_task);
+    process->parameter = process->name;
+    program_pid = AddProcess(process);
 }

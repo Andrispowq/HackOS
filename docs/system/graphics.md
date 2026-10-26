@@ -53,16 +53,19 @@ it is an experimental shared-memory interface rather than a protected graphics
 API. The userspace library carries its own framebuffer/display types, so layout
 changes must be coordinated across both sides.
 
-The regular update/draw loop lives in `kernel_task`, which is not started while
-tasking initialization is disabled. Normal `kernel_main` draws the initial
-backbuffer once and then halts between interrupts.
+The active `kernel_task` runs the console shell and flushes the backbuffer when
+text output marks it dirty. It does not run the experimental window-manager loop
+or launch `libs/shell`. This keeps command output visible and avoids copying the
+whole framebuffer on every idle iteration.
 
 ## Observing graphics
 
 Use a QEMU window or VNC to inspect output. `-nographic` redirects character
 devices but does not turn this framebuffer into a serial console. Automated
-boot reporting should use a separate serial/debug channel; visual tests can
-then focus on clipping, colours, glyphs, and buffer composition.
+tests capture console characters through QEMU debug port `0xe9` and also save
+a framebuffer screenshot. To capture text manually, add
+`-debugcon file:console.log -global isa-debugcon.iobase=0xe9` to QEMU. This mirror
+starts with the kernel console; it is not an early-loader serial driver.
 
 See [building and running](../development/building.md) and the
 [testing plan](../development/testing.md).

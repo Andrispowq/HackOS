@@ -1,13 +1,13 @@
 #ifndef FILE_H
 #define FILE_H
 
-#include <stdint.h>
+#include "../stdint.h"
 
 class ActiveFile
 {
 public:
     ActiveFile() : seek_position(0) {}
-    ~ActiveFile() {}
+    virtual ~ActiveFile() {}
 
     virtual uint64_t GetSize() const = 0;
     virtual const char* GetName() const = 0;

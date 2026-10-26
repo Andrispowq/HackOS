@@ -14,3 +14,7 @@ build-images:
 	$(PYTHON) build_images.py --firmware $(FIRMWARE)
 test-qemu:
 	$(PYTHON) qemu_boot.py --firmware $(FIRMWARE) $(if $(IMAGE),--image $(IMAGE)) $(if $(ELF),--elf $(ELF))
+
+.PHONY: test-shell
+test-shell:
+	$(PYTHON) qemu_shell.py --firmware $(FIRMWARE)

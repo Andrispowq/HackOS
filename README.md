@@ -26,9 +26,10 @@ and mouse drivers, framebuffer graphics and a console, ACPI/PCI discovery,
 ATA/AHCI storage, FAT32, and a small VFS. There are also window primitives,
 an ELF loader, a scheduler, and an experimental userspace library.
 
-Userspace is unfinished. Tasking is disabled in the normal startup path, and
-program loading does not yet provide isolated ring-3 execution. USB support is
-experimental, and there is no networking stack.
+Preemptive kernel tasks and an interactive PS/2 shell run on both boot paths.
+Try `help`, `ls`, `ps` or `print tick`. Programs still execute in ring 0 and share
+kernel memory; isolated userspace remains unfinished. USB support is experimental,
+and there is no networking stack.
 
 ## Getting started
 
@@ -50,7 +51,9 @@ inputs remain in the repository and how the generated files fit into the build.
 Run `make -C tests test` for host checks, boot assets, and the BIOS loader-chain
 probe. The [testing guide](docs/development/testing.md) covers dependencies,
 Docker, coverage reports, full BIOS/UEFI boot checks, and GitHub Actions. Host tests enforce standard C semantics; BIOS and UEFI boot checks require
-kernel entry and repeated timer interrupts.
+kernel entry and repeated timer interrupts. `make -C tests test-shell FIRMWARE=bios`
+(or `uefi`) exercises keyboard input, the file ABI, context switching and task exit
+after a fresh image build.
 
 ## License
 
