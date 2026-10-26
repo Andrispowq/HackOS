@@ -17,9 +17,12 @@ docker compose up --build bios
 Open [the console](http://localhost:6080/vnc.html?autoconnect=true&resize=scale).
 It shows initialization output followed by the standalone ring-3 shell. Click inside it
 and try `help`, `ls`, `ps` or `print tick`. Input uses the US keyboard layout.
-Use `./USR/BIN/TEST` to read a file from ring 3, or `user USR/BIN/RING3` for
+Use `./USR/BIN/TEST alpha "two words"` to see argument passing and read a file
+from ring 3, or `user USR/BIN/RING3` for
 the print/preemption/exit demo. `shutdown` requests kernel ACPI power-off. The
-old window demo and raw-pointer libc ABI are retired.
+old window demo and raw-pointer libc ABI are retired. Program commands wait for
+completion before showing the prompt; a separate trailing `&` launches in the
+background.
 The first image build compiles
 GCC and Binutils from source and takes considerably longer than later cached
 builds. Source changes are picked up when the service starts again.

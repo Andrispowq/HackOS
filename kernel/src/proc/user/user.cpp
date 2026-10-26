@@ -1,4 +1,6 @@
 #include "user.h"
+#include "hackos/abi.h"
+#include "lib/string.h"
 #include "address_space.h"
 #include "proc/elf/elf.h"
 #include "proc/tasking/process.h"
@@ -7,9 +9,25 @@
 #include "lib/stdio.h"
 #include "drivers/screen/screen.h"
 
-uint64_t LoadUserProgramTask(const char* path, bool systemShell)
+uint64_t LoadUserProgramTask(const char* path, bool systemShell, uint64_t argc, const char* const* argv)
 {
     PreemptionGuard guard;
+    auto parent = GetRunningProcess();
+    ChildResult* result = nullptr;
+    if (parent && parent->userSpace)
+    {
+        for (auto& child : parent->children) if (!child.pid) { result = &child; break; }
+        if (!result) return 0;
+    }
+    const char* defaultArgs[] = {path};
+    if (!argv) { argc = 1; argv = defaultArgs; }
+    if (!argc || argc > HACKOS_MAX_ARGS) return 0;
+    uint64_t bytes = 0;
+    for (uint64_t i = 0; i < argc; ++i)
+    {
+        bytes += strlen((char*)argv[i]) + 1;
+        if (bytes > HACKOS_ARG_BYTES) return 0;
+    }
     uint64_t address;
     auto header = LoadProgram(path, &address, false);
     if (!header) { kprintf("Cannot load user program: %s\n", path); return false; }
@@ -66,16 +84,31 @@ uint64_t LoadUserProgramTask(const char* path, bool systemShell)
         kprintf("Rejected user program: %s\n", path);
         return false;
     }
+    // The argument strings and NULL-terminated pointer vector live in the
+    // child's own writable stack pages, above the initial call stack.
+    uint64_t cursor = USER_END;
+    uint64_t userArgv[HACKOS_MAX_ARGS + 1] = {};
+    for (uint64_t i = argc; i > 0; --i)
+    {
+        uint64_t length = strlen((char*)argv[i-1]) + 1;
+        cursor -= length;
+        space->CopyToUser(cursor, argv[i-1], length);
+        userArgv[i-1] = cursor;
+    }
+    cursor = (cursor & ~7ULL) - (argc + 1) * sizeof(uint64_t);
+    space->CopyToUser(cursor, userArgv, (argc + 1) * sizeof(uint64_t));
     auto process = new Process(path, (void*)header->e_entry);
     process->systemShell = systemShell;
+    if (result) { process->parentPid = parent->pid; result->pid = process->pid; }
     process->userSpace = space;
     process->pageTable = &space->directory;
     auto frame = (Registers*)process->rsp;
     frame->rip = header->e_entry;
     frame->cs = 0x1b;
     frame->ds = frame->ss = 0x23;
-    frame->rsp = USER_END - 8; // SysV entry alignment; zero return address
-    frame->rdi = 0; // Do not expose the kernel Process* from TaskTrampoline.
+    frame->rsp = (cursor & ~15ULL) - 8; // SysV entry alignment; zero return address
+    frame->rdi = argc;
+    frame->rsi = cursor;
     frame->rflags = 0x202; // IF set, IOPL=0, no NT/VM/DF/TF
     kfree(header);
     AddProcess(process);
@@ -98,6 +131,7 @@ uint64_t user_write(const char* buffer, uint64_t length)
 {
     auto p = GetRunningProcess();
     kprintf("User process %d exited %d; preemptions %d\n", p->pid, code, p->userPreemptions);
+    p->exitStatus = (int32_t)code;
     _Kill();
 }
 
@@ -106,5 +140,6 @@ uint64_t user_write(const char* buffer, uint64_t length)
     auto p = GetRunningProcess();
     kprintf("User process %d fault %d error %x rip %x\n", p->pid,
             frame->int_no, frame->err_code, frame->rip);
+    p->exitStatus = 128 + frame->int_no;
     _Kill();
 }

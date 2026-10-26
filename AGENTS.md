@@ -17,7 +17,9 @@ guides. Keep those pages consistent with changes to component contracts.
 Tasking supports idle plus isolated ring-3 programs. The standalone shell at
 `~/USR/BIN/SHELL` starts automatically; idle refreshes the console and reaps
 exited tasks. User programs own private frames and page tables, with shared
-supervisor-only kernel mappings. Both `./` and `user` launch ring-3 programs.
+supervisor-only kernel mappings. Both `./` and `user` launch ring-3 programs with bounded `argc`/`argv` and
+foreground waits by default; a separate trailing `&` requests background mode.
+Exit results belong to the parent independently of idle resource reclamation.
 All active syscalls are user interfaces; kernel code calls internal functions
 directly. Only the boot shell has input, console editing, kill and power rights.
 See `docs/system/userspace.md` for ABI, ownership and lifecycle contracts.

@@ -46,7 +46,9 @@ more devices.
   reject legacy raw-pointer calls from CPL3.
 - [x] Start the standalone ring-3 shell automatically, expose copied terminal/
   process/file data and process-owned read handles, and authorize shell shutdown.
-- [ ] Add blocking input, arguments, job control, a user heap, file writes and
+- [x] Add bounded command arguments, parent-owned exit results and blocking
+  foreground waits, with explicit background launches.
+- [ ] Add blocking input, Ctrl-C/job control, a user heap, file writes and
   owned window handles to the safe ABI. Port remaining legacy runtime helpers.
 - [ ] Extend the implemented automatic read-handle cleanup to future allocations
   and windows. Add blocking waits, priorities and broader scheduler stress tests.

@@ -77,7 +77,7 @@ static uint64_t UserKill(uint64_t pid)
     for (auto p = ready_queue; p; p = p->next) if (p->pid == pid)
     {
         if (!p->userSpace || p->systemShell || p == Caller()) return HACKOS_DENIED;
-        if (p->state != PROCESS_STATE_ALIVE) return HACKOS_ERROR;
+        if (p->state == PROCESS_STATE_ZOMBIE) return HACKOS_ERROR;
         Kill(pid); return 0;
     }
     return HACKOS_ERROR;
@@ -90,6 +90,27 @@ static uint64_t UserSpawn(const char* name)
     for (auto p = ready_queue; p; p = p->next) ++count;
     if (count >= 16) return HACKOS_ERROR;
     uint64_t pid = LoadUserProgramTask(path);
+    return pid ? pid : HACKOS_ERROR;
+}
+static uint64_t UserSpawnArgs(const char* name, uint64_t argc, const char* const* argv)
+{
+    char path[256], strings[HACKOS_ARG_BYTES];
+    uint64_t pointers[HACKOS_MAX_ARGS];
+    const char* arguments[HACKOS_MAX_ARGS];
+    auto space = Caller()->userSpace;
+    if (!Path(name, path) || !argc || argc > HACKOS_MAX_ARGS ||
+        !space->CopyFromUser(pointers, (uint64_t)argv, argc * sizeof(uint64_t))) return HACKOS_ERROR;
+    uint64_t used = 0;
+    for (uint64_t i = 0; i < argc; ++i)
+    {
+        if (!space->CopyString(strings + used, pointers[i], sizeof(strings) - used)) return HACKOS_ERROR;
+        arguments[i] = strings + used;
+        while (strings[used++]) {}
+    }
+    unsigned count = 0;
+    for (auto p = ready_queue; p; p = p->next) ++count;
+    if (count >= 16) return HACKOS_ERROR;
+    uint64_t pid = LoadUserProgramTask(path, false, argc, arguments);
     return pid ? pid : HACKOS_ERROR;
 }
 static uint64_t UserOpen(const char* name)
@@ -194,6 +215,7 @@ static void syscall_handler(Registers* r)
     if ((r->cs & 3) != 3 || !Caller() || !Caller()->userSpace) { r->rax = HACKOS_ERROR; return; }
     if (r->rax == HACKOS_SYS_exit) ExitUserProcess(r->rdi);
     if (r->rax == HACKOS_SYS_yield) { ScheduleIRQ(); r->rax = 0; return; }
+    if (r->rax == HACKOS_SYS_wait) { r->rax = WaitForChild(r->rdi, (int64_t*)r->rsi, r->rdx); return; }
     PreemptionGuard guard;
     switch (r->rax)
     {
@@ -204,6 +226,7 @@ static void syscall_handler(Registers* r)
     case HACKOS_SYS_process_info: r->rax = UserProcessInfo(r->rdi, (HackosProcessInfo*)r->rsi); break;
     case HACKOS_SYS_kill: r->rax = UserKill(r->rdi); break;
     case HACKOS_SYS_spawn: r->rax = UserSpawn((const char*)r->rdi); break;
+    case HACKOS_SYS_spawn_args: r->rax = UserSpawnArgs((const char*)r->rdi, r->rsi, (const char* const*)r->rdx); break;
     case HACKOS_SYS_open: r->rax = UserOpen((const char*)r->rdi); break;
     case HACKOS_SYS_read: r->rax = UserRead(r->rdi, (void*)r->rsi, r->rdx); break;
     case HACKOS_SYS_close: r->rax = UserClose(r->rdi); break;

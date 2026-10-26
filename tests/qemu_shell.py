@@ -47,22 +47,26 @@ class QMP:
 
     def type(self, text):
         punctuation = {" ": "spc", ".": "dot", "/": "slash", "-": "minus",
-                       "\n": "ret", "\b": "backspace", "_": "minus", "%": "5", "~": "grave_accent"}
+                       "\n": "ret", "\b": "backspace", "_": "minus", "%": "5", "~": "grave_accent", "&": "7", '"': "apostrophe", "'": "apostrophe", "\\": "backslash"}
         for ch in text:
-            self.key(punctuation.get(ch, ch.lower()), ch.isupper() or ch in "_%~")
+            self.key(punctuation.get(ch, ch.lower()), ch.isupper() or ch in "_%~&\"")
 
     def close(self):
         self.stream.close()
         self.socket.close()
 
 
-def build_probe(directory, source, waiting=False):
+def build_probe(directory, source, waiting=False, extra=None):
     cross = os.environ.get("CROSS_COMPILE", "x86_64-elf-")
     obj, asm, program = (directory/n for n in (("wait.o", "context.o", "WAITPROBE") if waiting else ("probe.o", "context.o", "ABIPROBE")))
+    guest_source = "wait_probe.cpp" if waiting else "abi_probe.cpp"
+    if extra:
+        guest_source, name = extra
+        obj, program = directory/(name+".o"), directory/name
     commands = [
         [cross+"g++", "-std=gnu++17", "-O0", "-g", "-ffreestanding", "-mno-red-zone",
          "-mcmodel=large", "-fno-pie", "-fno-stack-protector", "-fno-exceptions", "-fno-rtti",
-         "-I", ROOT/"libs/libc/src", "-I", ROOT/"common/include", "-I", ROOT/"include", "-c", ROOT/("tests/guest/wait_probe.cpp" if waiting else "tests/guest/abi_probe.cpp"), "-o", obj],
+         "-I", ROOT/"libs/libc/src", "-I", ROOT/"common/include", "-I", ROOT/"include", "-c", ROOT/"tests/guest"/guest_source, "-o", obj],
         ["nasm", "-f", "elf64", ROOT/"tests/guest/context_probe.asm", "-o", asm],
         [cross+"ld", "-T", ROOT/"libs/ring3/userspace.ld", "-static", "-nostdlib",
          "-o", program, obj, asm, source/"libs/libc/bin/libc.a"]]
@@ -84,6 +88,10 @@ def test(firmware, timeout):
 
     def run():
         programs = [build_probe(directory, built/"source", waiting) for waiting in (False, True)]
+        programs += [build_probe(directory,built/"source",extra=extra)
+                     for extra in (("args_probe.cpp","ARGPROBE"),("wait_test.cpp","WAITTEST"))]
+        symbols = require_success(command([os.environ.get("CROSS_COMPILE","x86_64-elf-")+"nm",directory/"ARGPROBE"]), "argument probe symbols")
+        gate = int(re.search(r"^([0-9a-f]+) [A-Za-z] release_gate$", symbols, re.M)[1],16)
         image = directory/"HackOS.img"
         shutil.copy2(built/"HackOS.img", image)
         fs_image = str(image) + ("@@"+str(334*512) if firmware == "bios" else "")
@@ -169,6 +177,48 @@ bp.delete()
                     enter("x"*255 + "\b"*256, "\nroot@root:~$ ")
                     enter("x"*256, "Command too long")
                     enter("print recovered", "\nrecovered\n")
+                    offset = len(output())
+                    qmp.type('./USR/BIN/ARGPROBE alpha "two words" "" escaped\\ space "&"\n')
+                    wait_text("ARGS_READY",offset)
+                    qmp.type("print queued\n")
+                    assert "root@root:" not in output()[offset:], "Prompt returned while foreground child was alive"
+                    assert "queued" not in output()[offset:], "Shell consumed input while waiting"
+                    qmp.call("stop")
+                    script = directory/"foreground.gdb"
+                    script.write_text("set pagination off\nset confirm off\ntarget remote "+str(gdb_path)+"\npython\nimport gdb, struct\n" + """
+# The child can print READY before its parent has returned from spawn.
+# Observe an idle pass after the parent actually blocks, not that launch race.
+bp = gdb.Breakpoint("ReapExitedProcesses()", type=gdb.BP_HARDWARE_BREAKPOINT)
+bp.condition = "ready_queue->next->state == 3"
+gdb.execute("continue")
+bp.delete()
+p = gdb.parse_and_eval("ready_queue")
+shell = child = None
+while int(p):
+    if int(p["systemShell"]): shell = p.dereference()
+    if p["name"].string() == "~/USR/BIN/ARGPROBE": child = p.dereference()
+    p = p["next"]
+assert shell is not None and child is not None, "Missing shell or child"
+assert int(shell["state"]) == 3 and int(shell["waitingFor"]) == int(child["pid"]), "Foreground parent did not block for its child"
+assert int(child["parentPid"]) == int(shell["pid"])
+va = """ + str(gate) + """
+entry = child["userSpace"]["leaf"]["entries"][(va-0x400000000000)//4096]
+physical = (int(entry["address"]) << 12) + (va & 4095)
+gdb.selected_inferior().write_memory(physical,struct.pack("<Q",1))
+print("FOREGROUND_WAIT_OK")
+""" + "end\ndetach\nquit\n")
+                    result = command([os.environ.get("GDB","gdb"),"--batch","--nx","-q",built/"kernel.elf","-x",script],timeout=20)
+                    (directory/"foreground.log").write_text(result.stdout)
+                    require_success(result,"inspect blocked foreground parent")
+                    assert "FOREGROUND_WAIT_OK" in result.stdout, result.stdout
+                    qmp.call("cont")
+                    wait_text("ARGS_DONE",offset)
+                    wait_text("Program exited with status 7.",offset)
+                    wait_text("\nqueued\n",offset)
+                    tail = output()[offset:]
+                    assert tail.index("ARGS_DONE") < tail.index("Program exited with status 7.") < tail.index("root@root:")
+                    enter("./USR/BIN/WAITTEST", "WAIT_TEST_OK")
+                    enter('./USR/BIN/ARGPROBE "unfinished', "Invalid arguments")
                     enter("./MISSING", "Cannot load user program:")
                     enter("open USR/HELLO.TXT", "File opened.")
                     for iteration in range(3):
@@ -178,7 +228,7 @@ bp.delete()
                         wait_text("PROBE_OK", offset)
                         assert "PROBE_FAIL" not in output()[offset:], "Guest ABI/context check failed"
                         enter("ps", "~/USR/BIN/SHELL (2) ALIVE")
-                    enter("./USR/BIN/WAITPROBE", "WAIT_PROBE_READY")
+                    enter("./USR/BIN/WAITPROBE &", "WAIT_PROBE_READY")
                     enter("./USR/BIN/ABIPROBE", "PROBE_OK")
                     enter("ps", "WAITPROBE")
                     pid = re.findall(r"Process: ~/USR/BIN/WAITPROBE \((\d+)\) ALIVE", output())[-1]
@@ -205,7 +255,7 @@ bp.delete()
 switches = int(gdb.parse_and_eval("scheduler_switches"))
 reaped = int(gdb.parse_and_eval("tasks_reaped"))
 assert switches > 20, "No sustained task switches"
-assert reaped == 5, "Missing/duplicate task reclamation: " + str(reaped)
+assert reaped == 13, "Missing/duplicate task reclamation: " + str(reaped)
 p = gdb.parse_and_eval("ready_queue")
 labels = []
 while int(p):
@@ -246,7 +296,7 @@ quit
                     (directory/"qmp-events.json").write_text(json.dumps(qmp.events, indent=2))
                     assert any(e.get("event") == "SHUTDOWN" and e["data"].get("guest") and
                                e["data"].get("reason") == "guest-shutdown" for e in qmp.events), "No guest ACPI shutdown event"
-                    return "Auto-started CPL3 shell, PS/2 editing, safe file handles and bad pointers, register preservation, concurrent programs, exit/kill resource cleanup, and real guest ACPI shutdown; " + result.stdout
+                    return "Auto-started CPL3 shell, quoted/empty/escaped argv, blocking foreground wait and exit status, late/repeated/invalid waits and orphan cleanup, PS/2 editing, safe file handles and bad pointers, register preservation, concurrent programs, exit/kill resource cleanup, and real guest ACPI shutdown; " + result.stdout
                 finally:
                     if qmp: qmp.close()
                     process.terminate()

@@ -22,7 +22,8 @@ rejects writable executable pages, page-sharing segments, dynamic linking,
 interpreters and TLS, and caps ELF files at 1 MiB. Empty load segments are allowed.
 BSS and page padding are zeroed. CR0.WP and EFER.NXE enforce permissions; CPUs
 without NX cannot launch user programs. Spawn permits at most 16 queued tasks,
-including idle and zombies awaiting reclamation.
+including idle and zombies awaiting reclamation. Each parent can also retain up
+to 16 uncollected child results; it must wait for them before spawning more.
 
 The initial interrupt frame enters CPL3 with CS `0x1b`, SS `0x23`, IF enabled,
 and IOPL zero. TSS.RSP0 selects a separate kernel stack. Timer scheduling switches
@@ -32,6 +33,28 @@ Exit and ordinary user exceptions mark the task dead. Idle closes its remaining
 file handles and frees private frames, page tables, name and kernel stack after
 switching away. Kernel faults, NMI, double fault and machine check retain kernel
 handling. Scheduling is single-CPU; AVX context is not supported.
+
+Programs enter with RDI=`argc` and RSI=`argv`; libc preserves these when calling
+`main(int argc, char** argv)`. The vector is terminated by a null pointer, and
+all strings and pointers are copied into the child's own user stack above its
+initial stack pointer. The stack retains SysV alignment. Spawn accepts 1–16
+arguments (including `argv[0]`) and at most 1024 bytes of strings including NULs.
+The original `spawn(path)` remains compatible and supplies just `argv[0]=path`.
+
+`wait(pid, status, flags)` can collect only a direct child's result, once. With
+flags zero, a live child causes the caller to enter `WAITING`, which the scheduler
+skips until that child exits, faults or is killed. There is no polling loop and
+no yield inside a preemption guard. `HACKOS_WAIT_NOHANG` returns zero while the
+child is alive. Completion returns the PID and optionally copies an `int64_t`
+status; a null status pointer discards it. Invalid flags, non-child/already-waited
+PIDs and invalid/read-only output buffers return `HACKOS_ERROR` without consuming
+a result. Normal exit stores the signed 32-bit program status; faults store
+128 plus the exception vector, and kill stores 137.
+
+Completion records live in the parent, separately from the child resources.
+Idle can therefore reclaim a child's files, pages and stack before the parent
+calls wait. A parent that exits discards its results; live children continue as
+orphans and are still reclaimed by idle. No PID is reused during a boot.
 
 The old trusted ELF helpers remain internal code. The binary-only `USERTEST.ELF`
 asset is retained but no longer called during boot. Neither shell launch syntax
@@ -54,13 +77,32 @@ Console rendering and hardware operations remain kernel services.
 | `ps`, `kill <pid>` | List tasks or stop a user program; idle and boot shell are protected |
 | `ls`, `wd`, `cd <path>` | Browse the first filesystem; `~` denotes its root |
 | `open <path>`, `read`, `close` | Open a read-only handle, read up to 512 bytes, close it |
-| `./<program>`, `user <path>` | Launch an isolated program; e.g. `./USR/BIN/TEST` or `user USR/BIN/RING3` |
+| `./<program> [args]`, `user <path> [args]` | Launch an isolated foreground program and wait; append a separate `&` for background execution |
 | `shutdown`, `restart` | Request kernel ACPI power-off or platform restart |
 
 Input supports the US layout, Shift, Caps Lock and Backspace. Lines longer than
 255 characters are discarded. Queue overflow discards input until Enter. There
-is no history, completion, argument passing, foreground job control or blocking
-terminal API yet. Program output shares the console with the shell.
+is no history, completion, pipelines, environment expansion, Ctrl-C/job control
+or blocking terminal API yet. Program output shares the console with the shell.
+
+Program commands split arguments on spaces/tabs. Single or double quotes group
+words (including empty strings); a backslash escapes the next character, also
+inside quotes. Unmatched quotes, a trailing backslash or excessive arguments
+reject the command. This syntax applies to program launches; existing built-in
+commands retain their literal text/path handling. The shell resolves `argv[0]`
+to the executable path. For example:
+
+```text
+./USR/BIN/TEST alpha "two words" ""
+user USR/BIN/RING3
+./USR/BIN/TEST background &
+```
+
+The foreground prompt appears only after wait returns. Nonzero statuses are
+reported. While waiting, the shell does not consume queued keyboard input or
+transfer its terminal privilege to the child. A bare trailing `&` opts out of
+waiting; the shell collects background results with nonblocking waits during
+its input loop.
 
 Only the process designated by the kernel at boot owns terminal input, console
 editing, task-kill and power privileges. Spawning another copy of SHELL does not
@@ -96,6 +138,8 @@ return an error rather than being reinterpreted as new operations.
 | 25 | `readdir(path, index, out)` | Copies one directory entry; 1 found, 0 end |
 | 26 | `power(operation)` | 0 ACPI shutdown, 1 restart; boot shell only |
 | 27 | `yield()` | Gives another runnable task a scheduling opportunity |
+| 28 | `spawn_args(path, argc, argv)` | Copies a bounded user pointer vector and strings; returns child PID |
+| 29 | `wait(pid, status, flags)` | Collects a direct child; flags 0 block, `HACKOS_WAIT_NOHANG` polls |
 
 Calls use `int 0x80`: RAX is the number, RDI/RSI/RDX/RCX/R8 hold arguments,
 and saved RAX receives the result. Successful operations without another result

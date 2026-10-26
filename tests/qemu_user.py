@@ -117,7 +117,7 @@ def test(firmware, timeout):
                     assert "RING3: finished; requesting exit" in output()
                     # Two copies at the same virtual addresses must coexist.
                     for n in range(2):
-                        enter("user USR/BIN/UPROBE", "RING3_PROBE_READY")
+                        enter("user USR/BIN/UPROBE &", "RING3_PROBE_READY")
                     inspect("isolation", '''
 base = 0x400000000000
 p = gdb.parse_and_eval("ready_queue")

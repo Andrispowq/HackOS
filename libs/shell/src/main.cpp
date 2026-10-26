@@ -1,5 +1,6 @@
 #include "hackos/user.h"
 #include "hackos/runtime/line_buffer.h"
+#include "hackos/runtime/arguments.h"
 using namespace User;
 static char workingDirectory[256] = "~";
 static uint64_t openFile = HACKOS_ERROR;
@@ -19,14 +20,48 @@ static bool PathFor(const char* name, char (&path)[256])
     if (prefix) { Copy(path, workingDirectory); path[prefix - 1] = '/'; }
     Copy(path + prefix, name); return true;
 }
+static uint64_t backgroundTasks[16] = {};
+static void CollectBackground()
+{
+    for (auto& pid : backgroundTasks)
+        if (pid && syscall_wait(pid, nullptr, HACKOS_WAIT_NOHANG) != 0) pid = 0;
+}
+static void Launch(char* command)
+{
+    char* args[HACKOS_MAX_ARGS];
+    bool background;
+    int argc = ParseArguments(command, args, HACKOS_MAX_ARGS, background);
+    if (argc <= 0) { Print("Invalid arguments (quotes, escapes, or too many arguments).\n"); return; }
+    char path[256];
+    if (!PathFor(args[0], path)) return;
+    args[0] = path;
+    CollectBackground();
+    uint64_t pid = syscall_spawn_args(path, argc, args);
+    if (pid == HACKOS_ERROR) { Print("Cannot load user program: "); Print(path); Print("\n"); return; }
+    if (background)
+    {
+        for (auto& slot : backgroundTasks) if (!slot) { slot = pid; return; }
+    }
+    int64_t status;
+    if (syscall_wait(pid, &status, 0) != pid) { Print("Wait failed.\n"); return; }
+    if (status)
+    {
+        Print("Program exited with status ");
+        if (status < 0) { Print("-"); Number((uint64_t)(-status)); }
+        else Number(status);
+        Print(".\n");
+    }
+}
 static void Command(char* input)
 {
     if (!*input) return;
+    if (Starts(input, "user ")) { Launch(input + 5); return; }
+    if (Starts(input, "./")) { Launch(input + 2); return; }
     if (Equal(input, "help"))
     {
         Print("Commands: help, clear, print <text|tick|time|date>, ps, kill <pid>\n");
         Print("Files: ls, wd, cd <path>, open <path>, read, close, ./<program>\n");
-        Print("User: user <path> (isolated ring 3). Power: shutdown, restart.\n");
+        Print("User: user <path> [args] (foreground; append & for background). Power: shutdown, restart.\n");
     }
     else if (Equal(input, "shutdown") || Equal(input, "restart"))
     {
@@ -40,7 +75,7 @@ static void Command(char* input)
         for (uint64_t i = 0; syscall_process_info(i, &info) == 1; ++i)
         {
             Print("Process: "); Print(info.name); Print(" ("); Number(info.pid);
-            Print(info.state == 0 ? ") ALIVE\n" : ") ZOMBIE\n");
+            Print(info.state == 0 ? ") ALIVE\n" : info.state == 3 ? ") WAITING\n" : ") ZOMBIE\n");
         }
     }
     else if (Starts(input, "kill "))
@@ -119,11 +154,6 @@ static void Command(char* input)
             if (length == HACKOS_ERROR) Print("Read failed.\n");
             else { syscall_user_write(buffer, length); Print("\n"); }
         }
-        else if ((Starts(input, "user ") && PathFor(input + 5, path)) ||
-                 (Starts(input, "./") && PathFor(input + 2, path)))
-        {
-            if (syscall_spawn(path) == HACKOS_ERROR) { Print("Cannot load user program: "); Print(path); Print("\n"); }
-        }
         else { Print("Unknown command: "); Print(input); Print("\n"); }
     }
 }
@@ -135,6 +165,7 @@ int main()
     bool discard = false;
     for (;;)
     {
+        CollectBackground();
         uint64_t value = syscall_input();
         if (value == HACKOS_DENIED) { Print("Only the boot shell owns terminal input.\n"); return 1; }
         if (!value) { syscall_yield(); continue; }

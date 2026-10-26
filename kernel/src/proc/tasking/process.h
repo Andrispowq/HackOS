@@ -6,6 +6,7 @@
 #define PROCESS_STATE_ALIVE 0
 #define PROCESS_STATE_ZOMBIE 1
 #define PROCESS_STATE_DEAD 2
+#define PROCESS_STATE_WAITING 3
 #define SIG_ILL 1
 #define SIG_TERM 2
 #define SIG_SEGV 3
@@ -13,6 +14,8 @@
 
 class UserAddressSpace;
 class ActiveFile;
+
+struct ChildResult { uint64_t pid = 0; int64_t status = 0; bool done = false; };
 
 class Process
 {
@@ -26,6 +29,10 @@ public:
     UserAddressSpace* userSpace = nullptr;
     uint64_t userPreemptions = 0;
     bool systemShell = false;
+    uint64_t parentPid = 0, waitingFor = 0;
+    int64_t exitStatus = 0;
+    ChildResult children[16] = {};
+
     ActiveFile* files[8] = {};
     uint64_t fileHandles[8] = {};
 
@@ -49,4 +56,5 @@ void ScheduleIRQ();
 Registers* Schedule(Registers* frame);
 void ReapExitedProcesses();
 void InitialiseTasking();
+uint64_t WaitForChild(uint64_t pid, int64_t* status, uint64_t flags);
 #endif

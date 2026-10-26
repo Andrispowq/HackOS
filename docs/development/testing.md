@@ -65,6 +65,7 @@ sanitizers; there is no automatic downgrade.
 | ELF | Identity, malformed/truncated headers, program-header bounds, filesystem loading, segment copying and BSS zeroing |
 | User address spaces | Private frames, supervisor kernel mappings, W/X rejection, checked cross-page copies in both directions, read-only output rejection, bounded strings, holes/overflow, allocation failure and reclamation with an explicit physical allocator adapter |
 | Keyboard and line input | Make/break bounds, Shift/Caps Lock, punctuation, extended/Pause sequences, FIFO wrap/overflow, editing and command-length limits |
+| Argument parsing | Quoted/empty/escaped words, concatenated quotes, explicit background marker, capacity and malformed syntax |
 | ABI | Fixed-width syscall record layouts and interrupt-frame offsets; historical `ActiveFile` layout checks remain for the unlinked legacy sources |
 
 Memory/string functions are required to follow standard C semantics. A
@@ -179,7 +180,17 @@ alongside a spinning task, which the shell then kills while it owns an open file
 The shell's own open handle stays isolated throughout. Missing programs are
 rejected before task creation. Idle and shell are protected from `kill`.
 
-GDB checks that all five terminated tasks were reaped, only idle and the isolated
+A held argument probe verifies `argc`, `argv[0]`, a null vector terminator,
+private stack strings, quoted/empty/escaped arguments and a literal ampersand.
+While the child spins, the harness queues keyboard input and asserts no prompt
+or input echo appears. GDB verifies that the parent is in `WAITING` for that
+child, then releases the child's private gate. Exit status 7 must precede the
+next prompt and queued command. A second program checks invalid argv/status
+pointers, excessive argument sizes, non-child and repeated waits, collection
+after idle cleanup, copied argument independence, fault status, legacy spawn,
+and orphan cleanup. Existing concurrency probes use explicit `&` launches.
+
+GDB checks that all thirteen terminated tasks were reaped, only idle and the isolated
 shell remain, user-page accounting matches the shell's live ownership, and no
 file handles leaked. Finally the harness types `shutdown` and requires QEMU to
 exit successfully with a QMP `SHUTDOWN` event whose reason is `guest-shutdown`.

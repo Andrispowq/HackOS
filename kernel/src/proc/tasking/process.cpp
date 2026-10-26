@@ -1,4 +1,5 @@
 #include "process.h"
+#include "hackos/abi.h"
 #include "arch/x86_64/interrupts/guard.h"
 #include "lib/stdio.h"
 #include "lib/memory.h"
@@ -79,7 +80,7 @@ bool IsRunning(uint64_t pid)
 {
     InterruptGuard guard;
     for (Process* p = ready_queue; p; p = p->next)
-        if (p->pid == pid) return p->state == PROCESS_STATE_ALIVE;
+        if (p->pid == pid) return p->state == PROCESS_STATE_ALIVE || p->state == PROCESS_STATE_WAITING;
     return false;
 }
 bool IsTaskingOnline() { return enabled; }
@@ -94,12 +95,53 @@ void PrintAll()
                 p->state == PROCESS_STATE_ALIVE ? "ALIVE" : "ZOMBIE");
 }
 
+// Publish completion before idle destroys the child's stack/address space.
+// All callers hold interrupts disabled on this single scheduling CPU.
+static void CompleteProcess(Process* child)
+{
+    if (child->state == PROCESS_STATE_ZOMBIE) return;
+    child->state = PROCESS_STATE_ZOMBIE;
+    for (auto parent = ready_queue; parent; parent = parent->next)
+        if (parent->pid == child->parentPid && parent->state != PROCESS_STATE_ZOMBIE)
+            for (auto& result : parent->children) if (result.pid == child->pid)
+            {
+                result.status = child->exitStatus; result.done = true;
+                if (parent->state == PROCESS_STATE_WAITING && parent->waitingFor == child->pid)
+                    parent->state = PROCESS_STATE_ALIVE;
+                return;
+            }
+}
+
+uint64_t WaitForChild(uint64_t pid, int64_t* status, uint64_t flags)
+{
+    InterruptGuard guard;
+    auto parent = current_process;
+    if (!parent || !parent->userSpace || flags & ~HACKOS_WAIT_NOHANG ||
+        (status && !parent->userSpace->WritableRange((uint64_t)status, sizeof(*status))))
+        return HACKOS_ERROR;
+    ChildResult* result = nullptr;
+    for (auto& child : parent->children) if (child.pid && child.pid == pid) { result = &child; break; }
+    if (!result) return HACKOS_ERROR; // never wait for self, a stranger, or an already consumed child
+    if (!result->done && (flags & HACKOS_WAIT_NOHANG)) return 0;
+    while (!result->done)
+    {
+        parent->waitingFor = pid;
+        parent->state = PROCESS_STATE_WAITING;
+        ScheduleIRQ(); // No PreemptionGuard: this task is genuinely blocked.
+    }
+    parent->waitingFor = 0;
+    if (status && !parent->userSpace->CopyToUser((uint64_t)status, &result->status, sizeof(*status)))
+        return HACKOS_ERROR;
+    *result = {}; // status is consumed exactly once; idle independently reclaims resources
+    return pid;
+}
+
 [[noreturn]] void _Kill()
 {
     asm volatile("cli" ::: "memory");
     if (current_process && current_process != ready_queue)
     {
-        current_process->state = PROCESS_STATE_ZOMBIE;
+        CompleteProcess(current_process);
         ScheduleIRQ();
     }
     // The idle task must remain available; an exited task must never resume.
@@ -110,9 +152,9 @@ void Kill(uint64_t pid)
 {
     InterruptGuard guard;
     if (!current_process || pid == ready_queue->pid) return;
-    if (pid == current_process->pid) _Kill();
+    if (pid == current_process->pid) { current_process->exitStatus = 137; _Kill(); }
     for (Process* p = ready_queue; p; p = p->next)
-        if (p->pid == pid) p->state = PROCESS_STATE_ZOMBIE;
+        if (p->pid == pid) { p->exitStatus = 137; CompleteProcess(p); }
 }
 
 void ScheduleIRQ() { asm volatile("int $0x81" ::: "memory"); }

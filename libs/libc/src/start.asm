@@ -6,6 +6,7 @@ section .text
 _start:
     xor ebp, ebp
     and rsp, -16
+    ; RDI=argc, RSI=argv from the loader; alignment preserves both.
     call main
     mov esi, eax
     xor edi, edi ; exit retains syscall number zero

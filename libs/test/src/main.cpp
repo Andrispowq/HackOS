@@ -1,6 +1,8 @@
 #include "hackos/user.h"
-int main()
+int main(int argc, char** argv)
 {
+    for (int i = 0; i < argc; ++i)
+    { User::Print("argv["); User::Number(i); User::Print("]="); User::Print(argv[i]); User::Print("\n"); }
     User::Print("Hello from the standalone ring-3 test program.\n");
     uint64_t handle = syscall_open("~/USR/HELLO.TXT");
     if (handle == HACKOS_ERROR) return 1;
