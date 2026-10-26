@@ -139,6 +139,7 @@ make -C boot/BIOS/stage_1 bootloader
 - BIOS stage-2 C has undeclared functions and implicit pointer/integer conversions
   rejected by newer GCC releases.
 - The UEFI loader includes `<elf.h>`, which the bare toolchain does not supply.
+- `libs/test` includes a missing `framebuffer/framebuffer.h`.
 - The BIOS QEMU recipe has a broken continuation before `-net none`.
 - UEFI font paths, fallback executable naming, and `ExitBootServices` handling
   need correction; see [boot documentation](../system/boot.md).
@@ -189,20 +190,41 @@ and keep it for post-run inspection.
 The legacy `make install` writes to `/dev/sdb`. It is unrelated to emulator setup
 and must not be used as a routine build or test step.
 
-## Docker direction
+## Test and build containers
 
-The first container should package a pinned target toolchain, Make, NASM, and
-mtools, then export the disk image and debug ELFs. Host QEMU can display the
-result normally. The repository does not contain a Dockerfile or Compose
-workflow yet.
+`tests/Dockerfile` packages the test tools and an automatically built
+`x86_64-elf` cross compiler. The Ubuntu base is pinned by digest; GCC 15.2.0 and
+binutils 2.47 source downloads are checked against SHA-256 hashes. No manual
+cross-compiler installation is needed inside this environment. The build
+still reports the source defects listed above.
 
-On Apple Silicon, an arm64 Linux builder with an x86-64 cross-compiler avoids
-emulating the compiler itself. An amd64 container is a possible initial
-compatibility route, with extra emulation cost. See Docker's
+```sh
+docker build --platform linux/amd64 --target toolchain \
+  -t hackos-tests:toolchain -f tests/Dockerfile tests
+mkdir -p tests/out
+docker run --rm --platform linux/amd64 --network none \
+  --user "$(id -u):$(id -g)" \
+  --mount "type=bind,source=$PWD,target=/work,readonly" \
+  --mount "type=bind,source=$PWD/tests/out,target=/work/tests/out" \
+  hackos-tests:toolchain python3 tests/build_images.py --firmware bios
+```
+
+Repeat with `--firmware uefi`. The harness builds tracked source inputs in a
+disposable copy, supplies missing directories and tool selection, and runs the
+unchanged Makefiles serially. Successful builds export `HackOS.img` and a debug
+`kernel.elf` under `tests/out/build-bios/` or `build-uefi/`. No stale local output
+is reused. This isolates testing while the production build rules await repair.
+
+Use the `host` Docker target for sanitizer tests without building GCC from
+source. See [testing](testing.md) for the commands, runtime limitations, and CI.
+
+On Apple Silicon, replace `linux/amd64` with `linux/arm64` in both toolchain
+commands to build and run the cross compiler natively. Its output is still
+x86-64 ELF. Keep the host-test container on `linux/amd64`, since those tests
+execute x86 assembly. Emulating GCC itself adds considerable build time. See Docker's
 [multi-platform build guidance](https://docs.docker.com/build/building/multi-platform/).
 
-A later runtime image can package QEMU with TCG and VNC. Publish VNC on host
-loopback, retain separate writable disk/firmware state, and treat KVM as an
-optional accelerator for suitable x86 Linux hosts. The file-based mtools build
+Both targets include QEMU with TCG and GDB for headless tests. Interactive VNC
+and KVM acceleration remain optional future additions. The mtools image builder
 needs neither privileged containers nor host disk access. Docker packages the
 tools and emulator; HackOS still runs as the guest operating system.

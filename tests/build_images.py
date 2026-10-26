@@ -1,0 +1,124 @@
+#!/usr/bin/env python3
+"""Exercise unchanged, serial production recipes in a disposable source copy."""
+import argparse
+import os
+from pathlib import Path
+import shutil
+import struct
+import subprocess
+import sys
+from common import ROOT, OUT, Report, command, require_success
+from run import validate_elf
+
+
+def build(firmware):
+    directory = OUT / ("build-" + firmware)
+    report = Report("build-" + firmware, directory)
+    work = directory / "source"
+    # Remove only this harness's disposable checkout, never the real build tree.
+    shutil.rmtree(work, ignore_errors=True)
+    work.mkdir()
+    for stale in ("HackOS.img", "kernel.elf"):
+        (directory / stale).unlink(missing_ok=True)
+    try:
+        files = require_success(command(["git", "-c", f"safe.directory={ROOT}", "ls-files", "-z"]), "list source inputs").split("\0")
+        for name in filter(None, files):
+            path = Path(name)
+            if path.parts[0] in ("tests", ".github", "docs") or name.endswith(".img"):
+                continue
+            destination = work / path
+            destination.parent.mkdir(parents=True, exist_ok=True)
+            shutil.copy2(ROOT / path, destination)
+        cross = os.environ.get("CROSS_COMPILE", "x86_64-elf-")
+        aliases = directory / "tools"
+        aliases.mkdir(exist_ok=True)
+        for tool in ("gcc", "ld", "objcopy", "ar"):
+            binary = shutil.which(cross + tool)
+            if not binary:
+                raise RuntimeError(f"Missing {cross + tool}; use the toolchain container")
+            alias = aliases / tool
+            alias.unlink(missing_ok=True)
+            alias.symlink_to(binary)
+        env = os.environ.copy()
+        env["PATH"] = str(aliases) + os.pathsep + env["PATH"]
+        env.pop("MAKEFLAGS", None)
+        for path in ("bin", "kernel/bin", "kernel/bin-int", "boot/BIOS/stage_2/bin",
+                     "boot/BIOS/stage_2/bin-int", "libs/libc/bin", "libs/shell/bin", "libs/test/bin"):
+            (work / path).mkdir(parents=True, exist_ok=True)
+        versions = "\n".join(command([cross + t, "--version"]).stdout for t in ("gcc", "ld"))
+        (directory / "toolchain.txt").write_text(versions)
+    except (RuntimeError, OSError, subprocess.TimeoutExpired) as exc:
+        report.add("build_setup", "error", str(exc))
+        return report.finish()
+
+    def make(name, path, targets, extra=()):
+        def run():
+            args = ["make", "-j1", "-k", "-C", work/path, *targets,
+                    f"CC={cross}gcc", f"LD={cross}ld", *extra]
+            result = command(args, cwd=work, env=env, timeout=300)
+            (directory / (name + "-output.log")).write_text(result.stdout)
+            assert result.returncode == 0, f"{' '.join(map(str, args))}\n{result.stdout}"
+            return result.stdout
+        report.check(name, run)
+
+    if firmware == "bios":
+        make("mbr", "boot/BIOS/mbr", ["mbr"])
+        make("stage1", "boot/BIOS/stage_1", ["bootloader"])
+        make("stage2", "boot/BIOS/stage_2", ["second_stage"])
+    else:
+        make("uefi_loader", "boot/UEFI/gnu-efi", ["lib", "gnuefi", "bootloader"],
+             ["ARCH=x86_64", f"CROSS_COMPILE={cross}"])
+    make("kernel", "kernel", ["kernel"])
+    make("userspace_library", "libs/libc", ["all"])
+    make("userspace_shell", "libs/shell", ["all"])
+    make("userspace_test", "libs/test", ["all"])
+
+    if any(r["status"] != "pass" for r in report.results):
+        report.add("image", "blocked", "Required components did not build; no stale binaries are used.")
+        return report.finish()
+
+    def package():
+        for name in ("test", "shell"):
+            shutil.copy2(work/f"libs/{name}/bin/{name}", work/f"util/libc/{name}")
+        kernel = (work/"bin/kernel.elf").read_bytes()
+        validate_elf(kernel)
+        if firmware == "bios":
+            for name, limit in [("mbr.bin",512),("bootloader.bin",512),
+                                ("second_stage.bin",32768),("kernel.elf",131072)]:
+                size = (work/"bin"/name).stat().st_size
+                assert 0 < size <= limit, f"{name}: {size} bytes exceeds its {limit}-byte slot"
+            assert (work/"util/fonts/zap-light16.psf").stat().st_size <= 6144
+        result = command(["make", "-j1", "buildimg", f"TARGET_BIOS={'true' if firmware=='bios' else 'false'}"],
+                         cwd=work, env=env, timeout=120)
+        (directory/"image-output.log").write_text(result.stdout)
+        require_success(result, "package image")
+        image = work/"bin/HackOS.img"
+        if firmware == "bios":
+            data = image.read_bytes()
+            assert len(data) == (334+93750)*512, "BIOS image extent mismatch"
+            for start, path in [(0,"bin/mbr.bin"),(1,"bin/bootloader.bin"),(2,"bin/second_stage.bin"),
+                                (66,"util/fonts/zap-light16.psf"),(78,"bin/kernel.elf")]:
+                payload = (work/path).read_bytes()
+                assert data[start*512:start*512+len(payload)] == payload, f"wrong payload at LBA {start}"
+            fs_image = str(image) + "@@" + str(334*512)
+        else:
+            fs_image = str(image)
+            efi = (work/"boot/UEFI/gnu-efi/x86_64/bootloader/main.efi").read_bytes()
+            assert efi[:2] == b"MZ", "UEFI payload lacks DOS header"
+            pe = struct.unpack_from("<I", efi, 0x3c)[0]
+            assert efi[pe:pe+4] == b"PE\0\0" and struct.unpack_from("<H",efi,pe+4)[0] == 0x8664
+            for name in ("/kernel.elf", "/EFI/BOOT/main.efi", "/startup.nsh"):
+                require_success(command(["mdir","-i",fs_image,"::"+name]), "image file " + name)
+        for name in ("/UTIL/FONTS/zap-light16.psf", "/USR/BIN/usertest.elf", "/USR/BIN/test", "/USR/BIN/shell"):
+            require_success(command(["mdir","-i",fs_image,"::"+name]), "image file " + name)
+        shutil.copy2(image, directory/"HackOS.img")
+        shutil.copy2(work/"kernel/bin/kernel.elf", directory/"kernel.elf")
+        return "Payload formats, slot limits, image offsets, and packaged inputs checked."
+    report.check("image", package)
+    return report.finish()
+
+
+if __name__ == "__main__":
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("--firmware", required=True, choices=("bios", "uefi"))
+    sys.exit(build(parser.parse_args().firmware))

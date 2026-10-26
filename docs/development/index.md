@@ -8,9 +8,9 @@ the component you need, and [TODO](../TODO.md) to see the next priorities.
 
 | Guide | Purpose |
 | --- | --- |
-| [Building and running](building.md) | Dependencies, Make targets, debugging, and container plans |
+| [Building and running](building.md) | Dependencies, Make targets, debugging, and test containers |
 | [Artifacts and fixtures](artifacts.md) | What belongs in Git and how generated outputs are produced |
-| [Testing plan](testing.md) | The test layers and first cases to implement |
+| [Testing](testing.md) | Commands, coverage boundaries, reports, and GitHub Actions |
 
 ## Working conventions
 
@@ -39,15 +39,13 @@ it already exists.
 
 ## Checking changes today
 
-There is no automated test suite yet. For build changes, start from a clean
-copy without generated objects and check both boot paths. For hardware-facing
-changes, inspect the result in QEMU with the existing device topology. Use
-copies of disk images and writable firmware state for experiments.
+Run `make -C tests test` for the independent host, boot-asset, and early BIOS
+checks. Run `make -C tests build-images FIRMWARE=bios` and the corresponding
+`test-qemu` target for full builds and kernel milestones; repeat with `uefi`.
+The [testing guide](testing.md) includes container commands and explains current
+failures and the limits of host coverage.
 
-Keep compiler errors, linker failures, emulator startup errors, and guest
-runtime failures distinct. A binary that links can still have the wrong entry
-point, exceed a BIOS allocation, or fail before reaching the kernel.
-
-The [testing plan](testing.md) describes how to turn these checks into repeatable
-automation in the next iteration. No test commands or CI jobs are implemented
-by that plan yet.
+For hardware-facing changes, also inspect the result in QEMU with the existing
+device topology. Keep compiler errors, linker failures, emulator startup errors,
+and guest runtime failures distinct. A binary that links can still have the wrong
+entry point, exceed a BIOS allocation, or fail before reaching the kernel.

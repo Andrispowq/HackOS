@@ -45,8 +45,8 @@ directly. Do not describe this as working isolated ring-3 process execution.
 
 Read [system documentation](docs/system/index.md) for component behavior,
 [build instructions](docs/development/building.md) for toolchain constraints,
-and [TODO](docs/TODO.md) for priorities. The [testing plan](docs/development/testing.md)
-describes future test infrastructure; its proposed targets are not implemented.
+and [TODO](docs/TODO.md) for priorities. The [testing guide](docs/development/testing.md)
+describes `tests/`, test containers, and the GitHub Actions workflow.
 
 ## Boot flow and contracts
 
@@ -92,9 +92,15 @@ the window-update loop and shell-program launch, but tasking is currently disabl
 
 ## Build and validation
 
-- Read the [build guide](docs/development/building.md) before trying to build. There is no automated
-  test suite or CI configuration. A successful compiler invocation is not a
-  successful boot.
+- Read the [build guide](docs/development/building.md) before trying to build.
+  `make -C tests test` runs host checks, boot-asset checks, and a BIOS MBR/stage-1
+  probe. Full BIOS/UEFI builds and GDB boot milestones are separate targets; see
+  `tests/Makefile` and `.github/workflows/tests.yml`. Existing defects are reported
+  as failures. A successful compiler invocation is not a successful boot.
+- Host tests enforce standard C memory/string semantics and compile real sources
+  with explicit hardware/allocator adapters. Do not weaken assertions to preserve
+  bugs. LLVM coverage covers only the linked C/C++ subset. ASan needs a compatible
+  x86-64 runtime; `--sanitizers undefined` is an explicit local fallback, not CI.
 - BIOS is selected by default: `make build_bios`. UEFI is selected with
   `make TARGET_BIOS=false build_efi`. `make all` builds and launches QEMU.
   Bare `make` selects `init`, which cleans and also builds GNU-EFI even for BIOS.
@@ -113,7 +119,8 @@ the window-update loop and shell-program launch, but tasking is currently disabl
   `AHCIDevice::GetType()` lacks the `const` required by `Device::GetType() const`;
   BIOS stage 2 fails in `cpu/rsdp.c` on undeclared `strncmp` and invalid implicit
   pointer/integer conversions. The UEFI loader's `<elf.h>` is unavailable in the
-  bare toolchain. MBR and stage 1 must each fit in 512 bytes.
+  bare toolchain. `libs/test` also includes a missing `framebuffer/framebuffer.h`.
+  MBR and stage 1 must each fit in 512 bytes.
   Update this guidance when the build blockers are fixed.
 - For boot changes, test BIOS and UEFI separately in QEMU using the existing
   `q35` device topology. Check ELF class, machine, entry point, and load segments

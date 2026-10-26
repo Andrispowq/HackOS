@@ -1,0 +1,26 @@
+#pragma once
+#define memcpy hackos_user_memcpy
+#define memset hackos_user_memset
+#define memcmp hackos_user_memcmp
+#define strlen hackos_user_strlen
+#define strcmp hackos_user_strcmp
+#define strncmp hackos_user_strncmp
+#define strcpy hackos_user_strcpy
+#define itoa hackos_user_itoa
+#define reverse hackos_user_reverse
+#define append hackos_user_append
+#define backspace hackos_user_backspace
+#define split hackos_user_split
+#define malloc_int hackos_user_malloc_int
+#define malloc hackos_user_malloc
+#define malloc_a hackos_user_malloc_a
+#define malloc_p hackos_user_malloc_p
+#define malloc_ap hackos_user_malloc_ap
+#define free hackos_user_free
+#define __memset hackos_user___memset
+#define __memcpy hackos_user___memcpy
+#define __memcmp hackos_user___memcmp
+#define __strlen hackos_user___strlen
+#define __strcmp hackos_user___strcmp
+#define __strncmp hackos_user___strncmp
+#define __strcpy hackos_user___strcpy

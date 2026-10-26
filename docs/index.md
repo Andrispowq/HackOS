@@ -27,9 +27,9 @@ The [development index](development/index.md) collects the day-to-day workflow.
 
 | Guide | What it covers |
 | --- | --- |
-| [Building and running](development/building.md) | Dependencies, cross-compilation, Make targets, QEMU, and Docker direction |
+| [Building and running](development/building.md) | Dependencies, cross-compilation, Make targets, QEMU, and test containers |
 | [Artifacts and fixtures](development/artifacts.md) | Generated outputs, retained binary inputs, and regeneration paths |
-| [Testing plan](development/testing.md) | A proposed host-test, image-check, and QEMU test strategy |
+| [Testing](development/testing.md) | Host tests, image checks, QEMU, coverage, and CI |
 | [TODO](TODO.md) | Prioritized build, boot, filesystem, memory, and userspace work |
 
 The component pages describe the current implementation and its constraints.

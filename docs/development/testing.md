@@ -1,119 +1,181 @@
-# Testing plan
+# Testing
 
 [Development index](index.md) · [TODO](../TODO.md)
 
-HackOS has no automated test suite or CI pipeline yet. The program in
-`libs/test` and the startup call to `USERTEST.ELF` are experiments, not a harness
-with assertions and a reliable pass/fail result. This page describes the next
-iteration; the directories and commands proposed here do not exist yet.
+The suite in `tests/` builds production sources into host executables, checks
+boot assets, exercises the BIOS loader chain in QEMU, and attempts clean BIOS
+and UEFI builds. Tests report current defects as failures. There are no expected
+failure exemptions, and a failed build never falls back to an old binary.
 
-## Start with three layers
+## Running the suite
 
-| Layer | What it establishes | What it cannot establish |
-| --- | --- | --- |
-| Host tests | Pure algorithms, parsers, and filesystem behavior against controlled memory/disks | Privileged instructions, interrupt entry, or actual driver behavior |
-| Build/image checks | Correct formats, entry symbols, sizes, layout, and packaged inputs | A working kernel or correct runtime mappings |
-| QEMU tests | Boot, interrupts, device I/O, and selected kernel services in an emulated machine | General compatibility with physical hardware |
+From the repository root, on an x86-64 machine with Clang/LLVM, Python 3.9+,
+NASM, mtools, and QEMU installed:
 
-Keep quick host tests independent from boot tests so a failure can be localized
-without starting a VM for every library change. Both BIOS and UEFI need their
-own emulator cases even though they share a kernel.
+```sh
+make -C tests test
+python3 tests/run.py host --case memory_compare
+make -C tests build-images FIRMWARE=bios
+make -C tests test-qemu FIRMWARE=bios
+make -C tests build-images FIRMWARE=uefi
+make -C tests test-qemu FIRMWARE=uefi
+```
 
-## Host-side tests
+`test` runs host tests, asset checks, and the BIOS MBR/stage-1 probe. The full
+image build and kernel boot are separate commands and require an ELF cross
+compiler and GDB. All output goes under the ignored `tests/out/` directory.
+Run without Python `-O` or `PYTHONOPTIMIZE`, since image checks use assertions.
 
-Build the real implementation under test, not a second implementation written
-for the test. Introduce small adapters for allocation, logging, clock access,
-and port/MMIO operations where needed. Avoid linking the entire kernel into a
-host executable.
+For a consistent Linux environment:
 
-| Area | First useful cases |
+```sh
+docker build --platform linux/amd64 --target host \
+  -t hackos-tests:host -f tests/Dockerfile tests
+mkdir -p tests/out
+docker run --rm --platform linux/amd64 --network none \
+  --user "$(id -u):$(id -g)" \
+  --mount "type=bind,source=$PWD,target=/work,readonly" \
+  --mount "type=bind,source=$PWD/tests/out,target=/work/tests/out" \
+  hackos-tests:host python3 tests/run.py all
+```
+
+The host binary includes real x86-64 NASM routines, so it needs an x86-64
+runtime. On Apple Silicon, translated x86 processes can fail during ASan
+startup, including with an empty program. Use a native x86-64 Linux runner for
+full sanitizer results. A limited local run is available with
+`python3 tests/run.py host --sanitizers undefined`; it keeps UBSan and assertions
+but cannot detect all memory errors. Its output is separate, in
+`tests/out/host-ubsan/`. CI always uses both address and undefined-behavior
+sanitizers; there is no automatic downgrade.
+
+## What the host tests exercise
+
+| Area | Checks |
 | --- | --- |
-| Bitmap and containers | First/last valid element, empty/full state, allocation exhaustion, growth/erase, and out-of-range behavior |
-| Memory/string routines | Zero length, alignment edges, boundaries, equality/ordering contracts, and overlap where the API promises it |
-| Memory-map interpretation | BIOS versus EFI types, sparse regions, regions above 4 GiB, reserved overlaps, and allocator bounds |
-| Heap | Split/coalesce, exhaustion/expansion, alignment requests, and ownership across free/reallocation |
-| ELF validation | Truncated headers, overflowing offsets, invalid segment ranges, overlapping segments, and BSS zeroing |
-| FAT32/VFS | Missing files, invalid handles/indices, zero-byte and cross-cluster I/O, EOF, long names, resize/delete, and malformed chains |
-| Graphics | Pixel packing, clipping at every edge, nontrivial pitch, and glyph bounds in a memory-backed framebuffer |
+| Memory and strings | Byte-fill semantics, unsigned comparisons, zero length, alignment, destination guards, termination, copy return values, integer formatting |
+| Bitmap and vector | Bit boundaries, full bitmap, first free bit, growth, erase, independent copies, self-assignment |
+| Memory setup | Page indices and structure sizes, BIOS/EFI map interpretation, sparse/high addresses, map instance isolation, early bump allocation and alignment |
+| Framebuffer | Pixels, rectangle clipping, pitch, colour fills, cursor background restoration |
+| VFS and registration | Volume selection, path translation, missing files/volumes, invalid indices/handles, create/read/write/close dispatch, error propagation, slot reuse |
+| FAT32 | Small, empty, long-name and cross-cluster files; seeked reads; enumeration; rewrite, create, shrink, delete and flush; invalid cluster-size input |
+| ELF | Identity, malformed/truncated headers, program-header bounds, filesystem loading, segment copying and BSS zeroing |
 
-First define the intended contracts of support routines. The project's
-`memset` and `memcmp` differ from their hosted namesakes; tests must not silently
-exercise the host libc or bless accidental behavior by copying it into expected
-results. Separate byte-memory operations from pixel fills where appropriate.
+Memory/string functions are required to follow standard C semantics. A
+nonstandard `memset`, `memcmp`, `strncmp`, or `strcpy` is a failure, even if
+existing callers depend on that behavior. The VFS has its own documented
+status-code interface; its `fread`/`fwrite` tests check that interface.
 
-For FAT32, implement a bounded in-memory or file-backed `Device`. Supply
-deterministic RTC values and a test allocator. Generate disposable images from
-small source fixtures with mtools, exercise the actual driver, flush/unmount,
-then reopen and inspect through an independent reader. Include malformed BPBs,
-out-of-range clusters, and cyclic chains with time/iteration limits.
+The small C++ harness uses registered functions and an always-enabled `CHECK`
+macro; it needs no third-party framework. Python runs each case in a separate
+process with a 15-second timeout. A crash, failed assertion, or sanitizer report
+fails that case while later cases continue. Use `--case` for debugging, not as
+a substitute for a full CI run.
 
-Host sanitizers can help find memory errors in portable C/C++ code, but they do
-not validate NASM routines or guest address-space behavior. Their build must
-keep kernel symbols and allocator hooks from accidentally replacing the host
-runtime's own functions.
+Kernel implementations are linked directly from `kernel/src`. The same memory
+and string cases also compile the independent BIOS stage-2 C and userspace
+libc C++ implementations, with their own symbols and NASM objects. Test-only symbol
+renaming prevents kernel memory/string/file functions from replacing the host
+runtime's functions. NASM string/memory helpers are assembled and linked as
+well. The ELF test includes the implementation to reach its internal validator.
+Allocation, physical-address translation, page mapping, logging, RTC access,
+and scheduling are explicit adapters. These tests do **not** exercise the real
+heap, page-table manager, scheduler, port I/O, or interrupt assembly. Leak
+checking is disabled because these adapters do not reproduce kernel ownership.
 
-## Build and image checks
+FAT32 tests use the real filesystem and driver over a bounded memory-backed
+`Device`. mtools creates fresh images containing deterministic fixtures. Each
+test loads its own copy. Successful mutation tests flush through the real
+destructor and inspect the saved image with mtools, including a surviving file
+when checking deletion. A byte match in the live driver cache is insufficient.
 
-Make these cheap failures before starting QEMU:
+## Reports and coverage
 
-- Confirm ELF64/x86-64 output, expected entry points, and valid load segments.
-- Check BIOS MBR/stage-1 length and `0x55aa` signatures; reject stage-2, font,
-  or stripped-kernel overflow before any `dd` truncation.
-- Check MBR offsets and partition extents against the image builder and readers.
-- List image contents and require the kernel, font, fixture, and rebuilt programs.
-- For UEFI, check executable format, fallback filename once adopted, and the
-  font path used by the loader.
-- Start from a clean checkout with no generated binaries; ensure image creation
-  rebuilds its prerequisites and does not modify firmware templates.
+Each suite writes `results.json`, `junit.xml`, and individual case logs. Host
+output also includes compiler/linker logs, tool versions, `coverage-summary.txt`,
+`coverage.json`, `coverage.lcov`, and LLVM raw/merged profiles. Build and boot
+failures have separate reports.
 
-Once dependency rules are repaired, add a parallel build and an incremental
-header/include-change check to catch the existing race and stale-object class
-of failures.
+Coverage measures only production C/C++ sources linked into the host test binary.
+It excludes test adapters and hosted headers. It is **not a whole-OS coverage
+percentage**: NASM, other kernel translation units, the rest of BIOS stage 2,
+UEFI, and real hardware behavior are outside that denominator. A process terminated before
+flushing its profile can undercount executed lines. There is no percentage gate;
+assertions and sanitizers are the correctness checks.
 
-## QEMU harness
+## Image and boot tests
 
-Add a small guest reporting channel before depending on unattended boot tests.
-A serial console or debug port can emit named milestones and assertion results.
-A dedicated emulator exit mechanism can report completion. The runner must
-distinguish pass, assertion failure, timeout, and an emulator startup error;
-an idle `hlt` loop or a process surviving for a few seconds is not a pass.
+The cheap asset suite assembles the actual MBR and stage 1, checks their lengths
+and signatures, checks partition offsets/extents, validates the font, and checks
+the retained userspace ELF's headers and executable entry segment.
 
-Proposed first milestones:
+`build_images.py` copies tracked source inputs into an isolated directory,
+creates missing output directories, selects cross tools, and invokes the
+unchanged Makefiles serially. Test-local aliases cover literal `ar` and
+`objcopy` calls. Independent components still build when another fails. The
+harness supplies build ordering and directories; it does not demonstrate that
+the root Makefile's dependency graph or setup scripts are correct.
 
-1. BIOS stage 2 or UEFI loader reaches the handoff.
-2. Kernel installs memory management and its interrupt table.
-3. Timer IRQs advance a counter and a deliberate fault reaches the right handler.
-4. A known file is read through the storage/FAT32 path.
-5. A small write is flushed, the guest exits, and the host verifies persisted data.
+If all prerequisites build, it checks ELF structure and BIOS payload sizes
+before packaging, then verifies bytes at the fixed LBAs and required filesystem
+contents. UEFI checks include the PE machine and currently packaged paths.
+These structural checks do not bless the known font-path and firmware-entry
+problems. A missing fresh image is reported as **blocked**, with a failing exit
+status, rather than a passing or silently skipped boot.
 
-Use TCG as the portable baseline and fixed QEMU machine/device settings. Give
-each test a temporary directory, disk copy, OVMF VARS copy, bounded timeout, and
-captured output. Keep failed images and logs as test artifacts. Use snapshots
-for disposable smoke tests, but a writable temporary disk for persistence tests.
-No test needs a physical disk or privileged container.
+There are two distinct emulator checks:
 
-The framebuffer needs a window/VNC or captured display for visual checks.
-Keep those separate from serial boot assertions. Screenshots can check a
-controlled drawing scene later; they should not be the only evidence that
-memory, IRQs, or filesystem writes worked.
+- `python3 tests/run.py bios-chain` boots the real MBR and stage 1, which must
+  reach a test-only stage-2 payload at `0x8000`. That payload writes to QEMU's
+  debug-exit device. Only exit status 33 passes. This covers the early BIOS
+  chain, not the production stage 2 or kernel.
+- `python3 tests/qemu_boot.py --firmware bios` (or `uefi`) loads the freshly
+  built image and debug ELF. GDB hardware breakpoints must reach `kernel_main`,
+  `InitialiseIRQ()`, then `timer_callback`. The stopped program counter is
+  checked at each milestone. A 60-second timeout fails the test. Reaching the
+  IRQ initializer alone is not proof that a timer interrupt arrived.
 
-## Userspace tests come after the boundary exists
+The kernel boot runner uses TCG, the existing q35/USB topology, a disk snapshot,
+and a private GDB Unix socket. UEFI gets a fresh OVMF variable-store copy. Logs
+include debugger output and guest errors/resets. No physical disk or privileged
+container is involved. This first boot test observes progress; it does not
+prove filesystem persistence, graphics correctness, repeated timer ticks, or
+exception recovery in the guest.
 
-Before ring-3 tests, repair context save/restore and resource lifetime. Then
-test a minimal program with arguments, file I/O, and normal exit. Add assertions
-that user code cannot access kernel pages, cannot pass invalid pointers through
-syscalls, and cannot corrupt another process. An invalid ELF or a faulting
-program should fail that load/task rather than halt the entire system.
+`python3 tests/qemu_boot.py --self-test` checks the debugger orchestration with
+a tiny synthetic payload. It also verifies that a guest stuck after the first milestone fails on timeout.
+Its labels imitate kernel milestones; its report is
+explicitly separate under `qemu-harness`. It is not evidence of kernel boot or
+IRQ delivery.
 
-## Suggested layout and first iteration
+## GitHub Actions
 
-Use a small layout such as `tests/host`, `tests/images`, `tests/qemu`, and
-`tests/fixtures`, with one runner that reports failures consistently. Future
-targets could be `make test-host`, `make check-images`, and `make test-qemu`.
-They are proposed names, not current commands.
+[The workflow](../../.github/workflows/tests.yml) runs on pushes, pull requests,
+and manual dispatch. Three independent jobs run host tests, asset checks, and
+the BIOS-chain probe. Two further jobs build and boot BIOS and UEFI with matrix
+fail-fast disabled. A failed host test does not suppress firmware diagnostics.
 
-The first implementation should deliver a clean build, a handful of bitmap/
-memory/ELF checks, BIOS image-limit checks, and one BIOS plus one UEFI boot
-milestone. Add FAT32 persistence next. CI can run fast host/image checks on
-each change and bounded emulator jobs for both firmware paths, retaining logs,
-debug ELFs, and failed disk images without committing them to Git.
+Containers use a digest-pinned Ubuntu base, Clang/LLVM 18, and source-pinned GCC
+15.2.0/binutils 2.47 with verified SHA-256 downloads. Ubuntu packages receive the
+repository's updates; this is not a bit-for-bit lock of every dependency. Buildx
+caches the tool images. The cross compiler's initial source build is slower than
+later cached runs. Tests run without network access, with the checkout mounted
+read-only and only `tests/out` writable.
+
+All jobs upload available logs, JUnit/JSON reports, coverage, images, and debug
+ELFs even after failures, retaining them for 14 days. The workflow requires no
+publishing credentials and publishes no container image. Once these files are
+committed and pushed to GitHub with Actions enabled, the workflow runs normally.
+Existing defects are expected to make it red until fixed; they are not exempted.
+
+## Next coverage to add
+
+Fix the failures before relying on deeper paths that they currently interrupt.
+Then add malformed FAT chains/LFN records and overflow cases, real heap
+split/coalesce tests, allocation failure injection, paging ownership, and shared
+boot-info layout checks. Keep intended behavior explicit for APIs whose EOF,
+partial-I/O, or failure contracts are still undefined.
+
+Guest-side assertions and a serial/debug channel would enable deliberate faults,
+repeated timer ticks, PS/2 input, disk-write persistence, and controlled framebuffer
+scenes. Ring-3 isolation, syscall pointer validation, and process teardown tests
+must follow implementation of the userspace boundary.

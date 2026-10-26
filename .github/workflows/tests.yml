@@ -1,0 +1,130 @@
+name: Tests
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: tests-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  portable:
+    name: ${{ matrix.suite }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    strategy:
+      fail-fast: false
+      matrix:
+        suite: [host, images, bios-chain]
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          persist-credentials: false
+      - uses: docker/setup-buildx-action@v4
+      - name: Build test environment
+        uses: docker/build-push-action@v7
+        with:
+          context: tests
+          file: tests/Dockerfile
+          target: host
+          platforms: linux/amd64
+          load: true
+          tags: hackos-tests:host
+          cache-from: type=gha,scope=tests-host-${{ matrix.suite }}
+          cache-to: type=gha,mode=max,scope=tests-host-${{ matrix.suite }}
+      - name: Run tests
+        env:
+          SUITE: ${{ matrix.suite }}
+        run: |
+          mkdir -p tests/out
+          docker run --rm --network none --user "$(id -u):$(id -g)" \
+            --mount "type=bind,source=$PWD,target=/work,readonly" \
+            --mount "type=bind,source=$PWD/tests/out,target=/work/tests/out" \
+            hackos-tests:host python3 tests/run.py "$SUITE"
+      - name: Check debugger runner and timeout detection
+        if: matrix.suite == 'bios-chain'
+        run: |
+          docker run --rm --network none --user "$(id -u):$(id -g)" \
+            --mount "type=bind,source=$PWD,target=/work,readonly" \
+            --mount "type=bind,source=$PWD/tests/out,target=/work/tests/out" \
+            hackos-tests:host python3 tests/qemu_boot.py --self-test
+      - name: Summarize results
+        if: always()
+        run: python3 tests/summarize.py >> "$GITHUB_STEP_SUMMARY"
+      - name: Upload diagnostics and coverage
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: tests-${{ matrix.suite }}
+          retention-days: 14
+          path: |
+            tests/out/${{ matrix.suite }}/
+            tests/out/qemu-harness/
+            !tests/out/**/*.o
+
+  firmware:
+    name: Build and boot ${{ matrix.firmware }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    strategy:
+      fail-fast: false
+      matrix:
+        firmware: [bios, uefi]
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          persist-credentials: false
+      - uses: docker/setup-buildx-action@v4
+      - name: Build cross-toolchain environment
+        uses: docker/build-push-action@v7
+        with:
+          context: tests
+          file: tests/Dockerfile
+          target: toolchain
+          platforms: linux/amd64
+          load: true
+          tags: hackos-tests:toolchain
+          cache-from: type=gha,scope=tests-toolchain-${{ matrix.firmware }}
+          cache-to: type=gha,mode=max,scope=tests-toolchain-${{ matrix.firmware }}
+      - name: Build fresh image and check layout
+        id: build
+        env:
+          FIRMWARE: ${{ matrix.firmware }}
+        run: |
+          mkdir -p tests/out
+          docker run --rm --network none --user "$(id -u):$(id -g)" \
+            --mount "type=bind,source=$PWD,target=/work,readonly" \
+            --mount "type=bind,source=$PWD/tests/out,target=/work/tests/out" \
+            hackos-tests:toolchain python3 tests/build_images.py --firmware "$FIRMWARE"
+      - name: Observe kernel and timer milestones
+        if: ${{ !cancelled() && steps.build.outcome != 'skipped' }}
+        env:
+          FIRMWARE: ${{ matrix.firmware }}
+        run: |
+          docker run --rm --network none --user "$(id -u):$(id -g)" \
+            --mount "type=bind,source=$PWD,target=/work,readonly" \
+            --mount "type=bind,source=$PWD/tests/out,target=/work/tests/out" \
+            hackos-tests:toolchain python3 tests/qemu_boot.py --firmware "$FIRMWARE"
+      - name: Summarize results
+        if: always()
+        run: python3 tests/summarize.py >> "$GITHUB_STEP_SUMMARY"
+      - name: Upload build and boot diagnostics
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: tests-${{ matrix.firmware }}
+          retention-days: 14
+          path: |
+            tests/out/build-${{ matrix.firmware }}/*.log
+            tests/out/build-${{ matrix.firmware }}/*.txt
+            tests/out/build-${{ matrix.firmware }}/*.json
+            tests/out/build-${{ matrix.firmware }}/*.xml
+            tests/out/build-${{ matrix.firmware }}/*.elf
+            tests/out/build-${{ matrix.firmware }}/*.img
+            tests/out/build-${{ matrix.firmware }}/source/**/*.elf
+            tests/out/build-${{ matrix.firmware }}/source/bin/*.img
+            tests/out/qemu-${{ matrix.firmware }}/

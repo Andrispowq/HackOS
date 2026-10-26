@@ -1,0 +1,21 @@
+#pragma once
+#define memcpy hackos_bios_memcpy
+#define memset hackos_bios_memset
+#define memcmp hackos_bios_memcmp
+#define strlen hackos_bios_strlen
+#define strcmp hackos_bios_strcmp
+#define strncmp hackos_bios_strncmp
+#define strcpy hackos_bios_strcpy
+#define itoa hackos_bios_itoa
+#define reverse hackos_bios_reverse
+#define append hackos_bios_append
+#define backspace hackos_bios_backspace
+#define split hackos_bios_split
+#define kmalloc_int hackos_bios_kmalloc_int
+#define kmalloc hackos_bios_kmalloc
+#define kmalloc_a hackos_bios_kmalloc_a
+#define kmalloc_p hackos_bios_kmalloc_p
+#define kmalloc_ap hackos_bios_kmalloc_ap
+#define kfree hackos_bios_kfree
+#define free_mem_addr hackos_bios_free_mem_addr
+#define end hackos_bios_end

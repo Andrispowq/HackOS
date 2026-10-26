@@ -1,6 +1,6 @@
 # TODO
 
-[Documentation index](index.md) · [Build guide](development/building.md) · [Testing plan](development/testing.md)
+[Documentation index](index.md) · [Build guide](development/building.md) · [Testing](development/testing.md)
 
 The first goal is a clean source build and dependable boot through both firmware
 paths. Filesystem integrity and memory ownership come before enabling general
@@ -13,6 +13,7 @@ userspace or adding more devices.
   newer GCC releases. Keep the freestanding headers complete.
 - [ ] Give the UEFI loader portable ELF declarations instead of depending on a
   host `<elf.h>` header absent from the bare toolchain.
+- [ ] Restore or replace the missing framebuffer header used by `libs/test`.
 - [ ] Centralize target `CC`, `CXX`, `LD`, `AR`, and `OBJCOPY`; keep host tools
   separate and pass the selection through all recursive builds.
 - [ ] Specify component-appropriate language standards and ABI/code-generation
@@ -64,6 +65,8 @@ images and fresh firmware state, and failures identify the stage that stopped.
   frame, stack alignment, and frame-pointer assumptions.
 - [ ] Define standard byte-memory operations separately from pixel fills and
   reconcile the duplicated memory/string support routines.
+- [ ] Fix 32-bit bitmap shifts, full-bitmap bounds, vector self-assignment,
+  per-instance usable-memory lists, and early allocator alignment above 4 GiB.
 
 See [memory](system/memory.md) and [interrupts](system/interrupts.md).
 
@@ -78,6 +81,8 @@ See [memory](system/memory.md) and [interrupts](system/interrupts.md).
   through `Device`, FAT32, and VFS instead of discarding them.
 - [ ] Add explicit metadata flush/unmount behavior and verify data survives a
   restart rather than only being readable from the live cache.
+- [ ] Fix nonzero-offset FAT32 reads and the directory-name bounds error reached
+  by file mutations. Keep the new persistence assertions failing until repaired.
 - [ ] Review AHCI DMA transfers and ATA argument narrowing against the documented
   sector-count interface.
 
@@ -98,14 +103,18 @@ See [filesystems](system/filesystems.md) and [devices](system/devices.md).
 
 See [programs and userspace](system/userspace.md).
 
-## 6. Add tests and improve the development loop
+## 6. Extend tests and improve the development loop
 
-- [ ] Implement the first host tests, image checks, and bounded BIOS/UEFI QEMU
-  runs described in the [testing plan](development/testing.md).
-- [ ] Add a source-built FAT32 fixture and persistence tests using disposable disks.
-- [ ] Add CI with a pinned toolchain and retain diagnostics as job artifacts.
-- [ ] Package the builder in Docker, exporting images and debug ELFs; add an
-  optional QEMU/VNC runtime once native build/boot checks are dependable.
+- [x] Add host assertions, image checks, an early BIOS probe, and a bounded
+  debugger runner for BIOS/UEFI kernel milestones.
+- [x] Generate FAT32 fixtures and test persistence against an independent reader.
+- [x] Add GitHub Actions, toolchain containers, coverage, and diagnostic artifacts.
+- [ ] Resolve current failures and reach the full kernel milestones through both
+  firmware paths. A working early BIOS probe does not complete this task.
+- [ ] Extend malformed FAT/ELF cases, allocation-failure tests, and real heap/paging
+  coverage as the existing defects are repaired; see the [testing guide](development/testing.md).
+- [ ] Add guest assertions for faults, repeated IRQ delivery, input, and disk
+  persistence; add controlled graphics scenes and optional VNC access.
 - [ ] Replace machine-specific editor settings with portable target settings.
 - [ ] Inspect/export useful contents of the legacy ext2 image, then remove or
   replace it with a documented fixture recipe.
