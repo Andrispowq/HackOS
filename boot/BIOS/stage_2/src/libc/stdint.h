@@ -1,5 +1,5 @@
 #ifndef STDINT_H
-#define STDINT_
+#define STDINT_H
 
 #include <stdint.h>
 #include <stddef.h>
