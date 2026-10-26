@@ -27,8 +27,9 @@ ATA/AHCI storage, FAT32, and a small VFS. There are also window primitives,
 an ELF loader, a scheduler, and an experimental userspace library.
 
 Preemptive kernel tasks and an interactive PS/2 shell run on both boot paths.
-Try `help`, `ls`, `ps` or `print tick`. Programs still execute in ring 0 and share
-kernel memory; isolated userspace remains unfinished. USB support is experimental,
+Try `help`, `ls`, `ps` or `print tick`. Run `user USR/BIN/RING3` for the minimal
+isolated ring-3 print/preemption/exit demo. The shell and legacy `./` programs
+still run in ring 0. USB support is experimental,
 and there is no networking stack.
 
 ## Getting started

@@ -13,10 +13,10 @@ user code/data, and TSS entries. Kernel code/data selectors are `0x08`/`0x10`;
 the user descriptors occupy `0x18`/`0x20`. The 64-bit TSS descriptor starts at
 `0x28` and occupies two slots, including its upper address and reserved fields.
 
-The presence of user descriptors is preparatory. The TSS stack initialization
-is commented out, and normal process construction selects kernel privilege.
-Ring transitions require a correct 64-bit TSS descriptor, kernel entry stack,
-and interrupt stack behavior before these descriptors can be used safely.
+The scheduler updates TSS.RSP0 to the selected task's kernel stack. User tasks
+enter with selectors `0x1b`/`0x23` and IOPL zero. The I/O bitmap offset lies
+beyond the TSS limit, denying user port access. Only vector `0x80` permits a
+user software interrupt; `0x81` remains kernel-only.
 
 ## Exception entry and dispatch
 
@@ -82,4 +82,5 @@ work on secondary processors.
 
 The [guest regression](../development/testing.md) checks general registers,
 XMM0–15, x87 state, MXCSR and flags while actual task switches occur. Ring-3
-transitions, deliberate exceptions and AVX state need separate coverage.
+transitions and contained protection faults are covered by `qemu_user.py`.
+AVX state remains unsupported.

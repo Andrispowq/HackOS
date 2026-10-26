@@ -1,5 +1,6 @@
 #include "idt.h"
 #include "proc/tasking/process.h"
+#include "proc/user/user.h"
 
 #include "arch/x86_64/ports.h"
 #include "lib/stdio.h"
@@ -139,7 +140,7 @@ void InitialiseIDT()
     idtr.SetGate(IRQ14, IDT_TA_InterruptGate, (uint64_t)irq14);
     idtr.SetGate(IRQ15, IDT_TA_InterruptGate, (uint64_t)irq15);
 
-    idtr.SetGate(0x80, IDT_TA_InterruptGate, (uint64_t)isr128);
+    idtr.SetGate(0x80, IDT_TA_InterruptGate | 0x60, (uint64_t)isr128);
     idtr.SetGate(0x81, IDT_TA_InterruptGate, (uint64_t)isr129);
 
     for(uint8_t i = 0; i < 32; i++)
@@ -202,6 +203,9 @@ extern "C"
 {
     Registers* ISRHandler(Registers* r)
     {
+        if ((r->cs & 3) == 3 && r->int_no < 32 &&
+            r->int_no != 2 && r->int_no != 8 && r->int_no != 18)
+            FaultUserProcess(r);
         if (r->int_no == 0x81) return Schedule(r);
         if (interrupt_handlers[r->int_no] != 0)
         {

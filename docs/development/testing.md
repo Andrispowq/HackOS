@@ -18,9 +18,11 @@ python3 tests/run.py host --case memory_compare
 make -C tests build-images FIRMWARE=bios
 make -C tests test-qemu FIRMWARE=bios
 make -C tests test-shell FIRMWARE=bios
+make -C tests test-user FIRMWARE=bios
 make -C tests build-images FIRMWARE=uefi
 make -C tests test-qemu FIRMWARE=uefi
 make -C tests test-shell FIRMWARE=uefi
+make -C tests test-user FIRMWARE=uefi
 ```
 
 `test` runs host tests, asset checks, and the BIOS MBR/stage-1 probe. The full
@@ -61,6 +63,7 @@ sanitizers; there is no automatic downgrade.
 | VFS and registration | Volume selection, path translation, missing files/volumes, invalid indices/handles, create/read/write/close dispatch, error propagation, slot reuse |
 | FAT32 | Small, empty, long-name and cross-cluster files; seeked reads; enumeration; rewrite/create/delete persistence; partial writes, EOF, empty-file growth, zero-fill, directory extension, invalid BPBs and cyclic chains |
 | ELF | Identity, malformed/truncated headers, program-header bounds, filesystem loading, segment copying and BSS zeroing |
+| User address spaces | Private frames, supervisor kernel mappings, W/X rejection, checked cross-page copies, holes/overflow, allocation failure and reclamation with an explicit physical allocator adapter |
 | Keyboard and line input | Make/break bounds, Shift/Caps Lock, punctuation, extended/Pause sequences, FIFO wrap/overflow, editing and command-length limits |
 | ABI | Kernel/libc `ActiveFile` virtual calls from separate translation units, interrupt-frame offsets, real syscall-bridge assembly alignment and five arguments |
 
@@ -182,6 +185,29 @@ live in `tests/out/qemu-shell-bios/` or `qemu-shell-uefi/`. These tests exercise
 ring-0 threads, not privilege transitions or automatic cleanup of every resource
 a program might leave open. They do not establish physical-PC compatibility.
 
+## Isolated ring-3 regressions
+
+`python3 tests/qemu_user.py --firmware bios` (or `uefi`) builds probes against
+the public syscall definitions and shared assembly stub, installs them in a
+copy of the fresh image, and runs the same q35 topology. It checks the bundled
+demo's print/exit path and runs two simultaneous copies of a probe at identical
+virtual addresses. GDB verifies distinct CR3 roots and code/data/stack frames,
+supervisor kernel mappings, text and stack permissions, stack guards, saved
+CPL3 frames, repeated timer preemption, and private data. It releases both probes
+through their separate physical backing pages; both must finish successfully.
+The assembly probe checks GPR, x87, XMM0–15, MXCSR and flag preservation.
+
+Guest checks exercise valid cross-page console writes, bad pointer ranges,
+unmapped pages, excessive lengths, and rejection of every legacy syscall.
+Nine separate tasks attempt kernel reads/writes, text writes, stack execution,
+port I/O, CLI, kernel-only software interrupts, disabled SYSCALL, and stack-guard
+access. Each must fault with the expected exception while the shell survives.
+Malformed ELF policies are rejected before task creation. Finally, GDB verifies
+all twelve task stacks were reaped and no private user frames/tables remain.
+Reports, console/GDB logs and a framebuffer screenshot are saved under
+`tests/out/qemu-user-bios/` or `qemu-user-uefi/`. These checks cover QEMU's
+configured CPU and firmware; they do not establish physical-PC compatibility.
+
 ## GitHub Actions
 
 [The workflow](../../.github/workflows/tests.yml) runs on pushes, pull requests,
@@ -189,7 +215,7 @@ and manual dispatch. Three independent jobs run host tests, asset checks, and
 the BIOS-chain probe. Two further jobs build and boot BIOS and UEFI with matrix
 fail-fast disabled. The firmware jobs also exercise the public parallel build
 command, check the Compose configuration, and run the interactive shell/task
-regressions for each firmware. A failed host test does not
+and ring-3 regressions for each firmware. A failed host test does not
 suppress firmware diagnostics.
 
 Containers use a digest-pinned Ubuntu base, Clang/LLVM 18, and source-pinned GCC
@@ -212,6 +238,6 @@ split/coalesce tests, allocation failure injection, paging ownership, and shared
 boot-info layout checks. Keep intended behavior explicit for APIs whose EOF,
 partial-I/O, or failure contracts are still undefined.
 
-Extend guest tests with deliberate faults, disk-write persistence, controlled
-framebuffer scenes, and automatic program-resource cleanup. Ring-3 isolation and
-syscall pointer validation must follow implementation of the userspace boundary.
+Extend guest tests with disk-write persistence, controlled framebuffer scenes,
+user resource exhaustion and future handle-based APIs. Keep testing isolation
+and syscall pointer validation as the userspace boundary grows.

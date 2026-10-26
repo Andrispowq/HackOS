@@ -17,12 +17,13 @@ more devices.
 - [ ] Add a serial/debug reporting path for failures before graphics is available.
 - [ ] Replace dense physical-page bookkeeping for highly sparse memory maps;
   distinguish reserved/allocated ownership and test high-RAM guests.
-- [ ] Define page-table/frame ownership on clone and process exit. Return a
+- [ ] Audit legacy page-table cloning; private user page ownership and exit
+  reclamation are implemented. Return a
   controlled failure when translating unmapped addresses.
 - [ ] Honor heap alignment requests and audit DMA buffers for physical
   contiguity. Test heap splitting, coalescing, exhaustion and allocation failure.
-- [ ] Test deliberate exceptions and recovery. Extend context preservation to
-  XSAVE/AVX before enabling those CPU features; finish the TSS for ring-3 entry.
+- [ ] Extend exception coverage beyond the tested user protection faults. Add
+  XSAVE/AVX context preservation before enabling those CPU features.
 
 ## Storage and filesystems
 
@@ -39,12 +40,13 @@ more devices.
 
 ## Userspace and scheduling
 
-- [ ] Load programs into process-owned memory with appropriate permissions;
-  validated ELF ranges alone do not make physical destinations safe.
-- [ ] Complete TSS/kernel entry stacks and deliberate ring-3 entry.
-- [ ] Choose and finish the syscall mechanism, permit intended user entry and
-  establish a stable handle-based ABI instead of exposing kernel objects.
-- [ ] Validate/copy user buffers and remove exposed kernel objects.
+- [x] Load minimal static programs into private memory with W/X permissions,
+  TSS kernel entry stacks, timer preemption and exit reclamation on BIOS/UEFI.
+- [x] Expose a restricted `int 0x80` user ABI for exit and checked literal output;
+  reject legacy raw-pointer calls from CPL3.
+- [ ] Add user terminal input and handle-based file/window APIs, then move the
+  shell into an automatically launched standalone user program. Define an
+  explicit authorized shutdown request for that shell.
 - [ ] Track program-owned files, allocations and windows for automatic cleanup
   on exit or kill. Add blocking waits, priorities and broader scheduler stress tests.
 - [ ] Replace binary-only `usertest.elf` with a source-built fixture.

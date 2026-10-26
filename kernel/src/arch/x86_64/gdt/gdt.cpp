@@ -32,16 +32,13 @@ void InitialiseGDT(bool fromUEFI)
     gdtr.limit = sizeof(GDTGate) * GDT_ENTRIES - 1;
 
     memset(&tss, 0, sizeof(TSS_Struct));
-    /*uint64_t kernel_stack = kmalloc(4096); //Let's allocate some memory for the user stack
-    uint64_t user_stack = kmalloc(4096); //Let's allocate some memory for the user stack
-    tss.rsp[0] = kernel_stack;
-    tss.rsp[2] = user_stack;*/
+    tss.iobp_off = sizeof(tss); // No I/O bitmap: ring 3 gets no port access.
 
     gdtr.SetGate(0, 0, 0, 0, 0);                                // Null segment
     gdtr.SetGate(1, 0, 0, 0x9A, 0xA0);                          // Code segment
-    gdtr.SetGate(2, 0, 0, 0x92, 0xA0);                          // Data segment
+    gdtr.SetGate(2, 0, 0, 0x92, 0xC0);                          // Data segment
     gdtr.SetGate(3, 0, 0, 0xFA, 0xA0);                          // User mode code segment
-    gdtr.SetGate(4, 0, 0, 0xF2, 0xA0);                          // User mode data segment
+    gdtr.SetGate(4, 0, 0, 0xF2, 0xC0);                          // User mode data segment
     // A long-mode TSS descriptor occupies two GDT slots. Its upper half must
     // remain the high address/reserved fields, including during the UEFI handoff.
     gdtr.SetGate(5, (uint64_t)&tss, sizeof(tss) - 1, 0x89, 0);
@@ -50,3 +47,5 @@ void InitialiseGDT(bool fromUEFI)
 
     gdtr.Flush();
 }
+
+void SetKernelEntryStack(uint64_t top) { tss.rsp[0] = top; }

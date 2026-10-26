@@ -127,6 +127,15 @@ jobs:
             --mount "type=bind,source=$PWD,target=/work,readonly" \
             --mount "type=bind,source=$PWD/tests/out,target=/work/tests/out" \
             hackos-tests:toolchain python3 tests/qemu_shell.py --firmware "$FIRMWARE"
+      - name: Exercise isolated ring-3 programs
+        if: ${{ !cancelled() && steps.build.outcome == 'success' }}
+        env:
+          FIRMWARE: ${{ matrix.firmware }}
+        run: |
+          docker run --rm --network none --user "$(id -u):$(id -g)" \
+            --mount "type=bind,source=$PWD,target=/work,readonly" \
+            --mount "type=bind,source=$PWD/tests/out,target=/work/tests/out" \
+            hackos-tests:toolchain python3 tests/qemu_user.py --firmware "$FIRMWARE"
       - name: Summarize results
         if: always()
         run: python3 tests/summarize.py >> "$GITHUB_STEP_SUMMARY"
@@ -147,3 +156,4 @@ jobs:
             tests/out/build-${{ matrix.firmware }}/source/bin/*.img
             tests/out/qemu-${{ matrix.firmware }}/
             tests/out/qemu-shell-${{ matrix.firmware }}/
+            tests/out/qemu-user-${{ matrix.firmware }}/

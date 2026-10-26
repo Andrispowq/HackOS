@@ -47,18 +47,19 @@ void PageFrameAllocator::ReadMemoryMap(MemoryMap* memMap)
     ReservePages(bitmap.buffer, (bytes + 4095) / 4096);
 }
 
-void* PageFrameAllocator::RequestPage()
+void* PageFrameAllocator::TryRequestPage()
 {
     uint64_t index = bitmap.First();
+    if (index == ~0ULL) return nullptr;
+    LockPages((void*)(index * 4096), 1);
+    return (void*)(index * 4096);
+}
 
-    if(index == 0xFFFFFFFFFFFFFFFF)
-    {
-        kprintf("KERNEL ERROR: no more free pages are available!\n");
-        while(1) asm("hlt");
-    }
-
-    LockPages((void*)(index * 0x1000), 1);
-    return (void*)(index * 0x1000);
+void* PageFrameAllocator::RequestPage()
+{
+    if (void* page = TryRequestPage()) return page;
+    kprintf("KERNEL ERROR: no more free pages are available!\n");
+    for (;;) asm("hlt");
 }
 
 void PageFrameAllocator::ReservePages(void* address, uint64_t pageCount)

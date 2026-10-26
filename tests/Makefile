@@ -18,3 +18,7 @@ test-qemu:
 .PHONY: test-shell
 test-shell:
 	$(PYTHON) qemu_shell.py --firmware $(FIRMWARE)
+
+.PHONY: test-user
+test-user:
+	$(PYTHON) qemu_user.py --firmware $(FIRMWARE)

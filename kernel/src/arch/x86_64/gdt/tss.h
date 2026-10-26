@@ -14,4 +14,8 @@ struct TSS_Struct
     uint16_t iobp_off;
 } __attribute__((packed));
 
+static_assert(sizeof(TSS_Struct) == 104);
+static_assert(__builtin_offsetof(TSS_Struct, rsp) == 4);
+static_assert(__builtin_offsetof(TSS_Struct, iobp_off) == 102);
+
 #endif

@@ -68,6 +68,11 @@ void PageTableManager::MapMemory(vaddr_t virtualAddress, paddr_t physicalAddress
     pt_entry.address = physicalAddress >> 12;
     SetEntry(&pt_entry, flags);
     pt->entries[indices.index_P] = pt_entry;
+    // Kernel mappings are shared by user roots too. AHCI reuses a temporary
+    // virtual window with different frames; stale translations would otherwise
+    // read/write a frame that has since become owned by a user process.
+    if (CurrentDirectory && (this == CurrentDirectory || this == &KernelDirectory))
+        asm volatile("invlpg (%0)" : : "r"(virtualAddress) : "memory");
 }
     
 paddr_t PageTableManager::PhysicalAddress(vaddr_t virtualAddress)
@@ -91,8 +96,8 @@ paddr_t PageTableManager::PhysicalAddress(vaddr_t virtualAddress)
 
 void PageTableManager::SetAsCurrent()
 {
-    uint64_t phys_pml4 = PhysicalAddress((uint64_t)pml4);
-    asm volatile("mov %0, %%cr3" : : "r"(phys_pml4));
+    // Roots come from the physical allocator and have a supervisor identity alias.
+    asm volatile("mov %0, %%cr3" : : "r"((uint64_t)pml4) : "memory");
     CurrentDirectory = this;
 }
 

@@ -64,6 +64,7 @@ def build(firmware):
     make("userspace_library", "libs/libc", ["all"])
     make("userspace_shell", "libs/shell", ["all"])
     make("userspace_test", "libs/test", ["all"])
+    make("ring3_program", "libs/ring3", ["all"])
 
     if any(r["status"] != "pass" for r in report.results):
         report.add("image", "blocked", "Required components did not build; no stale binaries are used.")
@@ -99,7 +100,7 @@ def build(firmware):
             assert efi[pe:pe+4] == b"PE\0\0" and struct.unpack_from("<H",efi,pe+4)[0] == 0x8664
             for name in ("/kernel.elf", "/EFI/BOOT/BOOTX64.EFI", "/startup.nsh"):
                 require_success(command(["mdir","-i",fs_image,"::"+name]), "image file " + name)
-        for name in ("/UTIL/FONTS/zap-light16.psf", "/USR/BIN/usertest.elf", "/USR/BIN/test", "/USR/BIN/shell"):
+        for name in ("/UTIL/FONTS/zap-light16.psf", "/USR/BIN/usertest.elf", "/USR/BIN/test", "/USR/BIN/shell", "/USR/BIN/ring3"):
             require_success(command(["mdir","-i",fs_image,"::"+name]), "image file " + name)
         shutil.copy2(image, directory/"HackOS.img")
         shutil.copy2(work/"kernel/bin/kernel.elf", directory/"kernel.elf")

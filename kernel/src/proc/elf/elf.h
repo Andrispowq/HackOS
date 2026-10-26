@@ -88,7 +88,7 @@ enum Elf_Type
 
 #define ET_EXEC 	0x02  // ELF is executable
 
-Elf64_Ehdr* LoadProgram(const char* name, uint64_t* baseAddress);
+Elf64_Ehdr* LoadProgram(const char* name, uint64_t* baseAddress, bool identity = true);
 void PrepareProgram(Elf64_Ehdr* header, uint64_t baseAddress);
 
 void program_task(void* parameter);

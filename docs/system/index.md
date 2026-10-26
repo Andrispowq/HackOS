@@ -64,7 +64,8 @@ or an automated test runner.
 The separate `kernel_task` function runs the interactive kernel shell. It drains
 the keyboard queue, executes commands outside interrupt context, and refreshes
 the console when output changes. The experimental userspace window shell is not
-launched automatically. All scheduled tasks remain in ring 0.
+launched automatically. The `user` command launches isolated ring-3 programs;
+the kernel shell and legacy `./` loader remain in ring 0.
 
 ## Important boundaries
 

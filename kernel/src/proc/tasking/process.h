@@ -11,6 +11,8 @@
 #define SIG_SEGV 3
 #define STACK_SIZE 16384
 
+class UserAddressSpace;
+
 class Process
 {
 public:
@@ -18,8 +20,10 @@ public:
     ~Process();
     void Notify(int signal);
 
-    // Kernel threads share this address space; they never own it.
+    // Kernel threads share KernelDirectory; userSpace owns isolated mappings.
     PageTableManager* pageTable;
+    UserAddressSpace* userSpace = nullptr;
+    uint64_t userPreemptions = 0;
     uint64_t pid, rsp, rip, state;
     uint64_t* stack;
     void* parameter;

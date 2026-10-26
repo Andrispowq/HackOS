@@ -17,6 +17,7 @@ public:
     void UnreservePages(void* address, uint64_t pageCount);
 
     void* RequestPage();
+    void* TryRequestPage();
 
     uint64_t GetFreeRAM() const { return freeMemory; }
     uint64_t GetUsedRAM() const { return usedMemory; }

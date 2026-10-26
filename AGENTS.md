@@ -15,9 +15,10 @@ The [documentation index](docs/index.md) links to the system and development
 guides. Keep those pages consistent with changes to component contracts.
 
 Tasking is enabled for ring-0 kernel threads. Idle reaps exited tasks and
-`kernel_task` runs the interactive PS/2 shell. All tasks share `KernelDirectory`;
-only one fixed-address ELF program may run at a time. Do not describe this as
-working isolated ring-3 execution. See `docs/system/userspace.md` for lifecycle,
+`kernel_task` runs the interactive PS/2 shell. Trusted ring-0 tasks share `KernelDirectory`; only one legacy fixed-address ELF
+program may run at a time. The `user` loader supports concurrent isolated ring-3
+programs with private frames, supervisor-only kernel mappings, and print/exit
+syscalls. The shell remains a ring-0 task. See `docs/system/userspace.md` for lifecycle,
 preemption guards and shell commands.
 
 ## Where to look

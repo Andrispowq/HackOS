@@ -4,6 +4,8 @@
 #include "lib/memory.h"
 #include "lib/string.h"
 #include "kernel.h"
+#include "proc/user/address_space.h"
+#include "arch/x86_64/gdt/gdt.h"
 
 Process* current_process;
 Process* ready_queue;
@@ -52,6 +54,7 @@ Process::Process(const char* label, void* entry, void* parameter)
 
 Process::~Process()
 {
+    delete userSpace;
     kfree(stack);
     delete[] name;
 }
@@ -120,7 +123,14 @@ Registers* Schedule(Registers* frame)
     Process* next = current_process;
     do { next = next->next ? next->next : ready_queue; }
     while (next->state != PROCESS_STATE_ALIVE);
-    if (next != current_process) ++scheduler_switches;
+    if (next != current_process)
+    {
+        ++scheduler_switches;
+        if (frame->int_no == IRQ0 && (frame->cs & 3) == 3)
+            ++current_process->userPreemptions;
+    }
+    if (next->pageTable != current_process->pageTable) next->pageTable->SetAsCurrent();
+    SetKernelEntryStack(next->stack ? ((uint64_t)next->stack + STACK_SIZE) & ~15ULL : 0);
     current_process = next;
     return (Registers*)next->rsp;
 }

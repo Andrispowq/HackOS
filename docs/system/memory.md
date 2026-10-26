@@ -17,7 +17,8 @@ BIOS E820 and EFI type values are not interchangeable.
 places its bitmap in a usable region, initially reserves memory, then releases
 usable regions into the free pool. It protects the first MiB, the kernel image,
 and its own bitmap. `RequestPage` marks a free frame used and returns its
-physical address. Exhaustion currently prints an error and halts.
+physical address. Exhaustion prints an error and halts; `TryRequestPage`
+returns null instead and is used by the user-space loader.
 
 `ReservePages`/`UnreservePages` describe memory unavailable to ordinary
 allocation; `LockPages`/`FreePages` account for allocated memory. Callers must
@@ -51,9 +52,10 @@ PCI windows are left to device discovery; EFI MMIO regions are mapped by their
 consumers. Device discovery adds mappings for hardware registers later.
 
 The flag definitions include user access, cache controls, and execute-disable.
-Their presence does not establish complete permission enforcement or process
-isolation: intermediate-table flags, existing mappings, CR3 transitions, and
-CPU feature setup all matter. Address translation also needs a defined failure
+The user loader sets permissions at every level, shares kernel mappings as
+supervisor-only, and enables NX and supervisor write protection. `MapMemory`
+invalidates changed active/shared mappings, including the reused AHCI buffer
+window. Address translation also needs a defined failure
 result for unmapped addresses instead of blindly walking absent entries.
 
 ## Early allocation and the heap
@@ -81,8 +83,9 @@ that ordinary heap memory is page-aligned or physically contiguous.
 
 Boot structures, firmware tables, framebuffer memory, and device buffers need
 explicit lifetime and mapping rules. Allocation must not reclaim data still
-referenced after a page-table switch. Kernel and user address-space teardown
-also need a clear ownership model before task isolation can be enabled.
+referenced after a page-table switch. User address spaces own a ledger of private frames/tables and release them
+only after switching away; shared kernel mappings are never released with a user
+task. The legacy clone helpers still need a broader ownership audit.
 
 The support routines in [lib/memory.cpp](../../kernel/src/lib/memory.cpp) use
 standard byte-memory semantics: `memset` repeats an unsigned byte, `memcmp`

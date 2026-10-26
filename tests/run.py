@@ -20,8 +20,8 @@ SOURCES = [
     "kernel/src/fs/fat32/fat32driver.cpp",
     "boot/BIOS/stage_2/src/libc/memory.c", "boot/BIOS/stage_2/src/libc/string.c",
     "libs/libc/src/memory.cpp", "libs/libc/src/string.cpp",
-    "common/src/split.c",
-    *[f"tests/host/{s}.cpp" for s in ("adapters", "main", "library_tests", "graphics_tests", "fs_tests", "elf_tests", "bios_tests", "user_tests", "input_tests", "file_abi_provider", "file_abi_consumer", "syscall_tests", "split_tests")],
+    "common/src/split.c", "kernel/src/proc/user/address_space.cpp",
+    *[f"tests/host/{s}.cpp" for s in ("adapters", "main", "library_tests", "graphics_tests", "fs_tests", "elf_tests", "bios_tests", "user_tests", "input_tests", "file_abi_provider", "file_abi_consumer", "syscall_tests", "split_tests", "user_address_tests")],
 ]
 
 

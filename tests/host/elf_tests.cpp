@@ -82,3 +82,19 @@ TEST(elf_rejects_invalid_segment_ranges) {
     }
     return 0;
 }
+
+TEST(elf_virtual_loading_and_empty_segment) {
+    struct Image { Elf64_Ehdr header; Elf64_Phdr segments[2]; } image = {};
+    image.header = valid_header(); image.header.e_phoff = sizeof(Elf64_Ehdr);
+    image.header.e_phnum = 2; image.header.e_entry = USER_BASE;
+    auto& segment = image.segments[0];
+    segment.p_type = PT_LOAD; segment.p_flags = 5;
+    segment.p_vaddr = USER_BASE; segment.p_paddr = ~0ULL;
+    segment.p_memsz = 4096; // User loader allocates frames, ignores p_paddr.
+    image.segments[1].p_type = PT_LOAD; // Empty linker-generated data segment.
+    CHECK(elf_check_ranges(&image.header, sizeof image, false));
+    CHECK(!elf_check_ranges(&image.header, sizeof image, true));
+    image.segments[1].p_filesz = 1;
+    CHECK(!elf_check_ranges(&image.header, sizeof image, false));
+    return 0;
+}

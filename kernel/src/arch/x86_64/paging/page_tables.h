@@ -13,8 +13,7 @@ struct PageTableEntry
     uint64_t size                      : 1;
     uint64_t global                    : 1;
     uint64_t ignored_2                 : 3;
-    uint64_t address                   : 28;
-    uint64_t reserved_1                : 12;
+    uint64_t address                   : 40; // physical address bits 12..51
     uint64_t ignored_1                 : 11;
     uint64_t execution_disabled        : 1;
 };

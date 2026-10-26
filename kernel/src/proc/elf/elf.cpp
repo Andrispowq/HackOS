@@ -1,5 +1,6 @@
 #include "arch/x86_64/interrupts/guard.h"
 #include "elf.h"
+#include "proc/user/address_space.h"
 
 #include "lib/memory.h"
 #include "lib/stdio.h"
@@ -27,7 +28,7 @@ static uint8_t elf_check_file(Elf64_Ehdr* hdr)
 }
 
 // Validate every file-backed range before any segment is mapped or copied.
-static bool elf_check_ranges(Elf64_Ehdr* header, uint64_t size)
+static bool elf_check_ranges(Elf64_Ehdr* header, uint64_t size, bool identity = true)
 {
     if (size < sizeof(Elf64_Ehdr) || !elf_check_file(header) ||
         header->e_ehsize != sizeof(Elf64_Ehdr) ||
@@ -42,16 +43,18 @@ static bool elf_check_ranges(Elf64_Ehdr* header, uint64_t size)
         const Elf64_Phdr& segment = segments[i];
         if (segment.p_type != PT_LOAD) continue;
         if (segment.p_filesz > segment.p_memsz || segment.p_offset > size ||
-            segment.p_filesz > size - segment.p_offset || !segment.p_paddr ||
-            segment.p_memsz > ~0ULL - segment.p_paddr ||
-            segment.p_vaddr != segment.p_paddr) return false;
+            segment.p_filesz > size - segment.p_offset) return false;
+        if (!segment.p_memsz) continue; // Linkers may emit an empty PT_LOAD.
+        if (!segment.p_vaddr ||
+            segment.p_memsz > ~0ULL - segment.p_vaddr ||
+            (identity && (segment.p_vaddr != segment.p_paddr || segment.p_vaddr >= USER_BASE))) return false;
         if (segment.p_align > 1 &&
             ((segment.p_align & (segment.p_align - 1)) ||
              segment.p_vaddr % segment.p_align != segment.p_offset % segment.p_align)) return false;
         for (uint64_t j = 0; j < i; ++j)
             if (segments[j].p_type == PT_LOAD && segment.p_memsz && segments[j].p_memsz &&
-                segment.p_paddr < segments[j].p_paddr + segments[j].p_memsz &&
-                segments[j].p_paddr < segment.p_paddr + segment.p_memsz) return false;
+                segment.p_vaddr < segments[j].p_vaddr + segments[j].p_memsz &&
+                segments[j].p_vaddr < segment.p_vaddr + segment.p_memsz) return false;
         if ((segment.p_flags & 1) && header->e_entry >= segment.p_vaddr &&
             header->e_entry - segment.p_vaddr < segment.p_memsz) entryFound = true;
     }
@@ -60,7 +63,7 @@ static bool elf_check_ranges(Elf64_Ehdr* header, uint64_t size)
 
 #include "fs/filesystem.h"
 
-Elf64_Ehdr* LoadProgram(const char* name, uint64_t* baseAddress)
+Elf64_Ehdr* LoadProgram(const char* name, uint64_t* baseAddress, bool identity)
 {
     if (!baseAddress) return nullptr;
     *baseAddress = 0;
@@ -69,12 +72,12 @@ Elf64_Ehdr* LoadProgram(const char* name, uint64_t* baseAddress)
     ActiveFile* file = drive->OpenFile(name);
     if (!file) return nullptr;
     uint64_t size = file->GetSize();
-    if (size < sizeof(Elf64_Ehdr)) { drive->CloseFile(file); return nullptr; }
+    if (size < sizeof(Elf64_Ehdr) || (!identity && size > 1024 * 1024)) { drive->CloseFile(file); return nullptr; }
     auto header = (Elf64_Ehdr*)kmalloc(size);
     if (!header) { drive->CloseFile(file); return nullptr; }
     int result = drive->Read(file, header, size);
     drive->CloseFile(file);
-    if (result != 0 || !elf_check_ranges(header, size))
+    if (result != 0 || !elf_check_ranges(header, size, identity))
     {
         kfree(header);
         return nullptr;

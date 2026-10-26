@@ -11,8 +11,29 @@ extern uint64_t kernelStart, kernelEnd;
 extern bool fromUEFI;
 
 extern IDTR idtr;
+bool user_nx_enabled;
+static void ConfigurePageProtection()
+{
+    uint32_t a, b, c, d;
+    asm volatile("cpuid" : "=a"(a), "=b"(b), "=c"(c), "=d"(d) : "a"(0x80000000U), "c"(0));
+    if (a >= 0x80000001U)
+    {
+        asm volatile("cpuid" : "=a"(a), "=b"(b), "=c"(c), "=d"(d) : "a"(0x80000001U), "c"(0));
+        user_nx_enabled = d & (1U << 20);
+    }
+    asm volatile("rdmsr" : "=a"(a), "=d"(d) : "c"(0xc0000080U));
+    a &= ~1U; // EFER.SCE=0: user SYSCALL must #UD, never jump to an unset LSTAR.
+    if (user_nx_enabled) a |= 1U << 11;
+    asm volatile("wrmsr" : : "a"(a), "d"(d), "c"(0xc0000080U) : "memory");
+    uint64_t cr0;
+    asm volatile("mov %%cr0, %0" : "=r"(cr0));
+    cr0 |= 1ULL << 16; // Supervisor writes also respect read-only pages.
+    asm volatile("mov %0, %%cr0" : : "r"(cr0) : "memory");
+}
+
 void InitPaging(MemoryMap* memMap)
 {
+    ConfigurePageProtection();
     PageFrameAllocator::SharedAllocator()->ReadMemoryMap(memMap);
 
     PageTable* kernelDirectory = (PageTable*)PageFrameAllocator::SharedAllocator()->RequestPage();

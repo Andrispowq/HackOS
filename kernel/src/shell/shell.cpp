@@ -5,6 +5,7 @@
 #include "fs/filesystem.h"
 #include "proc/elf/elf.h"
 #include "proc/tasking/process.h"
+#include "proc/user/user.h"
 
 static char working_dir[256];
 static ActiveFile* openFile;
@@ -27,7 +28,7 @@ static void Command(char* input)
     {
         kprintf("Commands: help, clear, print <text|tick|time|date>, ps, kill <pid>\n");
         kprintf("Files: ls, wd, cd <path>, open <path>, read, close, ./<program>\n");
-        kprintf("Power: shutdown, restart. Programs currently run in ring 0.\n");
+        kprintf("User: user <path> (isolated ring 3). Power: shutdown, restart.\n");
     }
     else if (strcmp(input, "clear") == 0) clrscr();
     else if (strcmp(input, "ps") == 0) PrintAll();
@@ -123,6 +124,7 @@ static void Command(char* input)
             if (size && drive->Read(openFile, buffer, size) != 0) kprintf("Read failed.\n");
             else kprintf("%s\n", buffer);
         }
+        else if (strncmp(input, "user ", 5) == 0 && PathFor(input + 5, path)) LoadUserProgramTask(path);
         else if (strncmp(input, "./", 2) == 0 && PathFor(input + 2, path)) LoadProgramTask(path);
         else kprintf("Unknown command: %s\n", input);
     }
