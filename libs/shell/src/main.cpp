@@ -1,8 +1,10 @@
 #include "hackos/user.h"
 #include "hackos/runtime/line_buffer.h"
 #include "hackos/runtime/arguments.h"
+#include "hackos/runtime/history.h"
 using namespace User;
 static char workingDirectory[256] = "~";
+static CommandHistory history;
 static uint64_t openFile = HACKOS_ERROR;
 
 static void Prompt()
@@ -36,7 +38,7 @@ static void Launch(char* command)
     if (!PathFor(args[0], path)) return;
     args[0] = path;
     CollectBackground();
-    uint64_t pid = syscall_spawn_args(path, argc, args);
+    uint64_t pid = background ? syscall_spawn_args(path, argc, args) : syscall_spawn_foreground(path, argc, args);
     if (pid == HACKOS_ERROR) { Print("Cannot load user program: "); Print(path); Print("\n"); return; }
     if (background)
     {
@@ -44,6 +46,7 @@ static void Launch(char* command)
     }
     int64_t status;
     if (syscall_wait(pid, &status, 0) != pid) { Print("Wait failed.\n"); return; }
+    if (status == 130) { Print("^C\n"); return; }
     if (status)
     {
         Print("Program exited with status ");
@@ -59,7 +62,7 @@ static void Command(char* input)
     if (Starts(input, "./")) { Launch(input + 2); return; }
     if (Equal(input, "help"))
     {
-        Print("Commands: help, clear, print <text|tick|time|date>, ps, kill <pid>\n");
+        Print("Commands: help, history, clear, print <text|tick|time|date>, ps, kill <pid>\n");
         Print("Files: ls, wd, cd <path>, open <path>, read, close, ./<program>\n");
         Print("User: user <path> [args] (foreground; append & for background). Power: shutdown, restart.\n");
     }
@@ -67,6 +70,11 @@ static void Command(char* input)
     {
         if (syscall_power(Equal(input, "shutdown") ? 0 : 1) != 0)
             Print("Power request failed.\n");
+    }
+    else if (Equal(input, "history"))
+    {
+        for (uint64_t i = 0; i < history.Count(); ++i)
+        { Number(i+1); Print(" "); Print(history.At(i)); Print("\n"); }
     }
     else if (Equal(input, "clear")) syscall_console(1);
     else if (Equal(input, "ps"))
@@ -167,11 +175,23 @@ int main()
     {
         CollectBackground();
         uint64_t value = syscall_input();
-        if (value == HACKOS_DENIED) { Print("Only the boot shell owns terminal input.\n"); return 1; }
+        if (value == HACKOS_DENIED) { Print("Shell does not own terminal input.\n"); return 1; }
         if (!value) { syscall_yield(); continue; }
+        if (value == HACKOS_KEY_INTERRUPT)
+        {
+            line.Reset(); history.ResetNavigation(); discard = false;
+            Print("^C\n"); Prompt(); continue;
+        }
+        if (!discard && (value == HACKOS_KEY_UP || value == HACKOS_KEY_DOWN))
+        {
+            const char* recalled = value == HACKOS_KEY_UP ? history.Up(line.Text()) : history.Down(line.Text());
+            for (uint64_t i = 0; i < line.Length(); ++i) syscall_console(0);
+            if (recalled != line.Text()) line.Set(recalled);
+            Print(line.Text()); continue;
+        }
         if (value == HACKOS_INPUT_OVERFLOW)
         {
-            line.Reset(); discard = true;
+            line.Reset(); history.ResetNavigation(); discard = true;
             Print("\nKeyboard queue overflow; press Enter to start a new command.\n");
             continue;
         }
@@ -181,9 +201,9 @@ int main()
         {
         case LineBuffer::Echo: syscall_user_write(&ch, 1); break;
         case LineBuffer::Erase: syscall_console(0); break;
-        case LineBuffer::Submit: Print("\n"); Command(line.Text()); line.Reset(); Prompt(); break;
+        case LineBuffer::Submit: Print("\n"); history.Add(line.Text()); Command(line.Text()); line.Reset(); Prompt(); break;
         case LineBuffer::Overflow:
-            Print("\nCommand too long (maximum 255 characters).\n"); line.Reset(); Prompt(); break;
+            Print("\nCommand too long (maximum 255 characters).\n"); line.Reset(); history.ResetNavigation(); Prompt(); break;
         default: break;
         }
     }

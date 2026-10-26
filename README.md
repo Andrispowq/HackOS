@@ -30,7 +30,8 @@ An automatically started standalone ring-3 PS/2 shell runs on both boot paths.
 Try `help`, `ls`, `ps` or `print tick`. Run `user USR/BIN/RING3` for the minimal
 isolated ring-3 print/preemption/exit demo. Both `./` and `user` accept arguments and wait for isolated programs to exit
 (append `&` for background execution); `shutdown` requests kernel ACPI
-power-off. USB support is experimental,
+power-off. `./USR/BIN/INPUT` demonstrates interactive input; Ctrl-C stops the
+foreground program, and Up/Down recalls the latest 256 shell commands. USB support is experimental,
 and there is no networking stack.
 
 ## Getting started

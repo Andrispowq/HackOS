@@ -48,8 +48,13 @@ more devices.
   process/file data and process-owned read handles, and authorize shell shutdown.
 - [x] Add bounded command arguments, parent-owned exit results and blocking
   foreground waits, with explicit background launches.
-- [ ] Add blocking input, Ctrl-C/job control, a user heap, file writes and
+- [x] Add foreground input ownership, safe Ctrl-C termination, and a fixed
+  256-command shell history with Up/Down draft navigation.
+- [ ] Add blocking input, process-group/job control, a user heap, file writes and
   owned window handles to the safe ABI. Port remaining legacy runtime helpers.
+- [ ] Port the old window test into a separate ring-3 program and package it once
+  checked window creation/drawing and ownership exist. The old test (e.g.
+  `38dbbf5:libs/test/src/main.cpp`) uses retired calls and kernel buffer pointers.
 - [ ] Extend the implemented automatic read-handle cleanup to future allocations
   and windows. Add blocking waits, priorities and broader scheduler stress tests.
 - [ ] Replace binary-only `usertest.elf` with a source-built fixture.

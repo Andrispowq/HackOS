@@ -17,3 +17,7 @@ constexpr uint32_t HACKOS_DIRECTORY = 16;
 constexpr uint64_t HACKOS_MAX_ARGS = 16;
 constexpr uint64_t HACKOS_ARG_BYTES = 1024; // includes all terminating NULs
 constexpr uint64_t HACKOS_WAIT_NOHANG = 1;
+
+constexpr uint64_t HACKOS_KEY_UP = 128;
+constexpr uint64_t HACKOS_KEY_DOWN = 129;
+constexpr uint64_t HACKOS_KEY_INTERRUPT = 3;

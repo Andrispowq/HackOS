@@ -21,7 +21,9 @@ supervisor-only kernel mappings. Both `./` and `user` launch ring-3 programs wit
 foreground waits by default; a separate trailing `&` requests background mode.
 Exit results belong to the parent independently of idle resource reclamation.
 All active syscalls are user interfaces; kernel code calls internal functions
-directly. Only the boot shell has input, console editing, kill and power rights.
+directly. The boot shell grants input/backspace to its foreground child; only the
+shell retains foreground-spawn, kill and power rights. Ctrl-C is deferred from
+IRQ context to a safe scheduler point. Shell history is a static 256-command ring.
 See `docs/system/userspace.md` for ABI, ownership and lifecycle contracts.
 
 ## Where to look

@@ -9,7 +9,8 @@ int main()
     for (uint64_t nr = 1; nr <= 13; ++nr) ok = MakeSyscall(nr,0,0,0,0,0) == HACKOS_ERROR && ok;
     ok = syscall_power(0) == HACKOS_DENIED && ok;
     ok = syscall_power(1) == HACKOS_DENIED && ok;
-    ok = syscall_input() == HACKOS_DENIED && ok;
+    ok = syscall_input() == 0 && ok;
+    ok = syscall_spawn_foreground("~/USR/BIN/TEST",0,nullptr) == HACKOS_DENIED && ok;
     ok = syscall_console(1) == HACKOS_DENIED && ok;
     ok = syscall_kill(2) == HACKOS_DENIED && ok;
     ok = syscall_clock((HackosClock*)0x100000) == HACKOS_ERROR && ok;

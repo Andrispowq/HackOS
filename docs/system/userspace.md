@@ -71,6 +71,7 @@ Console rendering and hardware operations remain kernel services.
 
 | Command | Behavior |
 | --- | --- |
+| `history` | List the newest 256 submitted commands; Up/Down recalls them |
 | `help`, `clear` | Show commands or clear the console |
 | `print <text>` | Print literal text, including percent signs |
 | `print tick`, `print time`, `print date` | Show monotonic ticks or RTC values |
@@ -80,10 +81,10 @@ Console rendering and hardware operations remain kernel services.
 | `./<program> [args]`, `user <path> [args]` | Launch an isolated foreground program and wait; append a separate `&` for background execution |
 | `shutdown`, `restart` | Request kernel ACPI power-off or platform restart |
 
-Input supports the US layout, Shift, Caps Lock and Backspace. Lines longer than
-255 characters are discarded. Queue overflow discards input until Enter. There
-is no history, completion, pipelines, environment expansion, Ctrl-C/job control
-or blocking terminal API yet. Program output shares the console with the shell.
+Input supports the US layout, Shift, Caps Lock, Backspace and Up/Down arrows.
+Lines longer than 255 characters are discarded. Queue overflow discards input
+until Enter. There is no completion, pipelines, environment expansion, process
+group/job control or blocking terminal-read API yet. Program output shares the console with the shell.
 
 Program commands split arguments on spaces/tabs. Single or double quotes group
 words (including empty strings); a backslash escapes the next character, also
@@ -99,15 +100,46 @@ user USR/BIN/RING3
 ```
 
 The foreground prompt appears only after wait returns. Nonzero statuses are
-reported. While waiting, the shell does not consume queued keyboard input or
-transfer its terminal privilege to the child. A bare trailing `&` opts out of
-waiting; the shell collects background results with nonblocking waits during
-its input loop.
+reported. `spawn_foreground` copies arguments and grants input ownership before
+the child can run, avoiding a spawn-to-handoff race. The shell then waits without
+reading input. A bare trailing `&` uses ordinary spawn and grants no terminal
+access; the shell collects background results with nonblocking waits.
 
-Only the process designated by the kernel at boot owns terminal input, console
-editing, task-kill and power privileges. Spawning another copy of SHELL does not
-inherit those privileges. Ordinary programs can print, inspect processes, read
-files, spawn, yield and exit. This is a minimal single-user permission model,
+Ownership returns automatically on exit, fault, kill or Ctrl-C. The keyboard
+queue is cleared at each handoff so child input cannot accidentally execute as
+shell commands. `input()` remains nonblocking: a foreground program reads events
+and yields on zero. Echo and line editing are program responsibilities. Try
+`./USR/BIN/INPUT` for the packaged interactive example: it echoes edited lines,
+accepts `exit`, and can be interrupted with Ctrl-C.
+
+Both Ctrl keys support Ctrl-C. It terminates the foreground process with status
+130 even if that process never reads input or its queue is full. The IRQ records
+a target PID; the scheduler performs termination only after preemption guards
+have ended. Normal deferred cleanup still closes files and frees user memory.
+Ctrl-C does not kill background tasks or the shell. At the shell prompt it cancels
+the current line and history navigation. This targets one foreground process,
+not a process group; interactive children of that process do not inherit input.
+
+## Command history
+
+The shell stores the latest 256 nonblank submitted commands in a predefined
+`char[256][256]` ring, with no dynamic allocation. Each entry can hold the full
+255-character command plus NUL. It records original text before argument parsing,
+including quotes, duplicate commands and commands that fail. Blank, cancelled
+and overlong discarded lines are not added. The oldest entry is overwritten when
+full; history is session-local and does not survive reboot.
+
+Up recalls older commands, Down returns toward newer commands and finally restores
+the unfinished draft present before navigation. Backspace/typing edits the recalled
+copy; stored entries change only when a new command is submitted. `history` lists
+the retained commands from oldest to newest (including that `history` invocation).
+
+The kernel-designated boot shell controls foreground launches, task-kill and
+power privileges. Terminal input belongs to the shell or its current foreground
+child. That child can also request console backspace; clear remains shell-only.
+Spawning another copy of SHELL does not inherit those privileges. Ordinary programs can print, inspect processes, read
+files, spawn, yield and exit. Background processes cannot read terminal input or
+edit the console. This is a minimal single-user permission model,
 not a hardened multi-user security system. Power returns zero when the hardware request is issued, or an error when it
 cannot be issued. Actual completion is confirmed by guest shutdown, not just a
 return value or printed message.
@@ -125,8 +157,8 @@ return an error rather than being reinterpreted as new operations.
 | ---: | --- | --- |
 | 0 | `exit(status)` | Does not return; libc uses it when `main` returns |
 | 14 | `user_write(buffer, length)` | Literal console bytes, maximum 1024; returns count |
-| 15 | `input()` | Character, 0 if empty, 256 for queue overflow; boot shell only |
-| 16 | `console(operation)` | 0 backspace, 1 clear; boot shell only |
+| 15 | `input()` | Character/event, 0 if empty, 256 for queue overflow; terminal owner only |
+| 16 | `console(operation)` | 0 backspace for terminal owner, 1 clear for boot shell |
 | 17 | `clock(out)` | Copies ticks and RTC fields; RTC retains existing BCD representation |
 | 18 | `process_info(index, out)` | Copies one process record; 1 found, 0 end |
 | 19 | `kill(pid)` | Stops another user task; boot shell only |
@@ -140,6 +172,7 @@ return an error rather than being reinterpreted as new operations.
 | 27 | `yield()` | Gives another runnable task a scheduling opportunity |
 | 28 | `spawn_args(path, argc, argv)` | Copies a bounded user pointer vector and strings; returns child PID |
 | 29 | `wait(pid, status, flags)` | Collects a direct child; flags 0 block, `HACKOS_WAIT_NOHANG` polls |
+| 30 | `spawn_foreground(path, argc, argv)` | Boot-shell-only spawn with atomic terminal ownership handoff |
 
 Calls use `int 0x80`: RAX is the number, RDI/RSI/RDX/RCX/R8 hold arguments,
 and saved RAX receives the result. Successful operations without another result
@@ -152,7 +185,9 @@ disabled; vector `0x81` remains kernel-only.
 records with pinned sizes and zeroed padding. Paths are NUL-terminated within
 256 bytes and start with `~`. Copy-in validates mapped user pages; copy-out
 also requires writable pages and validates the whole range before touching it.
-Read validates the destination before advancing a file offset. No syscall
+Read validates the destination before advancing a file offset. Input events
+include `HACKOS_KEY_UP` (128), `HACKOS_KEY_DOWN` (129), and
+`HACKOS_KEY_INTERRUPT` (3, shell only). No syscall
 returns kernel addresses, virtual objects, format strings or `va_list` objects.
 
 Each process can own eight file handles. Monotonically allocated opaque tokens
@@ -174,7 +209,11 @@ Kernel and user code compile shared primitives with their own flags. Line editin
 is shared with host tests through `common/include/hackos/runtime/line_buffer.h`.
 All active programs use the isolated linker layout in `libs/ring3/userspace.ld`.
 The test program reads a file through the safe ABI; the ring3 demo exercises
-print, timer preemption and exit. The old split adapters retain host coverage,
+print, timer preemption and exit. The old window test is not runnable or packaged
+as a working program: it depends
+on retired window calls and kernel framebuffer pointers. A separate ring-3 window
+example must wait for an owned, checked window API; restoring those unsafe calls
+is not part of terminal support. The old split adapters retain host coverage,
 but allocation-dependent legacy libc helpers are not linked into user programs.
 
 The [testing guide](../development/testing.md) covers shell CPL3 entry, input,

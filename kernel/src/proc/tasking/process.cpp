@@ -1,5 +1,6 @@
 #include "process.h"
 #include "hackos/abi.h"
+#include "drivers/keyboard/keyboard.h"
 #include "arch/x86_64/interrupts/guard.h"
 #include "lib/stdio.h"
 #include "lib/memory.h"
@@ -17,6 +18,27 @@ uint64_t scheduler_switches;
 uint64_t tasks_reaped;
 uint64_t user_files_live;
 extern PageTableManager KernelDirectory;
+
+static uint64_t terminalOwner, terminalShell, pendingInterrupt;
+void SetTerminalOwner(uint64_t pid)
+{
+    InterruptGuard guard;
+    if (!terminalShell) terminalShell = pid; // first owner is the boot shell
+    terminalOwner = pid;
+    pendingInterrupt = 0;
+    ClearKeyboard(); // typeahead must never cross an ownership boundary
+}
+bool OwnsTerminal(uint64_t pid) { return pid && pid == terminalOwner; }
+void RequestTerminalInterrupt()
+{
+    // IRQ context: latch a target only. Do not kill/yield inside an interrupted
+    // allocator or console PreemptionGuard. Ctrl-C at the shell stays an event.
+    if (terminalOwner && terminalOwner != terminalShell)
+    {
+        pendingInterrupt = terminalOwner;
+        ClearKeyboard();
+    }
+}
 
 void DisablePreemption() { InterruptGuard guard; ++preemption_depth; }
 void EnablePreemption() { InterruptGuard guard; --preemption_depth; }
@@ -101,6 +123,7 @@ static void CompleteProcess(Process* child)
 {
     if (child->state == PROCESS_STATE_ZOMBIE) return;
     child->state = PROCESS_STATE_ZOMBIE;
+    if (child->pid == terminalOwner) SetTerminalOwner(terminalShell);
     for (auto parent = ready_queue; parent; parent = parent->next)
         if (parent->pid == child->parentPid && parent->state != PROCESS_STATE_ZOMBIE)
             for (auto& result : parent->children) if (result.pid == child->pid)
@@ -163,6 +186,14 @@ Registers* Schedule(Registers* frame)
 {
     // Called with interrupts disabled, after the PIC has been acknowledged.
     if (!enabled || preemption_depth) return frame;
+    if (pendingInterrupt)
+    {
+        uint64_t target = pendingInterrupt; pendingInterrupt = 0;
+        if (target == terminalOwner && target != terminalShell)
+            for (auto p = ready_queue; p; p = p->next)
+                if (p->pid == target && p->state != PROCESS_STATE_ZOMBIE)
+                { p->exitStatus = 130; CompleteProcess(p); break; }
+    }
     current_process->rsp = (uint64_t)frame;
     Process* next = current_process;
     do { next = next->next ? next->next : ready_queue; }

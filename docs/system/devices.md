@@ -51,9 +51,12 @@ The [keyboard driver](../../kernel/src/drivers/keyboard/keyboard.cpp) reads
 translated set-1 scancodes from port `0x60`. Its allocation-free decoder tracks
 both Shift keys and Caps Lock, bounds-checks make/break codes, and handles or
 ignores extended sequences. Decoded characters enter a 255-character FIFO. The
-boot shell drains it through the input syscall, edits a bounded line in ring 3,
+terminal owner (boot shell or foreground program) drains it through the input
+syscall and edits a bounded line in ring 3,
 and dispatches commands on Enter. The kernel reads the queue with interrupts
-briefly disabled; other processes cannot consume the shell's terminal input. Overflow discards input instead of executing
+briefly disabled; background processes cannot consume terminal input. Extended Up/Down keys become
+events, and either Ctrl key plus C cancels shell input or requests termination of
+the foreground process at a safe scheduling point. Overflow discards input instead of executing
 a truncated command. The keyboard layout is US ASCII.
 
 The [mouse driver](../../kernel/src/drivers/mouse/mouse.cpp) configures the PS/2

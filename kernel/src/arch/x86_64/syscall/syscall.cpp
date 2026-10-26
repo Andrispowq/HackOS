@@ -41,7 +41,7 @@ static void Info(HackosFileInfo& info, ActiveFile* file)
 }
 static uint64_t UserInput()
 {
-    if (!Caller()->systemShell) return HACKOS_DENIED;
+    if (!OwnsTerminal(Caller()->pid)) return HACKOS_DENIED;
     char ch;
     auto result = ReadKeyboard(ch);
     return result == KeyboardRead::Overflow ? HACKOS_INPUT_OVERFLOW :
@@ -49,7 +49,7 @@ static uint64_t UserInput()
 }
 static uint64_t UserConsole(uint64_t operation)
 {
-    if (!Caller()->systemShell) return HACKOS_DENIED;
+    if (!OwnsTerminal(Caller()->pid) || (operation != 0 && !Caller()->systemShell)) return HACKOS_DENIED;
     if (operation == 0) kprintf_backspace();
     else if (operation == 1) clrscr();
     else return HACKOS_ERROR;
@@ -112,6 +112,14 @@ static uint64_t UserSpawnArgs(const char* name, uint64_t argc, const char* const
     if (count >= 16) return HACKOS_ERROR;
     uint64_t pid = LoadUserProgramTask(path, false, argc, arguments);
     return pid ? pid : HACKOS_ERROR;
+}
+static uint64_t UserSpawnForeground(const char* name, uint64_t argc, const char* const* argv)
+{
+    if (!Caller()->systemShell || !OwnsTerminal(Caller()->pid)) return HACKOS_DENIED;
+    // Dispatcher holds a PreemptionGuard: the child cannot run before handoff.
+    uint64_t pid = UserSpawnArgs(name, argc, argv);
+    if (pid != HACKOS_ERROR) SetTerminalOwner(pid);
+    return pid;
 }
 static uint64_t UserOpen(const char* name)
 {
@@ -227,6 +235,7 @@ static void syscall_handler(Registers* r)
     case HACKOS_SYS_kill: r->rax = UserKill(r->rdi); break;
     case HACKOS_SYS_spawn: r->rax = UserSpawn((const char*)r->rdi); break;
     case HACKOS_SYS_spawn_args: r->rax = UserSpawnArgs((const char*)r->rdi, r->rsi, (const char* const*)r->rdx); break;
+    case HACKOS_SYS_spawn_foreground: r->rax = UserSpawnForeground((const char*)r->rdi, r->rsi, (const char* const*)r->rdx); break;
     case HACKOS_SYS_open: r->rax = UserOpen((const char*)r->rdi); break;
     case HACKOS_SYS_read: r->rax = UserRead(r->rdi, (void*)r->rsi, r->rdx); break;
     case HACKOS_SYS_close: r->rax = UserClose(r->rdi); break;

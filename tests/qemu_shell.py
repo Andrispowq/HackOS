@@ -40,8 +40,8 @@ class QMP:
             if "return" in result:
                 return result["return"]
 
-    def key(self, key, shift=False):
-        keys = (["shift"] if shift else []) + [key]
+    def key(self, key, shift=False, control=False):
+        keys = (["ctrl"] if control else []) + (["shift"] if shift else []) + [key]
         self.call("send-key", {"keys": [{"type": "qcode", "data": k} for k in keys], "hold-time": 1})
         time.sleep(0.025)
 
@@ -89,7 +89,7 @@ def test(firmware, timeout):
     def run():
         programs = [build_probe(directory, built/"source", waiting) for waiting in (False, True)]
         programs += [build_probe(directory,built/"source",extra=extra)
-                     for extra in (("args_probe.cpp","ARGPROBE"),("wait_test.cpp","WAITTEST"))]
+                     for extra in (("args_probe.cpp","ARGPROBE"),("wait_test.cpp","WAITTEST"),("terminal_probe.cpp","TERMPROBE"))]
         symbols = require_success(command([os.environ.get("CROSS_COMPILE","x86_64-elf-")+"nm",directory/"ARGPROBE"]), "argument probe symbols")
         gate = int(re.search(r"^([0-9a-f]+) [A-Za-z] release_gate$", symbols, re.M)[1],16)
         image = directory/"HackOS.img"
@@ -177,6 +177,22 @@ bp.delete()
                     enter("x"*255 + "\b"*256, "\nroot@root:~$ ")
                     enter("x"*256, "Command too long")
                     enter("print recovered", "\nrecovered\n")
+                    enter("print history_one", "\nhistory_one\n")
+                    enter("print history_two", "\nhistory_two\n")
+                    offset = len(output())
+                    qmp.type("print draft")
+                    qmp.key("up"); qmp.key("up"); qmp.key("down"); qmp.key("down")
+                    qmp.type("\n")
+                    wait_text("\ndraft\n",offset)
+                    wait_text("root@root:~$ ",offset)
+                    offset = len(output()); qmp.key("up"); qmp.type("\n")
+                    wait_text("\ndraft\n",offset)
+                    wait_text("root@root:~$ ",offset)
+                    offset = len(output()); qmp.type("print should_not_run"); qmp.key("c",control=True)
+                    wait_text("^C\nroot@root:~$ ",offset)
+                    offset = len(output()); qmp.key("up"); qmp.type("\n")
+                    wait_text("\ndraft\n",offset) # cancelled partial input was not stored
+                    wait_text("root@root:~$ ",offset)
                     offset = len(output())
                     qmp.type('./USR/BIN/ARGPROBE alpha "two words" "" escaped\\ space "&"\n')
                     wait_text("ARGS_READY",offset)
@@ -214,7 +230,9 @@ print("FOREGROUND_WAIT_OK")
                     qmp.call("cont")
                     wait_text("ARGS_DONE",offset)
                     wait_text("Program exited with status 7.",offset)
-                    wait_text("\nqueued\n",offset)
+                    wait_text("root@root:~$ ",offset)
+                    assert "\nqueued\n" not in output()[offset:], "Child typeahead leaked into shell commands"
+                    enter("print reclaimed", "\nreclaimed\n")
                     tail = output()[offset:]
                     assert tail.index("ARGS_DONE") < tail.index("Program exited with status 7.") < tail.index("root@root:")
                     enter("./USR/BIN/WAITTEST", "WAIT_TEST_OK")
@@ -226,12 +244,34 @@ print("FOREGROUND_WAIT_OK")
                         qmp.type("./USR/BIN/ABIPROBE\n")
                         wait_text("PROBE_CONTEXT_BEGIN", offset)
                         wait_text("PROBE_OK", offset)
+                        wait_text("root@root:~$ ", offset)
                         assert "PROBE_FAIL" not in output()[offset:], "Guest ABI/context check failed"
                         enter("ps", "~/USR/BIN/SHELL (2) ALIVE")
                     enter("./USR/BIN/WAITPROBE &", "WAIT_PROBE_READY")
                     enter("./USR/BIN/ABIPROBE", "PROBE_OK")
                     enter("ps", "WAITPROBE")
                     pid = re.findall(r"Process: ~/USR/BIN/WAITPROBE \((\d+)\) ALIVE", output())[-1]
+                    # Input goes to the foreground program, while a background
+                    # task remains alive and cannot consume the keyboard queue.
+                    offset = len(output()); qmp.type("./USR/BIN/INPUT\n")
+                    wait_text("input> ",offset)
+                    qmp.type("hellx\bo\n")
+                    wait_text("You typed: hello\ninput> ",offset)
+                    assert "root@root:" not in output()[offset:]
+                    qmp.type("exit\n"); wait_text("root@root:~$ ",offset)
+                    offset = len(output()); qmp.type("./USR/BIN/INPUT\n")
+                    wait_text("input> ",offset)
+                    qmp.type("unfinished"); qmp.key("c",control=True)
+                    wait_text("^C\nroot@root:~$ ",offset)
+                    for iteration in range(2):
+                        offset = len(output()); qmp.type("./USR/BIN/TERMPROBE\n")
+                        wait_text("TERMINAL_SPIN_READY",offset)
+                        if iteration == 0: qmp.type("x"*260+"\n") # full queue cannot mask Ctrl-C
+                        qmp.key("c",control=True)
+                        wait_text("^C\nroot@root:~$ ",offset)
+                        assert "Unknown command:" not in output()[offset:], "Interrupted typeahead executed in shell"
+                    enter("ps", "WAITPROBE")
+                    enter("history", './USR/BIN/ARGPROBE alpha "two words" "" escaped\\ space "&"')
                     enter("kill 1", "Cannot stop the idle or shell task.")
                     enter("kill 2", "Cannot stop the idle or shell task.")
                     enter("kill 99999", "No running task with that PID.")
@@ -255,7 +295,7 @@ bp.delete()
 switches = int(gdb.parse_and_eval("scheduler_switches"))
 reaped = int(gdb.parse_and_eval("tasks_reaped"))
 assert switches > 20, "No sustained task switches"
-assert reaped == 13, "Missing/duplicate task reclamation: " + str(reaped)
+assert reaped == 17, "Missing/duplicate task reclamation: " + str(reaped)
 p = gdb.parse_and_eval("ready_queue")
 labels = []
 while int(p):
@@ -271,6 +311,8 @@ while int(p):
     p = p["next"]
 assert labels == ["idle", "~/USR/BIN/SHELL"], labels
 assert int(gdb.parse_and_eval("user_files_live")) == 0
+assert int(gdb.parse_and_eval("terminalOwner")) == 2
+assert int(gdb.parse_and_eval("pendingInterrupt")) == 0
 print("SHELL_REGRESSION_OK switches=%d reaped=%d" % (switches, reaped))
 end
 detach
@@ -296,7 +338,7 @@ quit
                     (directory/"qmp-events.json").write_text(json.dumps(qmp.events, indent=2))
                     assert any(e.get("event") == "SHUTDOWN" and e["data"].get("guest") and
                                e["data"].get("reason") == "guest-shutdown" for e in qmp.events), "No guest ACPI shutdown event"
-                    return "Auto-started CPL3 shell, quoted/empty/escaped argv, blocking foreground wait and exit status, late/repeated/invalid waits and orphan cleanup, PS/2 editing, safe file handles and bad pointers, register preservation, concurrent programs, exit/kill resource cleanup, and real guest ACPI shutdown; " + result.stdout
+                    return "Auto-started CPL3 shell, fixed history recall/draft/cancel, foreground input and backspace, Ctrl-C of input and busy programs with full queue, quoted/empty/escaped argv, blocking foreground wait and exit status, late/repeated/invalid waits and orphan cleanup, PS/2 editing, safe file handles and bad pointers, register preservation, concurrent programs, exit/kill resource cleanup, and real guest ACPI shutdown; " + result.stdout
                 finally:
                     if qmp: qmp.close()
                     process.terminate()

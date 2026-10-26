@@ -30,6 +30,7 @@ def package(firmware):
         for source, dest in [('util/fonts/zap-light16.psf', 'UTIL/FONTS/zap-light16.psf'),
                              ('util/usertest/usertest.elf', 'USR/BIN/usertest.elf'),
                              ('libs/test/bin/test', 'USR/BIN/test'),
+                             ('libs/input/bin/input', 'USR/BIN/input'),
                              ('libs/ring3/bin/ring3', 'USR/BIN/ring3'),
                              ('libs/shell/bin/shell', 'USR/BIN/shell'), ('hello.txt', 'USR/hello.txt')]:
             mtool('mcopy', ROOT / source, '::/' + dest)

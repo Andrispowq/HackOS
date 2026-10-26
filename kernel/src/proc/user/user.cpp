@@ -99,6 +99,7 @@ uint64_t LoadUserProgramTask(const char* path, bool systemShell, uint64_t argc, 
     space->CopyToUser(cursor, userArgv, (argc + 1) * sizeof(uint64_t));
     auto process = new Process(path, (void*)header->e_entry);
     process->systemShell = systemShell;
+    if (systemShell) SetTerminalOwner(process->pid);
     if (result) { process->parentPid = parent->pid; result->pid = process->pid; }
     process->userSpace = space;
     process->pageTable = &space->directory;

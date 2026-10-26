@@ -32,7 +32,7 @@ TEST(keyboard_extended_and_pause_sequences)
 {
     KeyboardInput keys; char c;
     const uint8_t ignored[] = {0xe0,0x2a,0xe0,0x37,0xe0,0xb7,0xe0,0xaa,
-                               0xe1,0x1d,0x45,0xe1,0x9d,0xc5,0xe0,0x48};
+                               0xe1,0x1d,0x45,0xe1,0x9d,0xc5};
     for (auto code : ignored) keys.PushScancode(code);
     CHECK(!keys.Pop(c));
     keys.PushScancode(0x1e); CHECK(keys.Pop(c) && c == 'a');
@@ -95,5 +95,28 @@ TEST(interrupt_frame_layout)
     CHECK(sizeof(Registers) == 704 && alignof(Registers) == 16);
     CHECK(__builtin_offsetof(Registers, rax) == 576);
     CHECK(__builtin_offsetof(Registers, rsp) == 688);
+    return 0;
+}
+
+TEST(keyboard_arrows_control_and_full_queue_interrupt)
+{
+    KeyboardInput keys; char c;
+    keys.PushScancode(0xe0); keys.PushScancode(0x48);
+    CHECK(keys.Pop(c) && (uint8_t)c == 128);
+    keys.PushScancode(0xe0); keys.PushScancode(0xc8); CHECK(!keys.Pop(c));
+    keys.PushScancode(0xe0); keys.PushScancode(0x50);
+    CHECK(keys.Pop(c) && (uint8_t)c == 129);
+    for (int i=0;i<260;++i) keys.PushScancode(0x1e);
+    keys.PushScancode(0x1d); keys.PushScancode(0x2e);
+    CHECK(keys.TakeInterrupt() && !keys.TakeInterrupt());
+    CHECK(!keys.DiscardOverflow());
+    CHECK(keys.Pop(c) && c == 3 && !keys.Pop(c));
+    keys.PushScancode(0x9d); keys.PushScancode(0x2e);
+    CHECK(keys.Pop(c) && c == 'c');
+    keys.PushScancode(0xe0); keys.PushScancode(0x1d);
+    keys.PushScancode(0x2a); keys.PushScancode(0x2e);
+    CHECK(keys.TakeInterrupt() && keys.Pop(c) && c == 3);
+    keys.PushScancode(0xe0); keys.PushScancode(0x9d);
+    keys.PushScancode(0x2e); CHECK(keys.Pop(c) && c == 'C');
     return 0;
 }

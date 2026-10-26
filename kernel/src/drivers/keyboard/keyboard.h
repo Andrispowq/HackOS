@@ -4,6 +4,7 @@
 #include "lib/stdint.h"
 
 void InitKeyboard();
+void ClearKeyboard();
 enum class KeyboardRead { Empty, Character, Overflow };
 KeyboardRead ReadKeyboard(char& ch);
 

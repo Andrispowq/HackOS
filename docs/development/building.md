@@ -22,7 +22,8 @@ from ring 3, or `user USR/BIN/RING3` for
 the print/preemption/exit demo. `shutdown` requests kernel ACPI power-off. The
 old window demo and raw-pointer libc ABI are retired. Program commands wait for
 completion before showing the prompt; a separate trailing `&` launches in the
-background.
+background. Try `./USR/BIN/INPUT` for interactive text input; Ctrl-C returns to
+the shell. Up/Down browses the fixed 256-command history, and `history` lists it.
 The first image build compiles
 GCC and Binutils from source and takes considerably longer than later cached
 builds. Source changes are picked up when the service starts again.

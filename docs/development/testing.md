@@ -64,7 +64,8 @@ sanitizers; there is no automatic downgrade.
 | FAT32 | Small, empty, long-name and cross-cluster files; seeked reads; enumeration; rewrite/create/delete persistence; partial writes, EOF, empty-file growth, zero-fill, directory extension, invalid BPBs and cyclic chains |
 | ELF | Identity, malformed/truncated headers, program-header bounds, filesystem loading, segment copying and BSS zeroing |
 | User address spaces | Private frames, supervisor kernel mappings, W/X rejection, checked cross-page copies in both directions, read-only output rejection, bounded strings, holes/overflow, allocation failure and reclamation with an explicit physical allocator adapter |
-| Keyboard and line input | Make/break bounds, Shift/Caps Lock, punctuation, extended/Pause sequences, FIFO wrap/overflow, editing and command-length limits |
+| Keyboard and line input | Make/break bounds, Shift/Caps Lock, punctuation, extended/Pause sequences, FIFO wrap/overflow, left/right Ctrl-C through a full queue, arrows, editing and command-length limits |
+| History | Fixed 256-entry wraparound, full-length commands, draft restoration, immutable recalled entries, duplicate retention |
 | Argument parsing | Quoted/empty/escaped words, concatenated quotes, explicit background marker, capacity and malformed syntax |
 | ABI | Fixed-width syscall record layouts and interrupt-frame offsets; historical `ActiveFile` layout checks remain for the unlinked legacy sources |
 
@@ -185,12 +186,22 @@ private stack strings, quoted/empty/escaped arguments and a literal ampersand.
 While the child spins, the harness queues keyboard input and asserts no prompt
 or input echo appears. GDB verifies that the parent is in `WAITING` for that
 child, then releases the child's private gate. Exit status 7 must precede the
-next prompt and queued command. A second program checks invalid argv/status
+next prompt. Queued child input is discarded at ownership return rather than
+being executed as shell commands. A second program checks invalid argv/status
 pointers, excessive argument sizes, non-child and repeated waits, collection
 after idle cleanup, copied argument independence, fault status, legacy spawn,
 and orphan cleanup. Existing concurrency probes use explicit `&` launches.
 
-GDB checks that all thirteen terminated tasks were reaped, only idle and the isolated
+Keyboard tests recall multiple commands, restore a draft, re-execute recalled
+text, cancel partial input with Ctrl-C, and verify original quoted commands in
+`history`. The packaged INPUT program receives edited text and returns normally;
+another copy is interrupted during input. Two busy probes that never read input
+are terminated with Ctrl-C, once with a deliberately full queue. Background input
+and backspace are denied, and a background task survives those interrupts.
+The probes hold open files to verify Ctrl-C cleanup. GDB checks terminal ownership
+returns to the shell with no pending interrupt.
+
+GDB checks that all seventeen terminated tasks were reaped, only idle and the isolated
 shell remain, user-page accounting matches the shell's live ownership, and no
 file handles leaked. Finally the harness types `shutdown` and requires QEMU to
 exit successfully with a QMP `SHUTDOWN` event whose reason is `guest-shutdown`.
