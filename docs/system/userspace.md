@@ -173,6 +173,10 @@ return an error rather than being reinterpreted as new operations.
 | 28 | `spawn_args(path, argc, argv)` | Copies a bounded user pointer vector and strings; returns child PID |
 | 29 | `wait(pid, status, flags)` | Collects a direct child; flags 0 block, `HACKOS_WAIT_NOHANG` polls |
 | 30 | `spawn_foreground(path, argc, argv)` | Boot-shell-only spawn with atomic terminal ownership handoff |
+| 31 | `window_create(spec)` | Copy a `HackosWindowSpec`; return an owned opaque handle |
+| 32 | `window_blit(handle, rect, pixels)` | Copy a packed rectangle of up to 1024 pixels; return 0 |
+| 33 | `window_poll(handle)` | 0 while open, 1 after the mouse closes it; nonblocking |
+| 34 | `window_close(handle)` | Destroy the window and release its handle; return 0 |
 
 Calls use `int 0x80`: RAX is the number, RDI/RSI/RDX/RCX/R8 hold arguments,
 and saved RAX receives the result. Successful operations without another result
@@ -193,8 +197,7 @@ returns kernel addresses, virtual objects, format strings or `va_list` objects.
 Each process can own eight file handles. Monotonically allocated opaque tokens
 are checked against the caller's live slots; closed, stale and foreign tokens
 are rejected. Exit, fault and kill close all outstanding handles. This version
-has no user file-write or window API: those need explicit safe interfaces rather
-than access to the old kernel object layout.
+has no user file-write API; windows use the owned API described below.
 
 ## Runtime and tests
 
@@ -209,14 +212,48 @@ Kernel and user code compile shared primitives with their own flags. Line editin
 is shared with host tests through `common/include/hackos/runtime/line_buffer.h`.
 All active programs use the isolated linker layout in `libs/ring3/userspace.ld`.
 The test program reads a file through the safe ABI; the ring3 demo exercises
-print, timer preemption and exit. The old window test is not runnable or packaged
-as a working program: it depends
-on retired window calls and kernel framebuffer pointers. A separate ring-3 window
-example must wait for an owned, checked window API; restoring those unsafe calls
-is not part of terminal support. The old split adapters retain host coverage,
+print, timer preemption and exit. The standalone `WINDOW` program ports the old
+window demo onto owned handles and pixel uploads. Launch `./USR/BIN/WINDOW`,
+then close its X button, press Q, or use Ctrl-C. Background launches also work; Q requires foreground input ownership.
+The old split adapters retain host coverage,
 but allocation-dependent legacy libc helpers are not linked into user programs.
 
 The [testing guide](../development/testing.md) covers shell CPL3 entry, input,
 file handles, bad pointers, concurrent programs, register preservation, resource
 cleanup and actual guest ACPI shutdown on both BIOS and UEFI. Further work is
 listed in [TODO](../TODO.md).
+
+## Owned windows
+
+`HackosWindowSpec` is 48 bytes: four `uint32_t` fields (`x`, `y`, `width`,
+`height`), followed by a 32-byte title buffer. Width/height specify the client
+area; the kernel adds a 30-pixel title bar. Client widths are 96–320 pixels,
+heights 30–240. Coordinates start at 1 and the complete decorated window must
+fit the screen. Titles must terminate within 30 bytes and contain printable
+ASCII; long labels are visually clipped before the title-bar controls.
+
+Each process may retain four handles, with a global limit of 16. Handles grant
+access only to their owner; spawning a child does not transfer them. There is
+no user mapping of window storage, framebuffer addresses or kernel objects.
+Closed handles are rejected, and all retained handles are released by idle when
+the process exits, faults, is killed or receives Ctrl-C.
+
+`HackosWindowRect` contains four `uint32_t` fields (`x`, `y`, `width`, `height`)
+relative to the client area. Blits use tightly packed row-major 32-bit
+`0xAARRGGBB` pixels (opaque copying, no alpha blending). Empty, overflowing or
+out-of-bounds rectangles and uploads above 1024 pixels are rejected. The kernel
+copies the entire upload into a bounded buffer before modifying the window, so
+invalid source memory cannot partially paint it. Both record pointers and pixel
+pointers are checked against the caller's mappings.
+
+The mouse X button removes the window; its handle remains reserved until
+`window_close` or process cleanup so the owner can observe `window_poll == 1`.
+Invalid, foreign and explicitly closed handles return `HACKOS_ERROR`. Polling
+does not block. The title-bar maximise/minimise decorations are not active
+controls; resize, move, focus, per-window keyboard input and mouse event queues
+remain future work.
+
+Idle updates mouse closure and flushes dirty drawing under a preemption guard.
+The compositor overlays windows onto the physical display after copying the
+console backbuffer. Window pixels never overwrite the console backbuffer;
+closing or reclaiming a window triggers redraw to restore the console beneath.

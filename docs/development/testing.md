@@ -270,3 +270,15 @@ partial-I/O, or failure contracts are still undefined.
 Extend guest tests with disk-write persistence, controlled framebuffer scenes,
 user resource exhaustion and future handle-based APIs. Keep testing isolation
 and syscall pointer validation as the userspace boundary grows.
+
+### Userspace windows
+
+After fresh image builds, run `python3 tests/qemu_windows.py --firmware bios`
+and `--firmware uefi` (or `make -C tests test-windows FIRMWARE=...`). The suite
+launches the packaged `WINDOW` demo from the ring-3 shell, checks real framebuffer
+pixels and console restoration, and captures `window.ppm` / `closed.ppm`.
+It exercises Q, PS/2 mouse closure and Ctrl-C; a guest probe checks record/pixel
+pointers, rectangle limits, per-process quota, foreign and stale handles. GDB
+then verifies cleanup after normal exit, fault and kill, including user page
+reclamation. Diagnostics live in `tests/out/qemu-windows-{bios,uefi}`; CI runs
+this suite for both firmware paths.

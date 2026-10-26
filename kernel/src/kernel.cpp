@@ -6,6 +6,7 @@
 #include "proc/tasking/process.h"
 
 #include "drivers/keyboard/keyboard.h"
+#include "drivers/screen/window_manager.h"
 
 #include "arch/x86_64/interrupts/guard.h"
 
@@ -30,6 +31,8 @@ extern "C" int kernel_main(KernelInfo* info)
         ReapExitedProcesses();
         {
             PreemptionGuard guard;
+            KernelWindowManager->Update();
+
             auto display = Display::SharedDisplay();
             if (display->dirty) display->DrawBackbuffer();
         }

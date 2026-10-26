@@ -21,3 +21,18 @@ constexpr uint64_t HACKOS_WAIT_NOHANG = 1;
 constexpr uint64_t HACKOS_KEY_UP = 128;
 constexpr uint64_t HACKOS_KEY_DOWN = 129;
 constexpr uint64_t HACKOS_KEY_INTERRUPT = 3;
+
+// Window dimensions describe the client area; the kernel adds a 30-pixel title bar.
+struct HackosWindowSpec
+{
+    uint32_t x, y, width, height;
+    char title[32];
+};
+
+struct HackosWindowRect
+{
+    uint32_t x, y, width, height;
+};
+
+static_assert(sizeof(HackosWindowSpec) == 48, "window specification ABI");
+static_assert(sizeof(HackosWindowRect) == 16, "window rectangle ABI");

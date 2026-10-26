@@ -6,6 +6,7 @@
 #include "arch/x86_64/ports.h"
 #include "proc/tasking/process.h"
 #include "proc/user/user.h"
+#include "proc/user/windows.h"
 #include "proc/user/address_space.h"
 #include "drivers/keyboard/keyboard.h"
 #include "drivers/screen/screen.h"
@@ -242,6 +243,18 @@ static void syscall_handler(Registers* r)
     case HACKOS_SYS_stat: r->rax = UserStat((const char*)r->rdi, (HackosFileInfo*)r->rsi); break;
     case HACKOS_SYS_readdir: r->rax = UserReadDir((const char*)r->rdi, r->rsi, (HackosFileInfo*)r->rdx); break;
     case HACKOS_SYS_power: r->rax = UserPower(r->rdi); break;
+    case HACKOS_SYS_window_create:
+        r->rax = UserWindowCreate((const HackosWindowSpec*)r->rdi);
+        break;
+    case HACKOS_SYS_window_blit:
+        r->rax = UserWindowBlit(r->rdi, (const HackosWindowRect*)r->rsi, (const uint32_t*)r->rdx);
+        break;
+    case HACKOS_SYS_window_poll:
+        r->rax = UserWindowPoll(r->rdi);
+        break;
+    case HACKOS_SYS_window_close:
+        r->rax = UserWindowClose(r->rdi);
+        break;
     default: r->rax = HACKOS_ERROR; break;
     }
 }

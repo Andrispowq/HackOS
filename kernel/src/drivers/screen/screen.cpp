@@ -1,4 +1,5 @@
 #include "screen.h"
+#include "window_manager.h"
 #include "arch/x86_64/interrupts/guard.h"
 
 #include "arch/x86_64/ports.h"
@@ -76,6 +77,11 @@ void Display::DrawBackbuffer()
     PreemptionGuard guard;
     dirty = false;
     memcpy(framebuffer.address, backbuffer.address, (uint64_t)framebuffer.pitch * framebuffer.height * 4);
+
+    if (KernelWindowManager)
+    {
+        KernelWindowManager->Draw();
+    }
 }
 
 void Display::clear()

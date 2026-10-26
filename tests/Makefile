@@ -22,3 +22,7 @@ test-shell:
 .PHONY: test-user
 test-user:
 	$(PYTHON) qemu_user.py --firmware $(FIRMWARE)
+
+.PHONY: test-windows
+test-windows:
+	$(PYTHON) qemu_windows.py --firmware $(FIRMWARE)

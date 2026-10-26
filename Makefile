@@ -30,6 +30,7 @@ userspace:
 	$(MAKE) -C libs/shell
 	$(MAKE) -C libs/test
 	$(MAKE) -C libs/input
+	$(MAKE) -C libs/window
 	$(MAKE) -C libs/ring3
 buildimg:
 	$(PYTHON) tools/make_image.py --firmware $(FIRMWARE)
@@ -48,5 +49,6 @@ clean:
 	$(MAKE) -C libs/shell clean
 	$(MAKE) -C libs/test clean
 	$(MAKE) -C libs/input clean
+	$(MAKE) -C libs/window clean
 	$(MAKE) -C libs/ring3 clean
 	rm -rf boot/UEFI/gnu-efi/x86_64

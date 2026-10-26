@@ -20,7 +20,8 @@ and try `help`, `ls`, `ps` or `print tick`. Input uses the US keyboard layout.
 Use `./USR/BIN/TEST alpha "two words"` to see argument passing and read a file
 from ring 3, or `user USR/BIN/RING3` for
 the print/preemption/exit demo. `shutdown` requests kernel ACPI power-off. The
-old window demo and raw-pointer libc ABI are retired. Program commands wait for
+raw-pointer libc ABI is retired. Launch `./USR/BIN/WINDOW` for the ported
+window demo; close its X button, press Q, or use Ctrl-C. Program commands wait for
 completion before showing the prompt; a separate trailing `&` launches in the
 background. Try `./USR/BIN/INPUT` for interactive text input; Ctrl-C returns to
 the shell. Up/Down browses the fixed 256-command history, and `history` lists it.

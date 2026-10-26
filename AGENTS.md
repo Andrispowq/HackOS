@@ -24,7 +24,9 @@ All active syscalls are user interfaces; kernel code calls internal functions
 directly. The boot shell grants input/backspace to its foreground child; only the
 shell retains foreground-spawn, kill and power rights. Ctrl-C is deferred from
 IRQ context to a safe scheduler point. Shell history is a static 256-command ring.
-See `docs/system/userspace.md` for ABI, ownership and lifecycle contracts.
+Userspace windows use process-owned handles and bounded pixel uploads; idle
+reclaims them on exit and composites them over the console. `USR/BIN/WINDOW`
+is the standalone demo. See `docs/system/userspace.md` for ABI, ownership and lifecycle contracts.
 
 ## Where to look
 
@@ -155,3 +157,8 @@ must remain available until replaced reproducibly. Generated outputs are ignored
 and untracked. `ext2.img` remains tracked because its contents have no regeneration
 recipe. See [artifacts and fixtures](docs/development/artifacts.md) before changing
 binary inputs, and do not restore generated binaries to hide missing dependencies.
+
+New code follows the original spacing style: separate functions and logical
+blocks with blank lines, one executable statement per line, and braces on loops
+and all else/else-if branches. An if without else may omit braces only when its
+entire statement fits on one line. Do not bulk-reformat existing code.

@@ -63,3 +63,6 @@ after a fresh image build.
 HackOS is distributed under the [Apache License 2.0](LICENSE). Vendored GNU-EFI
 sources carry their own license notices; retain those notices when changing or
 redistributing that code.
+
+Launch `./USR/BIN/WINDOW` for the standalone ring-3 window demo. It uses owned
+handles and checked pixel uploads; close X, press Q, or use Ctrl-C to return.

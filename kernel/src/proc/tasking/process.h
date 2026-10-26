@@ -33,6 +33,8 @@ public:
     int64_t exitStatus = 0;
     ChildResult children[16] = {};
 
+    uint64_t windows[4] = {};
+
     ActiveFile* files[8] = {};
     uint64_t fileHandles[8] = {};
 

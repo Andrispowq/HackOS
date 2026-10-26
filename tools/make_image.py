@@ -31,6 +31,7 @@ def package(firmware):
                              ('util/usertest/usertest.elf', 'USR/BIN/usertest.elf'),
                              ('libs/test/bin/test', 'USR/BIN/test'),
                              ('libs/input/bin/input', 'USR/BIN/input'),
+                             ('libs/window/bin/window', 'USR/BIN/window'),
                              ('libs/ring3/bin/ring3', 'USR/BIN/ring3'),
                              ('libs/shell/bin/shell', 'USR/BIN/shell'), ('hello.txt', 'USR/hello.txt')]:
             mtool('mcopy', ROOT / source, '::/' + dest)

@@ -5,7 +5,7 @@ WindowManager* KernelWindowManager;
 
 WindowManager::WindowManager()
 {
-    drawBuffer = Display::SharedDisplay()->backbuffer;
+    drawBuffer = Display::SharedDisplay()->framebuffer;
 }
 
 WindowManager::~WindowManager()
@@ -18,16 +18,20 @@ WindowManager::~WindowManager()
 
 void WindowManager::Update()
 {
-    size_t size = windows.size();
-    for(size_t i = 0; i < size; i++)
+    size_t i = 0;
+    while (i < windows.size())
     {
         windows[i]->Update();
 
-        if(windows[i]->ShouldBeClosed())
+        if (windows[i]->ShouldBeClosed())
         {
             delete windows[i];
             windows.erase(i);
-            size--;
+            Display::SharedDisplay()->dirty = true;
+        }
+        else
+        {
+            i++;
         }
     }
 }

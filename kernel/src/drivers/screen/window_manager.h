@@ -29,4 +29,6 @@ private:
     Framebuffer drawBuffer;
 };
 
+extern WindowManager* KernelWindowManager;
+
 #endif

@@ -84,7 +84,7 @@ void Window::Draw(Framebuffer* framebuffer)
 
     int index = 0;
     char c = 0;
-    while((c = title[index]) != 0)
+    while((c = title[index]) != 0 && 10 + (index + 1) * mainConsole.char_width < sizeX - 65)
     {
         putchar_at_xy(*framebuffer, c, (x + index * mainConsole.char_width), y);
         index++;
@@ -123,6 +123,7 @@ void Window::ResizeWindow(uint32_t x, uint32_t y)
     delete[] drawArea->address;
     uint32_t size_y = fullscreen ? sizeY : (sizeY - navbar_height);
     uint32_t* drawPointer = new uint32_t[sizeX * size_y];
+    memset(drawPointer, 0, sizeX * size_y * sizeof(uint32_t));
     drawArea->address = drawPointer;
     drawArea->bpp = mainFramebuffer.bpp;
     drawArea->width = sizeX;

@@ -51,15 +51,14 @@ more devices.
 - [x] Add foreground input ownership, safe Ctrl-C termination, and a fixed
   256-command shell history with Up/Down draft navigation.
 - [ ] Add blocking input, process-group/job control, a user heap, file writes and
-  owned window handles to the safe ABI. Port remaining legacy runtime helpers.
-- [ ] Port the old window test into a separate ring-3 program and package it once
-  checked window creation/drawing and ownership exist. The old test (e.g.
-  `38dbbf5:libs/test/src/main.cpp`) uses retired calls and kernel buffer pointers.
-- [ ] Extend the implemented automatic read-handle cleanup to future allocations
-  and windows. Add blocking waits, priorities and broader scheduler stress tests.
+  window focus/input/resize to the safe ABI. Port remaining legacy runtime helpers.
+- [x] Port the old window test to `USR/BIN/WINDOW` using process-owned handles,
+  bounded pixel copies, close polling, and automatic lifecycle cleanup.
+- [ ] Extend automatic file/window cleanup to future user allocations. Add
+  priorities and broader scheduler stress tests.
 - [ ] Replace binary-only `usertest.elf` with a source-built fixture.
-- [ ] Add shell history/completion and a terminal input API for programs.
-  Integrate the window manager without clearing console output.
+- [ ] Add shell completion and a blocking terminal input API for programs.
+- [x] Integrate the window manager without overwriting console contents.
 
 ## Tests and development
 

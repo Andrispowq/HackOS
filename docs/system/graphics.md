@@ -28,7 +28,7 @@ conversion; the UEFI loader currently accepts BGR output only.
 [InitialiseDisplay](../../kernel/src/drivers/screen/screen.cpp) maps the hardware
 framebuffer with cache-control flags and allocates a software backbuffer at
 virtual address `0xD0000000`. `Display::DrawBackbuffer` copies the entire software
-buffer into the hardware buffer.
+buffer into the hardware buffer, then composites visible windows over it.
 
 The `Display` singleton owns console state: foreground/background colour,
 cursor position, character size, and rows/columns. `puts` and `putc` render
@@ -38,25 +38,28 @@ The console is configured around 8-by-16 character cells and the bundled
 
 Colour fills use `Framebuffer::Clear`/`DrawRect`, keeping complete RGB values.
 `memset` is reserved for byte fills. Window buffer pitch is also expressed in
-pixels, matching the kernel and userspace framebuffer APIs.
+pixels. User uploads are tightly packed pixel arrays, not framebuffer objects.
 
 ## Windows
 
 [Window](../../kernel/src/drivers/screen/window.cpp) provides per-window state
 and drawing. [WindowManager](../../kernel/src/drivers/screen/window_manager.cpp)
-owns a list of windows, updates them, draws them into the display backbuffer,
-and resolves window IDs.
+owns a list of windows, updates mouse closure, draws onto the physical display,
+and resolves window IDs. Window pixels do not alter the console backbuffer.
 
-The syscall layer exposes creation, destruction, title changes, and access to
-a window buffer. Buffer access currently returns kernel-owned state directly;
-it is an experimental shared-memory interface rather than a protected graphics
-API. The userspace library carries its own framebuffer/display types, so layout
-changes must be coordinated across both sides.
+Userspace uses process-owned opaque handles through `window_create`,
+`window_blit`, `window_poll`, and `window_close`. Creation takes a copied title
+and bounded geometry; drawing copies validated pixel rectangles. No kernel
+framebuffer pointer or object layout is exposed. Exit, fault, kill and Ctrl-C
+release the owner's windows. See [userspace](userspace.md#owned-windows) for
+record layouts, quotas and return values.
 
-The active `kernel_task` runs the console shell and flushes the backbuffer when
-text output marks it dirty. It does not run the experimental window-manager loop
-or launch `libs/shell`. This keeps command output visible and avoids copying the
-whole framebuffer on every idle iteration.
+Idle updates the manager and flushes dirty rendering under a preemption guard.
+Creation, uploads, mouse closure and resource cleanup mark the display dirty.
+Console output also marks it dirty; compositing keeps windows visible over
+updated text. Removing a window restores the console from its untouched
+backbuffer. The standalone ring-3 shell launches `./USR/BIN/WINDOW` on request;
+the demo closes with X, Q, or Ctrl-C.
 
 ## Observing graphics
 

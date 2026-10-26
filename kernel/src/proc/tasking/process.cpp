@@ -7,6 +7,7 @@
 #include "lib/string.h"
 #include "fs/filesystem.h"
 #include "proc/user/address_space.h"
+#include "proc/user/windows.h"
 #include "arch/x86_64/gdt/gdt.h"
 
 Process* current_process;
@@ -78,6 +79,7 @@ Process::Process(const char* label, void* entry, void* parameter)
 
 Process::~Process()
 {
+    ReleaseUserWindows(this);
     for (auto file : files) if (file) { filesystems[0]->CloseFile(file); --user_files_live; }
     delete userSpace;
     kfree(stack);
