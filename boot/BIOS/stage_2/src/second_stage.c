@@ -42,16 +42,18 @@ void loader_main(struct FramebufferInfo* info)
     InstallISR();
     InitPaging(entries);
 
-    for(uint8_t i = 0; i < MemoryRegionCount; i++)
-    {
-        MemoryMapEntry* entry = (MemoryMapEntry*)((uint64_t)entries + i * sizeof(MemoryMapEntry));
-    
-        for(uint64_t i = entry->address; i < (entry->address + entry->length + 0x1000); i += 0x1000)
-        {
-            MapMemory(i, i);
+    // High reserved PCI windows are mapped by device drivers when needed.
+    for (uint8_t i = 0; i < MemoryRegionCount; ++i) {
+        MemoryMapEntry* entry = entries + i;
+        if (!entry->length || entry->length > ~0ULL - entry->address ||
+            (entry->type == 2 && entry->address >= 0x100000000ULL)) continue;
+        uint64_t last = (entry->address + entry->length - 1) & ~4095ULL;
+        for (uint64_t address = entry->address & ~4095ULL;; address += 4096) {
+            MapMemory(address, address);
+            if (address == last) break;
         }
     }
-    
+
     //Get the RSDP
     uint8_t version;
     RSDP1* rsdp = FindRSDP(&version);

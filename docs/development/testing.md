@@ -57,7 +57,7 @@ sanitizers; there is no automatic downgrade.
 | Memory setup | Page indices and structure sizes, BIOS/EFI map interpretation, sparse/high addresses, map instance isolation, early bump allocation and alignment |
 | Framebuffer | Pixels, rectangle clipping, pitch, colour fills, cursor background restoration |
 | VFS and registration | Volume selection, path translation, missing files/volumes, invalid indices/handles, create/read/write/close dispatch, error propagation, slot reuse |
-| FAT32 | Small, empty, long-name and cross-cluster files; seeked reads; enumeration; rewrite, create, shrink, delete and flush; invalid cluster-size input |
+| FAT32 | Small, empty, long-name and cross-cluster files; seeked reads; enumeration; rewrite/create/delete persistence; partial writes, EOF, empty-file growth, zero-fill, directory extension, invalid BPBs and cyclic chains |
 | ELF | Identity, malformed/truncated headers, program-header bounds, filesystem loading, segment copying and BSS zeroing |
 
 Memory/string functions are required to follow standard C semantics. A
@@ -84,8 +84,8 @@ checking is disabled because these adapters do not reproduce kernel ownership.
 
 FAT32 tests use the real filesystem and driver over a bounded memory-backed
 `Device`. mtools creates fresh images containing deterministic fixtures. Each
-test loads its own copy. Successful mutation tests flush through the real
-destructor and inspect the saved image with mtools, including a surviving file
+test loads its own copy. Mutation tests use the driver's normal write and close
+paths, then inspect the saved image with mtools, including a surviving file
 when checking deletion. A byte match in the live driver cache is insufficient.
 
 ## Reports and coverage
@@ -108,19 +108,15 @@ The cheap asset suite assembles the actual MBR and stage 1, checks their lengths
 and signatures, checks partition offsets/extents, validates the font, and checks
 the retained userspace ELF's headers and executable entry segment.
 
-`build_images.py` copies tracked source inputs into an isolated directory,
-creates missing output directories, selects cross tools, and invokes the
-unchanged Makefiles serially. Test-local aliases cover literal `ar` and
-`objcopy` calls. Independent components still build when another fails. The
-harness supplies build ordering and directories; it does not demonstrate that
-the root Makefile's dependency graph or setup scripts are correct.
+`build_images.py` copies tracked and untracked source inputs into an isolated
+directory, selects the cross toolchain, and builds each component independently.
+It uses production Makefile dependencies and directory creation. Another
+component can still report useful diagnostics after a failure.
 
-If all prerequisites build, it checks ELF structure and BIOS payload sizes
-before packaging, then verifies bytes at the fixed LBAs and required filesystem
-contents. UEFI checks include the PE machine and currently packaged paths.
-These structural checks do not bless the known font-path and firmware-entry
-problems. A missing fresh image is reported as **blocked**, with a failing exit
-status, rather than a passing or silently skipped boot.
+When prerequisites pass, it checks ELF structure and BIOS payload sizes, invokes
+the production image packager, and verifies fixed-LBA bytes and FAT contents.
+UEFI checks include the PE machine and `EFI/BOOT/BOOTX64.EFI`. Missing fresh
+images are reported as **blocked** with a failing exit status.
 
 There are two distinct emulator checks:
 
@@ -130,16 +126,17 @@ There are two distinct emulator checks:
   chain, not the production stage 2 or kernel.
 - `python3 tests/qemu_boot.py --firmware bios` (or `uefi`) loads the freshly
   built image and debug ELF. GDB hardware breakpoints must reach `kernel_main`,
-  `InitialiseIRQ()`, then `timer_callback`. The stopped program counter is
-  checked at each milestone. A 60-second timeout fails the test. Reaching the
+  `InitialiseIRQ()`, then `timer_callback`. It resumes through three more
+  callbacks and checks increasing ticks, covering interrupt return and repeated
+  delivery. The stopped program counter is checked at each milestone. A 60-second timeout fails the test. Reaching the
   IRQ initializer alone is not proof that a timer interrupt arrived.
 
 The kernel boot runner uses TCG, the existing q35/USB topology, a disk snapshot,
 and a private GDB Unix socket. UEFI gets a fresh OVMF variable-store copy. Logs
 include debugger output and guest errors/resets. No physical disk or privileged
 container is involved. This first boot test observes progress; it does not
-prove filesystem persistence, graphics correctness, repeated timer ticks, or
-exception recovery in the guest.
+prove filesystem persistence, graphics correctness, complete register-state
+preservation, or exception recovery in the guest.
 
 `python3 tests/qemu_boot.py --self-test` checks the debugger orchestration with
 a tiny synthetic payload. It also verifies that a guest stuck after the first milestone fails on timeout.
@@ -152,7 +149,9 @@ IRQ delivery.
 [The workflow](../../.github/workflows/tests.yml) runs on pushes, pull requests,
 and manual dispatch. Three independent jobs run host tests, asset checks, and
 the BIOS-chain probe. Two further jobs build and boot BIOS and UEFI with matrix
-fail-fast disabled. A failed host test does not suppress firmware diagnostics.
+fail-fast disabled. The firmware jobs also exercise the public parallel build
+command and check the Compose configuration. A failed host test does not
+suppress firmware diagnostics.
 
 Containers use a digest-pinned Ubuntu base, Clang/LLVM 18, and source-pinned GCC
 15.2.0/binutils 2.47 with verified SHA-256 downloads. Ubuntu packages receive the
@@ -165,17 +164,16 @@ All jobs upload available logs, JUnit/JSON reports, coverage, images, and debug
 ELFs even after failures, retaining them for 14 days. The workflow requires no
 publishing credentials and publishes no container image. Once these files are
 committed and pushed to GitHub with Actions enabled, the workflow runs normally.
-Existing defects are expected to make it red until fixed; they are not exempted.
+Failures are not marked expected or exempted.
 
 ## Next coverage to add
 
-Fix the failures before relying on deeper paths that they currently interrupt.
-Then add malformed FAT chains/LFN records and overflow cases, real heap
+Extend malformed LFN records and allocation-failure cases, and add real heap
 split/coalesce tests, allocation failure injection, paging ownership, and shared
 boot-info layout checks. Keep intended behavior explicit for APIs whose EOF,
 partial-I/O, or failure contracts are still undefined.
 
 Guest-side assertions and a serial/debug channel would enable deliberate faults,
-repeated timer ticks, PS/2 input, disk-write persistence, and controlled framebuffer
+timer register-state checks, PS/2 input, disk-write persistence, and controlled framebuffer
 scenes. Ring-3 isolation, syscall pointer validation, and process teardown tests
 must follow implementation of the userspace boundary.

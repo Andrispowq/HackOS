@@ -45,10 +45,6 @@ to the filesystem. AHCI also needs careful treatment of physical address
 translation, buffer lifetime, and multi-page DMA requests. Virtually adjacent
 heap pages are not necessarily physically contiguous.
 
-The `AHCIDevice::GetType` declaration currently lacks the `const` required by
-the base interface, which blocks compilation. Driver discovery and correct
-transfer behavior are separate milestones.
-
 ## PS/2 input
 
 The [keyboard driver](../../kernel/src/drivers/keyboard/keyboard.cpp) reads

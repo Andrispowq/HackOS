@@ -23,7 +23,7 @@ extern PageTableManager KernelDirectory;
 void InitialiseDisplay(Framebuffer framebuffer, PSF1_FONT* font)
 {
     uint64_t fb_addr = (uint64_t)framebuffer.address;
-    uint64_t fb_size = framebuffer.width * framebuffer.height * 4;
+    uint64_t fb_size = (uint64_t)framebuffer.pitch * framebuffer.height * 4;
     for(uint64_t i = fb_addr; i < fb_addr + fb_size + 0x1000; i += 0x1000)
     {
         KernelDirectory.MapMemory(i, i, (uint64_t)PageTableFlags::Present | (uint64_t)PageTableFlags::Writable | (uint64_t)PageTableFlags::CacheDisabled | (uint64_t)PageTableFlags::WriteThrough);
@@ -72,16 +72,12 @@ void printf_backspace()
 
 void Display::DrawBackbuffer()
 {
-    memcpy(framebuffer.address, backbuffer.address, framebuffer.width * framebuffer.height * 4);
+    memcpy(framebuffer.address, backbuffer.address, (uint64_t)framebuffer.pitch * framebuffer.height * 4);
 }
 
 void Display::clear()
 {
-    uint32_t* addr = backbuffer.address;
-    uint32_t size = backbuffer.width * backbuffer.height * 4;
-    uint32_t colour = console.bgColour;
-
-    memset(addr, colour, size);
+    backbuffer.Clear(console.bgColour);
 }
 
 void Display::put_backspace()
@@ -104,7 +100,7 @@ int Display::puts(const char* str)
 void putchar_at_xy(Framebuffer fb, char character, uint32_t x, uint32_t y)
 {
     uint32_t* addr = fb.address;
-    uint32_t pitch = fb.width;
+    uint32_t pitch = fb.pitch;
     
     uint32_t charWidth = display.console.char_width;
     uint32_t charHeight = display.console.char_height;
@@ -130,7 +126,7 @@ void putchar_at_xy(Framebuffer fb, char character, uint32_t x, uint32_t y)
 void putchar_at(Framebuffer fb, char character, uint32_t xOff, uint32_t yOff)
 {
     uint32_t* addr = fb.address;
-    uint32_t pitch = fb.width;
+    uint32_t pitch = fb.pitch;
     
     uint32_t charWidth = display.console.char_width;
     uint32_t charHeight = display.console.char_height;
@@ -155,7 +151,7 @@ void putchar_at(Framebuffer fb, char character, uint32_t xOff, uint32_t yOff)
 void empty_char_at(Framebuffer fb, uint32_t xOff, uint32_t yOff)
 {
     uint32_t* addr = fb.address;
-    uint32_t pitch = fb.width;
+    uint32_t pitch = fb.pitch;
     
     uint32_t charWidth = display.console.char_width;
     uint32_t charHeight = display.console.char_height;
@@ -173,25 +169,12 @@ void empty_char_at(Framebuffer fb, uint32_t xOff, uint32_t yOff)
 
 void scroll_up(Framebuffer fb)
 {
-    Console con = display.console;
-
-    uint32_t width = fb.width;
-    uint32_t height = fb.height;
-    uint32_t char_width = con.char_width;
-    uint32_t char_height = con.char_height;
-
-    uint32_t scroll_height = con.con_height - 1;
-    uint64_t copy_size = char_height * width * 4;
-    
-    void* addr = fb.address;
-
-    //Move everything up
-    memcpy(addr, (void*)((uint64_t)addr + copy_size), copy_size * scroll_height);
-
-    //Clear the last row
-    uint64_t offset = copy_size * scroll_height;
-    void* last_row = (void*)((uint64_t)addr + offset);
-    memset(last_row, con.bgColour, copy_size);
+    const uint32_t rows = display.console.char_height;
+    if (rows >= fb.height) { fb.Clear(display.console.bgColour); return; }
+    for (uint32_t y = 0; y < fb.height - rows; ++y)
+        memcpy(fb.address + (uint64_t)y * fb.pitch,
+               fb.address + (uint64_t)(y + rows) * fb.pitch, fb.width * sizeof(uint32_t));
+    fb.DrawRect(0, fb.height - rows, fb.width, rows, display.console.bgColour);
 }
 
 int Display::putc(char ch) 

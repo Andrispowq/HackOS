@@ -1,0 +1,33 @@
+# Both services build natively on amd64/arm64 hosts, then emulate the same x86-64 guest.
+x-development: &development
+  image: hackos:development
+  build:
+    context: tests
+    target: development
+  working_dir: /work
+  user: "1000:1000"
+  init: true
+  read_only: true
+  tmpfs:
+    - /tmp:mode=1777
+  volumes:
+    - .:/work:ro
+    - build-output:/output
+  ports:
+    - "127.0.0.1:6080:6080"
+  security_opt:
+    - no-new-privileges:true
+  cap_drop:
+    - ALL
+
+services:
+  bios:
+    <<: *development
+    command: [python3, tools/container.py, --firmware, bios]
+  uefi:
+    <<: *development
+    profiles: [uefi]
+    command: [python3, tools/container.py, --firmware, uefi]
+
+volumes:
+  build-output:

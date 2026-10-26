@@ -43,3 +43,8 @@
 *~
 *.swp
 *.swo
+
+# Isolated local builds and Python caches.
+/out/
+__pycache__/
+*.pyc

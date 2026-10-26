@@ -18,10 +18,13 @@ pair, prints its result, and kills the current task. `LoadProgramTask` wraps tha
 function in a new `Process`. The kernel startup smoke path also directly calls
 the retained `USERTEST.ELF` entry.
 
-This loader needs file-bound checks, overflow checks, address-range validation,
-segment permission handling, and correct zeroing of `p_memsz - p_filesz` for
-BSS. It currently clears only `p_filesz` bytes before copying the same number
-of bytes. Programs cannot safely choose arbitrary physical destinations.
+The loader validates ELF version, header sizes, aligned program-header tables,
+file-backed ranges, address overflow, segment alignment, non-overlap and an
+executable entry point. It copies file bytes and zeros `p_memsz - p_filesz`.
+Physical and virtual segment addresses must match this identity-loading model.
+These checks do not provide isolation: destination ownership, segment permissions
+and a process-owned address space are still needed before accepting untrusted
+programs.
 
 ## Processes and scheduling
 
@@ -37,9 +40,10 @@ can call `Schedule` once scheduling is enabled, and
 and switches CR3.
 
 The task-switch code assumes compiler frame pointers and a specific interrupt
-stack shape. It also restores the XMM11 slot into XMM12, leaving XMM11 unrestored;
-this needs fixing before relying on context preservation. Process termination
-and page-table ownership need review before enabling general scheduling.
+stack shape. Its frame skip matches the interrupt stub's 32-byte call area,
+and XMM11 is restored correctly. Scheduling remains disabled: process termination,
+initial frame construction, floating-point control state and page-table ownership
+need guest tests before enabling general scheduling.
 
 ## Syscalls
 

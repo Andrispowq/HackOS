@@ -8,7 +8,7 @@ PageTableManager KernelDirectory(nullptr);
 PageTableManager* CurrentDirectory = nullptr;
 
 extern uint64_t kernelStart, kernelEnd;
-extern uint8_t fromUEFI;
+extern bool fromUEFI;
 
 extern IDTR idtr;
 void InitPaging(MemoryMap* memMap)
@@ -20,12 +20,22 @@ void InitPaging(MemoryMap* memMap)
 
     KernelDirectory = PageTableManager(kernelDirectory);
 
-    for(uint64_t i = 0; i < memMap->GetTotalSystemMemory(); i += 0x1000)
-    {
-        KernelDirectory.MapMemory(i, i);
+    // Keep the low boot handoff/BIOS area, then map actual regions instead of a sum of lengths.
+    for (uint64_t address = 0; address < 0x100000; address += 4096)
+        KernelDirectory.MapMemory(address, address);
+    for (uint64_t i = 0; i < memMap->GetEntryCount(); ++i) {
+        auto entry = memMap->GetEntry(i);
+        if (!entry->size || entry->size > ~0ULL - entry->address) continue;
+        if (fromUEFI ? (entry->type == 0 || entry->type == 8 || entry->type >= 11) :
+            (entry->type == 2 && entry->address >= 0x100000000ULL)) continue;
+        uint64_t first = entry->address & ~4095ULL;
+        uint64_t last = (entry->address + entry->size - 1) & ~4095ULL;
+        for (uint64_t address = first;; address += 4096) {
+            KernelDirectory.MapMemory(address, address);
+            if (address == last) break;
+        }
     }
-
-    idtr.SetGate(14, IDT_TA_InterruptGate, (uint64_t)PageFaultHandler);
+    RegisterInterruptHandler(14, PageFaultHandler);
 
     KernelDirectory.SetAsCurrent();
 }

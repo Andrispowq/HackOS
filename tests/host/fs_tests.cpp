@@ -83,7 +83,9 @@ TEST(fat_missing_file) {
     MemoryDisk disk; FAT32 fs(&disk,0); CHECK(fs.OpenFile("~/DOESNOT.EXI")==nullptr); return 0;
 }
 TEST(fat_directory_enumeration) {
-    MemoryDisk disk; FAT32 fs(&disk,0); CHECK(fs.GetDirectoryEntryCount("~/TESTS")>=2); return 0;
+    MemoryDisk disk; FAT32 fs(&disk,0); CHECK(fs.GetDirectoryEntryCount("~/TESTS")>=2);
+    CHECK(fs.GetDirectoryEntryCount("~/TESTS/HELLO.TXT")==0);
+    CHECK(fs.GetFile("~/TESTS/HELLO.TXT",0)==nullptr); return 0;
 }
 TEST(fat_rewrite_and_flush) {
     MemoryDisk disk;
@@ -131,4 +133,85 @@ TEST(fat_delete_and_flush) {
 TEST(fat_rejects_zero_sectors_per_cluster) {
     MemoryDisk disk; disk.bytes[13]=0; FAT32 fs(&disk,0);
     CHECK(fs.OpenFile("~/TESTS/HELLO.TXT")==nullptr); return 0;
+}
+
+TEST(fat_partial_write_preserves_neighbors) {
+    MemoryDisk disk; FAT32 fs(&disk,0); auto file=fs.OpenFile("~/TESTS/PATTERN.BIN");
+    CHECK(file); file->seek_position=511; unsigned char patch[3]={21,22,23};
+    CHECK(fs.Write(file,patch,3)==0); file->seek_position=0;
+    unsigned char bytes[8193]; CHECK(fs.Read(file,bytes,sizeof bytes)==0);
+    for(unsigned i=0;i<sizeof bytes;++i) CHECK(bytes[i]==(i>=511 && i<514 ? patch[i-511] : (unsigned char)(i*17+3)));
+    fs.CloseFile(file); return 0;
+}
+TEST(fat_grow_empty_and_zero_gap) {
+    MemoryDisk disk; FAT32 fs(&disk,0); auto file=fs.OpenFile("~/TESTS/EMPTY.TXT");
+    CHECK(file); file->seek_position=1025;
+    CHECK(fs.Write(file,(void*)"OK",2)==0); CHECK(file->GetSize()==1027);
+    file->seek_position=0; unsigned char bytes[1027]; CHECK(fs.Read(file,bytes,sizeof bytes)==0);
+    for(unsigned i=0;i<1025;++i)CHECK(bytes[i]==0);
+    CHECK(bytes[1025]=='O' && bytes[1026]=='K'); fs.CloseFile(file); return 0;
+}
+TEST(fat_truncate_to_zero_and_regrow) {
+    MemoryDisk disk; FAT32 fs(&disk,0); auto file=fs.OpenFile("~/TESTS/PATTERN.BIN"); CHECK(file);
+    fs.ResizeFile(file,0); CHECK(file->GetSize()==0); fs.ResizeFile(file,1025); CHECK(file->GetSize()==1025);
+    unsigned char bytes[1025]; CHECK(fs.Read(file,bytes,sizeof bytes)==0);
+    for(unsigned i=0;i<sizeof bytes;++i)CHECK(bytes[i]==0);
+    fs.CloseFile(file); return 0;
+}
+TEST(fat_eof_read_clamps_position_and_buffer) {
+    MemoryDisk disk; FAT32 fs(&disk,0); auto file=fs.OpenFile("~/TESTS/HELLO.TXT"); CHECK(file);
+    file->seek_position=12; char bytes[4]={42,42,42,42}; CHECK(fs.Read(file,bytes,4)==0);
+    CHECK(bytes[0]=='\n' && bytes[1]==42 && file->seek_position==13);
+    file->seek_position=100; CHECK(fs.Read(file,bytes,4)==0); CHECK(file->seek_position==100);
+    fs.CloseFile(file); return 0;
+}
+TEST(fat_long_name_create_and_flush) {
+    MemoryDisk disk;
+    { FAT32 fs(&disk,0); auto file=fs.CreateFile("~/TESTS","Another long filename.txt",ARCHIVE);
+      CHECK(file); CHECK(fs.Write(file,(void*)"Long create\n",12)==0); fs.CloseFile(file);
+      file=fs.OpenFile("~/TESTS/another LONG filename.txt"); CHECK(file); CHECK(file->GetSize()==12); fs.CloseFile(file); }
+    test_disk_save(disk.bytes,disk.size); return 0;
+}
+TEST(fat_directory_extension_and_lfn_boundary) {
+    MemoryDisk disk; FAT32 fs(&disk,0);
+    for(unsigned i=0;i<24;++i) {
+        char name[]="Boundary filename 00.txt"; name[18]='0'+i/10; name[19]='0'+i%10;
+        auto file=fs.CreateFile("~/TESTS",name,ARCHIVE); CHECK(file);
+        CHECK(fs.Write(file,(void*)"data",4)==0); fs.CloseFile(file);
+    }
+    for(unsigned i=0;i<24;++i) {
+        char path[]="~/TESTS/Boundary filename 00.txt"; path[26]='0'+i/10; path[27]='0'+i%10;
+        auto file=fs.OpenFile(path); CHECK(file); char bytes[4]; CHECK(fs.Read(file,bytes,4)==0);
+        CHECK(test_equal(bytes,"data",4)); fs.CloseFile(file);
+    }
+    return 0;
+}
+TEST(fat_long_name_delete_keeps_neighbors) {
+    MemoryDisk disk; FAT32 fs(&disk,0); auto file=fs.OpenFile("~/TESTS/Long file name.txt"); CHECK(file);
+    fs.DeleteFile(file); CHECK(fs.OpenFile("~/TESTS/Long file name.txt")==nullptr);
+    file=fs.OpenFile("~/TESTS/HELLO.TXT"); CHECK(file); char bytes[13]; CHECK(fs.Read(file,bytes,13)==0);
+    CHECK(test_equal(bytes,"Hello HackOS\n",13)); fs.CloseFile(file); return 0;
+}
+TEST(fat_new_directory_dot_entries) {
+    MemoryDisk disk; FAT32 fs(&disk,0); auto dir=fs.CreateFile("~/TESTS","SUBDIR",DIRECTORY); CHECK(dir);
+    fs.CloseFile(dir); auto file=fs.CreateFile("~/TESTS/SUBDIR","NESTED.TXT",ARCHIVE); CHECK(file); fs.CloseFile(file);
+    file=fs.OpenFile("~/TESTS/SUBDIR/../HELLO.TXT"); CHECK(file); fs.CloseFile(file);
+    return 0;
+}
+TEST(fat_rejects_cyclic_directory_chain) {
+    MemoryDisk disk; auto* boot=(FAT32_BootSector*)disk.bytes;
+    auto* fat=(uint32_t*)(disk.bytes+boot->ReservedSectors*512);
+    fat[boot->RootDirStart]=boot->RootDirStart;
+    FAT32 fs(&disk,0); CHECK(fs.OpenFile("~/TESTS")==nullptr); return 0;
+}
+TEST(fat_rejects_invalid_bpb_without_writing) {
+    for(unsigned variant=0;variant<4;++variant) {
+        MemoryDisk disk; auto* boot=(FAT32_BootSector*)disk.bytes;
+        switch(variant) {case 0:boot->BytesPerSector=1024;break;case 1:boot->SectorsPerCluster=3;break;
+            case 2:boot->NumberOfFATs=0;break;case 3:boot->SectorsPerFAT32=1;break;}
+        unsigned char before[512];test_copy(before,disk.bytes,512);
+        { FAT32 fs(&disk,0); CHECK(fs.OpenFile("~/TESTS")==nullptr); }
+        CHECK(test_equal(before,disk.bytes,512));
+    }
+    return 0;
 }

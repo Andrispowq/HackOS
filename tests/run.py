@@ -153,6 +153,7 @@ def host(args):
             ok = result.returncode==0
             persisted = {"fat_rewrite_and_flush":("HELLO.TXT","Changed data\n"),
                          "fat_create_and_flush":("NEW.TXT","Created data\n"),
+                         "fat_long_name_create_and_flush":("Another long filename.txt","Long create\n"),
                          "fat_shrink_and_flush":("HELLO.TXT","Hello")}
             if ok and name in persisted:
                 filename, expected = persisted[name]

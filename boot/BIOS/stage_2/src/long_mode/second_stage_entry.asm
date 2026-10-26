@@ -134,6 +134,6 @@ MemoryRegionCount: db 0
 KERNEL_STACK_SIZE   equ 8192 
 
 section .bss
-align 4
+align 16
 resb KERNEL_STACK_SIZE
 default_stack_pointer:

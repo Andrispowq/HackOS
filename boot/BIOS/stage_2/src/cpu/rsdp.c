@@ -1,5 +1,6 @@
 #include "rsdp.h"
 #include "libc/stdio.h"
+#include "libc/string.h"
 
 static int DoChecksum(void* rsdp)
 {
@@ -37,7 +38,7 @@ void* FindRSDP(uint8_t* version)
     void* ptr = 0;
     int v2 = 0;
 
-    for(uint64_t i = EBDA_ptr; i < (EBDA_ptr + EBDA_size); i += 0x10)
+    for(uint8_t* i = EBDA_ptr; i < (EBDA_ptr + EBDA_size); i += 0x10)
     {
         void* curr = (void*)i;
         if(strncmp((char*)curr, (char*)"RSD PTR ", 8) == 0)
@@ -58,7 +59,7 @@ void* FindRSDP(uint8_t* version)
         uint8_t* EXT_mem_start = (uint8_t*)0x000E0000;
         uint8_t* EXT_mem_end = (uint8_t*)0x000FFFFF;
 
-        for(uint64_t i = EXT_mem_start; i < EXT_mem_end; i += 0x10)
+        for(uint8_t* i = EXT_mem_start; i < EXT_mem_end; i += 0x10)
         {
             void* curr = (void*)i;
 

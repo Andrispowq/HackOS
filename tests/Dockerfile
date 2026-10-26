@@ -22,3 +22,10 @@ ENV GDB=gdb-multiarch TEST_LD=x86_64-elf-ld TEST_OBJCOPY=x86_64-elf-objcopy
 FROM base AS host
 RUN apt-get update && apt-get install -y --no-install-recommends libclang-rt-18-dev \
     && rm -rf /var/lib/apt/lists/*
+
+# Interactive builds share the exact compiler stage used by CI.
+FROM toolchain AS development
+RUN apt-get update && apt-get install -y --no-install-recommends novnc websockify \
+    && rm -rf /var/lib/apt/lists/* \
+    && mkdir /output && chown 1000:1000 /output
+USER 1000:1000

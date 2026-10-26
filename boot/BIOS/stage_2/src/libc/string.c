@@ -84,42 +84,25 @@ void backspace(char s[])
  * Returns <0 if s1<s2, 0 if s1==s2, >0 if s1>s2 */
 int strcmp(char s1[], char s2[]) 
 {
-    int i;
-    for (i = 0; s1[i] == s2[i]; i++) 
-    {
-        if (s1[i] == '\0')
-        {
-            return 0;
-        }
-    }
-
-    return s1[i] - s2[i];
+    while (*s1 && (uint8_t)*s1 == (uint8_t)*s2) { ++s1; ++s2; }
+    return (int)(uint8_t)*s1 - (int)(uint8_t)*s2;
 }
 
 int strncmp(char s1[], char s2[], int bytes)
 {
-    int i;
-    for (i = 0; i < bytes; i++) 
+    for (int i = 0; i < bytes; ++i)
     {
-        if (s1[i] != s2[i])
-        {
-            return 1;
-        }
+        int difference = (int)(uint8_t)s1[i] - (int)(uint8_t)s2[i];
+        if (difference || s1[i] == 0) return difference;
     }
-
     return 0;
 }
 
 char* strcpy(char* dst, const char* src)
 {
-    int length = strlen(src);
-    int i; 
-    for(i = 0; i < length; i++)
-    {
-        dst[i] = src[i];
-    }
-
-    return dst;
+    char* start = dst;
+    do { *dst++ = *src; } while (*src++);
+    return start;
 }
 
 char** split(const char* str, char delim, int* count)

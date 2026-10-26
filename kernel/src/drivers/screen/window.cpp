@@ -30,7 +30,7 @@ Window::Window()
     drawArea->bpp = mainFramebuffer.bpp;
     drawArea->width = sizeX;
     drawArea->height = size_y;
-    drawArea->pitch = sizeX * (drawArea->bpp / 8);
+    drawArea->pitch = sizeX;
 }
 
 Window::~Window()
@@ -127,7 +127,7 @@ void Window::ResizeWindow(uint32_t x, uint32_t y)
     drawArea->bpp = mainFramebuffer.bpp;
     drawArea->width = sizeX;
     drawArea->height = size_y;
-    drawArea->pitch = sizeX * (drawArea->bpp / 8);
+    drawArea->pitch = sizeX;
 }
 
 void Window::SetCursorPosiiton(uint32_t x, uint32_t y)

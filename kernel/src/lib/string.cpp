@@ -67,8 +67,6 @@ void backspace(char* s)
 }
 
 extern "C" size_t __strlen(char* s);
-extern "C" int __strcmp(char* s1, char* s2);
-extern "C" int __strncmp(char* s1, char* s2, size_t bytes);
 extern "C" char* __strcpy(char* dst, const char* src);
 
 size_t strlen(char* s) 
@@ -78,25 +76,18 @@ size_t strlen(char* s)
 
 int strcmp(char* s1, char* s2) 
 {
-    size_t cnt = 0;
-    while(*s1 != 0)
-    {
-        if(*s1 != *s2)
-        {
-            break;
-        }
-
-        s1++;
-        s2++;
-    }
-
-    return *s1 - *s2;
-    //return __strcmp(s1, s2);
+    while (*s1 && (uint8_t)*s1 == (uint8_t)*s2) { ++s1; ++s2; }
+    return (int)(uint8_t)*s1 - (int)(uint8_t)*s2;
 }
 
 int strncmp(char* s1, char* s2, int bytes)
 {
-    return (__strncmp(s1, s2, bytes) == 0);
+    for (int i = 0; i < bytes; ++i)
+    {
+        int difference = (int)(uint8_t)s1[i] - (int)(uint8_t)s2[i];
+        if (difference || s1[i] == 0) return difference;
+    }
+    return 0;
 }
 
 char* strcpy(char* dst, const char* src)

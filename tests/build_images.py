@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Exercise unchanged, serial production recipes in a disposable source copy."""
+"""Build each production component and independently check the packaged image."""
 import argparse
 import os
 from pathlib import Path
@@ -21,7 +21,7 @@ def build(firmware):
     for stale in ("HackOS.img", "kernel.elf"):
         (directory / stale).unlink(missing_ok=True)
     try:
-        files = require_success(command(["git", "-c", f"safe.directory={ROOT}", "ls-files", "-z"]), "list source inputs").split("\0")
+        files = require_success(command(["git", "-c", f"safe.directory={ROOT}", "ls-files", "--cached", "--others", "--exclude-standard", "-z"]), "list source inputs").split("\0")
         for name in filter(None, files):
             path = Path(name)
             if path.parts[0] in ("tests", ".github", "docs") or name.endswith(".img"):
@@ -30,21 +30,11 @@ def build(firmware):
             destination.parent.mkdir(parents=True, exist_ok=True)
             shutil.copy2(ROOT / path, destination)
         cross = os.environ.get("CROSS_COMPILE", "x86_64-elf-")
-        aliases = directory / "tools"
-        aliases.mkdir(exist_ok=True)
-        for tool in ("gcc", "ld", "objcopy", "ar"):
-            binary = shutil.which(cross + tool)
-            if not binary:
+        for tool in ("gcc", "g++", "ld", "objcopy", "ar"):
+            if not shutil.which(cross + tool):
                 raise RuntimeError(f"Missing {cross + tool}; use the toolchain container")
-            alias = aliases / tool
-            alias.unlink(missing_ok=True)
-            alias.symlink_to(binary)
         env = os.environ.copy()
-        env["PATH"] = str(aliases) + os.pathsep + env["PATH"]
         env.pop("MAKEFLAGS", None)
-        for path in ("bin", "kernel/bin", "kernel/bin-int", "boot/BIOS/stage_2/bin",
-                     "boot/BIOS/stage_2/bin-int", "libs/libc/bin", "libs/shell/bin", "libs/test/bin"):
-            (work / path).mkdir(parents=True, exist_ok=True)
         versions = "\n".join(command([cross + t, "--version"]).stdout for t in ("gcc", "ld"))
         (directory / "toolchain.txt").write_text(versions)
     except (RuntimeError, OSError, subprocess.TimeoutExpired) as exc:
@@ -54,7 +44,7 @@ def build(firmware):
     def make(name, path, targets, extra=()):
         def run():
             args = ["make", "-j1", "-k", "-C", work/path, *targets,
-                    f"CC={cross}gcc", f"LD={cross}ld", *extra]
+                    f"CROSS_COMPILE={cross}", f"CC={cross}gcc", f"CXX={cross}g++", f"LD={cross}ld", *extra]
             result = command(args, cwd=work, env=env, timeout=300)
             (directory / (name + "-output.log")).write_text(result.stdout)
             assert result.returncode == 0, f"{' '.join(map(str, args))}\n{result.stdout}"
@@ -78,8 +68,6 @@ def build(firmware):
         return report.finish()
 
     def package():
-        for name in ("test", "shell"):
-            shutil.copy2(work/f"libs/{name}/bin/{name}", work/f"util/libc/{name}")
         kernel = (work/"bin/kernel.elf").read_bytes()
         validate_elf(kernel)
         if firmware == "bios":
@@ -107,7 +95,7 @@ def build(firmware):
             assert efi[:2] == b"MZ", "UEFI payload lacks DOS header"
             pe = struct.unpack_from("<I", efi, 0x3c)[0]
             assert efi[pe:pe+4] == b"PE\0\0" and struct.unpack_from("<H",efi,pe+4)[0] == 0x8664
-            for name in ("/kernel.elf", "/EFI/BOOT/main.efi", "/startup.nsh"):
+            for name in ("/kernel.elf", "/EFI/BOOT/BOOTX64.EFI", "/startup.nsh"):
                 require_success(command(["mdir","-i",fs_image,"::"+name]), "image file " + name)
         for name in ("/UTIL/FONTS/zap-light16.psf", "/USR/BIN/usertest.elf", "/USR/BIN/test", "/USR/BIN/shell"):
             require_success(command(["mdir","-i",fs_image,"::"+name]), "image file " + name)

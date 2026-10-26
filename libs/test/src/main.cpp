@@ -2,7 +2,7 @@
 #include "stdint.h"
 
 #include "kernel_interface/syscall.h"
-#include "framebuffer/framebuffer.h"
+#include "screen/framebuffer.h"
 
 #include "memory.h"
 #include "string.h"

@@ -42,15 +42,11 @@ void InitialiseGDT(bool fromUEFI)
     gdtr.SetGate(2, 0, 0, 0x92, 0xA0);                          // Data segment
     gdtr.SetGate(3, 0, 0, 0xFA, 0xA0);                          // User mode code segment
     gdtr.SetGate(4, 0, 0, 0xF2, 0xA0);                          // User mode data segment
-    gdtr.SetGate(5, (uint64_t)&tss, sizeof(tss), 0x89, 0x40);   // TSS
-    gdtr.SetGate(6, 0, 0, 0, 0);                                // OVMF data segment
-    gdtr.SetGate(7, 0, 0, 0, 0);                                // OVMF code segment
-
-    if(fromUEFI)
-    {
-        gdtr.SetGate(6, 0, 0, 0x92, 0xA0);                          // OVMF data segment
-        gdtr.SetGate(7, 0, 0, 0x9A, 0xA0);                          // OVMF code segment
-    }
+    // A long-mode TSS descriptor occupies two GDT slots. Its upper half must
+    // remain the high address/reserved fields, including during the UEFI handoff.
+    gdtr.SetGate(5, (uint64_t)&tss, sizeof(tss) - 1, 0x89, 0);
+    *(uint64_t*)&gates[6] = (uint64_t)&tss >> 32;
+    gdtr.SetGate(7, 0, 0, 0, 0);
 
     gdtr.Flush();
 }

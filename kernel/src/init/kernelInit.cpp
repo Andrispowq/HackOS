@@ -126,15 +126,14 @@ void InitialiseRSDP(struct KernelInfo* info)
     }
 }
 
-MemoryMap _map(nullptr, 0);
-MemoryMap* map = &_map;
+MemoryMap* map = nullptr;
 void InitialiseDisplay(KernelInfo* info)
 {
     fromUEFI = 1 - info->booted_from_BIOS;
 
     asm("cli");
     InitialiseGDT(fromUEFI);
-    _map = MemoryMap(info->memMap, info->memMapEntries);
+    map = new MemoryMap(info->memMap, info->memMapEntries);
 
     InitialiseIDT();
     InitPaging(map);

@@ -92,6 +92,7 @@ public:
 
     void operator=(const vector<T>& other)
     {
+        if (this == &other) return;
         this->capacity = other.capacity;
         this->_size = other._size;
         delete[] ptr;

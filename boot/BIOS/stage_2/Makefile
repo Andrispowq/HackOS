@@ -11,31 +11,41 @@ OBJS = $(patsubst $(SRC_DIR)/%.c, $(OBJ_DIR)/%.o, $(SRC))
 OBJS += $(patsubst $(SRC_DIR)/%.asm, $(OBJ_DIR)/%.o, $(ASM_SRC))
 DIRS = $(wildcard $(SRC_DIR)/*)
 
-CC = gcc
+CROSS_COMPILE ?= x86_64-elf-
+CC = $(CROSS_COMPILE)gcc
+CXX = $(CROSS_COMPILE)g++
 ASM = nasm
-LD = ld
+LD = $(CROSS_COMPILE)ld
+AR = $(CROSS_COMPILE)ar
+OBJCOPY = $(CROSS_COMPILE)objcopy
 
 LDS = link.ld
-CFLAGS = -m64 -ffreestanding -fno-pic -c -g -I src
+CFLAGS = -std=gnu11 -fno-pie -fno-stack-protector -fno-omit-frame-pointer -MMD -MP -m64 -mno-red-zone -ffreestanding -fno-pic -c -g -I src
 ASM_FLAGS = -f elf64 -g
 LDFLAGS = -T $(LDS)
 
-second_stage: $(OBJS) link
+.PHONY: second_stage link clean
+second_stage: $(BUILD_DIR)/second_stage.bin
+link: $(BIN_DIR)/second_stage.elf
 
-$(OBJ_DIR)/%.o: $(SRC_DIR)/%.c
+$(OBJ_DIR)/%.o: $(SRC_DIR)/%.c Makefile
 	@ echo !==== COMPILING $^
 	@ mkdir -p $(@D)
-	$(CC) $(CFLAGS) -c $^ -o $@
+	$(CC) $(CFLAGS) -c $< -o $@
 	
-$(OBJ_DIR)/%.o: $(SRC_DIR)/%.asm
+$(OBJ_DIR)/%.o: $(SRC_DIR)/%.asm $(call rwildcard,$(SRC_DIR),*.inc)
 	@ echo !==== COMPILING $^
 	@ mkdir -p $(@D)
-	$(ASM) $(ASM_FLAGS) $^ -o $@
+	$(ASM) $(ASM_FLAGS) -MD $(@:.o=.d) $< -o $@
 
-link:
+$(BIN_DIR)/second_stage.elf: $(OBJS) $(LDS)
+	@ mkdir -p $(@D)
 	@ echo !==== LINKING
 	$(LD) $(LDFLAGS) -o $(BIN_DIR)/second_stage.elf $(OBJS)
-	objcopy --strip-debug $(BIN_DIR)/second_stage.elf --output-format=binary $(BUILD_DIR)/second_stage.bin
+
+$(BUILD_DIR)/second_stage.bin: $(BIN_DIR)/second_stage.elf
+	@ mkdir -p $(@D)
+	$(OBJCOPY) --strip-all --output-format=binary $< $@
 
 # cleaning
 clean:
@@ -43,3 +53,4 @@ clean:
 	rm -rf ${BIN_DIR}
 	mkdir ${OBJ_DIR}
 	mkdir ${BIN_DIR}
+-include $(OBJS:.o=.d)

@@ -60,6 +60,17 @@ for symbol in ["kernel_main", "InitialiseIRQ()", "timer_callback"]:
     if pc not in addresses:
         raise gdb.GdbError("Stopped somewhere other than milestone: " + symbol)
     print("HACKOS_MILESTONE=" + symbol, flush=True)
+    if symbol == "timer_callback" and not ''' + repr(self_test) + ''':
+        ticks = int(gdb.parse_and_eval("tick"))
+        for repeat in range(3):
+            gdb.execute("continue")
+            if int(gdb.parse_and_eval("$pc")) not in addresses:
+                raise gdb.GdbError("Stopped outside repeated timer callback")
+            now = int(gdb.parse_and_eval("tick"))
+            if now <= ticks:
+                raise gdb.GdbError("Timer did not return and advance")
+            ticks = now
+        print("HACKOS_MILESTONE=repeated_timer", flush=True)
     bp.delete()
 end
 info registers
@@ -86,10 +97,10 @@ quit
                         raise AssertionError(f"Kernel did not reach all milestones in {timeout}s; see gdb.log and guest.log") from exc
                     (directory/"gdb.log").write_text(result.stdout)
                     assert result.returncode == 0, f"GDB exited {result.returncode}; see gdb.log"
-                    for milestone in ("kernel_main","InitialiseIRQ()","timer_callback"):
+                    for milestone in ("kernel_main","InitialiseIRQ()","timer_callback", *(() if self_test else ("repeated_timer",))):
                         assert "HACKOS_MILESTONE="+milestone in result.stdout, f"Missing milestone {milestone}"
                     return ("Debugger runner reached test-only labels; no kernel/IRQ coverage." if self_test else
-                            "Reached kernel entry, IRQ initialization, and the timer interrupt callback.")
+                            "Reached kernel entry, IRQ initialization, and repeated timer interrupts.")
                 finally:
                     if process.poll() is None:
                         process.terminate()

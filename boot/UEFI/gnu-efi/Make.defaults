@@ -156,7 +156,7 @@ CFLAGS += -marm
 endif
 
 # Generic compilation flags
-INCDIR  += -I$(SRCDIR) -I$(TOPDIR)/inc -I$(TOPDIR)/inc/$(ARCH) \
+INCDIR  += -I$(TOPDIR)/../include -I$(SRCDIR) -I$(TOPDIR)/inc -I$(TOPDIR)/inc/$(ARCH) \
            -I$(TOPDIR)/inc/protocol
 
 # Only enable -fpic for non MinGW compilers (unneeded on MinGW)

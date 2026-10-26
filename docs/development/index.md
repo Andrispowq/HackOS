@@ -2,8 +2,8 @@
 
 [Documentation index](../index.md)
 
-Start with [building and running](building.md) to understand the toolchain and
-current build limitations. Use the [system overview](../system/index.md) to find
+Start with [building and running](building.md) to use Docker or prepare a native
+cross toolchain. Use the [system overview](../system/index.md) to find
 the component you need, and [TODO](../TODO.md) to see the next priorities.
 
 | Guide | Purpose |
@@ -42,8 +42,8 @@ it already exists.
 Run `make -C tests test` for the independent host, boot-asset, and early BIOS
 checks. Run `make -C tests build-images FIRMWARE=bios` and the corresponding
 `test-qemu` target for full builds and kernel milestones; repeat with `uefi`.
-The [testing guide](testing.md) includes container commands and explains current
-failures and the limits of host coverage.
+The [testing guide](testing.md) includes container commands and explains failure
+reports and the limits of host coverage.
 
 For hardware-facing changes, also inspect the result in QEMU with the existing
 device topology. Keep compiler errors, linker failures, emulator startup errors,

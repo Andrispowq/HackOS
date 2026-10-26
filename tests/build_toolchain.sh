@@ -13,7 +13,7 @@ tar -xf binutils.tar.bz2
 tar -xf gcc.tar.xz
 mkdir build-binutils build-gcc
 cd build-binutils
-../binutils-2.47/configure --target="$target" --prefix="$prefix" --with-sysroot --disable-nls --disable-werror
+../binutils-2.47/configure --target="$target" --prefix="$prefix" --enable-targets=x86_64-w64-mingw32 --with-sysroot --disable-nls --disable-werror
 make -j2
 make install
 cd ../build-gcc

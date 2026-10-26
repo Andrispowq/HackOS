@@ -1,230 +1,158 @@
 # Building and running
 
-[Development index](index.md) · [Boot layout](../system/boot.md) · [TODO](../TODO.md)
+[Development index](index.md) · [Boot layout](../system/boot.md) · [Testing](testing.md)
 
-HackOS targets x86-64 ELF, regardless of the host CPU or operating system. The
-build is being repaired: the Makefiles still select host tools in several
-places, and source errors prevent a complete build. The targets below describe
-the existing workflow; they are not yet a one-command setup.
+HackOS always targets x86-64. The Docker environment supplies the compiler,
+assembler, image tools, firmware, debugger, and emulator; the host needs Docker
+with Compose and a web browser. Use Linux containers on Windows.
 
-## Required tools
+## Docker quick start
 
-| Tool | Purpose |
-| --- | --- |
-| GNU Make | Project and vendored GNU-EFI builds |
-| `x86_64-elf-gcc` and `x86_64-elf-g++` | Freestanding C/C++ compilation |
-| Target Binutils | ELF linking, object copying, archives, and inspection |
-| NASM | BIOS, kernel, and userspace assembly |
-| mtools | FAT32 formatting and image population through `mformat`, `mmd`, and `mcopy` |
-| QEMU system x86 | BIOS/UEFI emulation and graphical output |
-| Host C compiler | Optional utilities under `util/tools` |
-| GDB with x86-64 support | Optional remote kernel debugging |
-
-The bundled OVMF files supply UEFI firmware. Disk images are regular files;
-building them does not require mounting a physical disk or loop device.
-
-### macOS
-
-Homebrew provides target compiler packages, so building GCC manually is not
-necessary for the usual setup:
+From the repository root:
 
 ```sh
-brew install x86_64-elf-gcc x86_64-elf-binutils nasm mtools qemu
-x86_64-elf-gcc -dumpmachine
-x86_64-elf-ld --version
+docker compose up --build bios
 ```
 
-The compiler target should be `x86_64-elf`. Apple `gcc` is a Clang entry point;
-the current host invocation can emit Mach-O even with `-m64`. Selecting the
-right instruction set is not enough: the object format and runtime assumptions
-must also match. See Homebrew's [GCC](https://formulae.brew.sh/formula/x86_64-elf-gcc)
-and [Binutils](https://formulae.brew.sh/formula/x86_64-elf-binutils) formulae.
+Open [the console](http://localhost:6080/vnc.html?autoconnect=true&resize=scale).
+It shows the kernel's initialization output. Click inside it to send keyboard
+and mouse input; the normal screen-update loop and interactive shell task are
+still disabled with tasking, so this is not yet a complete desktop or shell.
+The first image build compiles
+GCC and Binutils from source and takes considerably longer than later cached
+builds. Source changes are picked up when the service starts again.
 
-### Linux and a reproducible toolchain
+For UEFI, stop the BIOS service first because both consoles use port 6080:
 
-Install GNU Make, a host C/C++ toolchain, NASM, mtools, and QEMU through the host
-package manager. The existing `setup` and `setup.sh` scripts only cover part of
-this and do not install a target compiler. They also continue after errors.
-
-For a portable toolchain, use a maintained package that explicitly targets
-`x86_64-elf`, or automate a pinned Binutils/GCC build in an isolated prefix.
-Such a script should verify source checksums, use separate source/build
-directories, enable C and C++, and build the compiler and target `libgcc`
-without requiring a hosted target libc. GCC documents its
-[prerequisites](https://gcc.gnu.org/install/prerequisites.html) and
-[cross-compiler configuration](https://gcc.gnu.org/install/configure.html).
-
-The repository does not contain this bootstrap script yet. A
-`x86_64-linux-gnu` compiler has different defaults and should not silently stand
-in for the bare-metal toolchain. Clang/LLVM is another possible toolchain, but
-would need its own linker, ABI, and assembly checks.
-
-## Tool selection in Make
-
-Project Makefiles currently assign `CC=gcc` and `LD=ld`, while some recipes call
-`objcopy` and `ar` literally. Passing `CC=x86_64-elf-gcc LD=x86_64-elf-ld` changes
-only part of the toolchain. `CROSS_COMPILE` is supported by GNU-EFI but is not
-yet a shared project setting.
-
-The intended common configuration is:
-
-```make
-CROSS_COMPILE ?= x86_64-elf-
-CC = $(CROSS_COMPILE)gcc
-CXX = $(CROSS_COMPILE)g++
-LD = $(CROSS_COMPILE)ld
-AR = $(CROSS_COMPILE)ar
-OBJCOPY = $(CROSS_COMPILE)objcopy
+```sh
+docker compose down
+docker compose --profile uefi up --build uefi
 ```
 
-This is a proposed interface. It must be included consistently, use `CXX` for
-`.cpp` files, and preserve command-line overrides. Host utilities need separate
-host tool variables. GNU-EFI also needs its own PIC/ABI flags rather than the
-kernel's flags being applied to every component.
+Ctrl-C stops the foreground service. `docker compose down` removes its container
+and network but retains the build volume. `docker compose down --volumes` also
+removes those disposable build outputs.
 
-Specify language standards, freestanding behavior, red-zone policy, PIE/stack
-protection policy, and runtime linkage explicitly. Preserve frame pointers
-where the current scheduling assembly expects them.
+To compile without starting the emulator:
 
-## Existing targets and build order
+```sh
+docker compose build bios
+docker compose run --rm bios python3 tools/container.py --firmware bios --build-only
+docker compose run --rm uefi python3 tools/container.py --firmware uefi --build-only
+```
 
-Run these targets from the repository root unless shown otherwise.
+The image and debug ELF live at `/output/bios/` or `/output/uefi/` in the named
+`build-output` volume. With the corresponding service container present, copy
+an image to the host:
+
+```sh
+mkdir -p out
+docker compose cp bios:/output/bios/HackOS.img out/HackOS-bios.img
+docker compose cp bios:/output/bios/kernel.elf out/kernel-bios.elf
+```
+
+`setup.sh` builds this environment; `setup` is a compatibility entry point. They
+do not install packages globally or require a manually prepared cross compiler.
+
+## What is consistent across hosts
+
+[compose.yaml](../../compose.yaml) builds a native Linux tool container on
+amd64 or arm64. GCC still emits x86-64 code on either host architecture. QEMU
+uses TCG software emulation with `q35`, `qemu64`, 1 GiB RAM, four virtual CPUs,
+and the same USB controller configuration. KVM, host CPU passthrough, privileged
+containers, host displays, and physical disks are unnecessary. This follows
+Docker's [native cross-compilation approach](https://docs.docker.com/build/building/multi-platform/).
+
+The source checkout is mounted read-only. A fresh source copy is compiled in the
+output volume on every run, preventing old objects from masking missing inputs.
+The container runs as an unprivileged user. Only the browser console is published,
+bound to host loopback through [Compose's port mapping](https://docs.docker.com/reference/compose-file/services/#ports).
+
+The tool image uses a digest-pinned Ubuntu 24.04 base, GCC 15.2.0, and Binutils
+2.47. Source archives have SHA-256 checks. Binutils includes the x86-64 PE/COFF
+backend needed by GNU-EFI. The project supplies the small set of ELF definitions
+needed by its UEFI build, so a host libc sysroot is unnecessary.
+
+This is a consistent build and machine configuration, not a promise of identical
+disk-image hashes: Ubuntu packages receive updates, and FAT timestamps, volume
+IDs, build paths, and emulated RTC time can vary. Windows/macOS/Linux hosts and
+both CPU architectures still need their own end-to-end checks when changing
+Docker, QEMU, or the compiler versions.
+
+## Building without Docker
+
+Required tools are GNU Make, Python 3.9+, NASM, mtools, an `x86_64-elf` GCC C/C++
+toolchain, and target Binutils. QEMU is needed to run the result; GDB with x86-64
+support is needed for boot tests. The bundled OVMF files supply UEFI firmware.
+
+On macOS, Homebrew provides `x86_64-elf-gcc`, `x86_64-elf-binutils`, `nasm`,
+`mtools`, and `qemu`. Apple host tools do not emit the required ELF binaries just
+because `-m64` is present. On Linux, use an explicit bare-metal toolchain rather
+than relying on distribution compiler defaults. The container bootstrap recipe
+is in [build_toolchain.sh](../../tests/build_toolchain.sh).
+
+```sh
+make -j2 build_bios
+make run
+make -j2 build_efi
+make TARGET_BIOS=false run
+```
+
+`CROSS_COMPILE` defaults to `x86_64-elf-` and reaches the project and GNU-EFI
+builds. `CC`, `CXX`, `LD`, `AR`, and `OBJCOPY` can also be overridden explicitly.
+C++ uses GNU++17; BIOS C uses GNU11. Kernel and BIOS code disable the red zone,
+PIE and stack protection; C++ code is freestanding without RTTI or exceptions.
+Frame pointers remain enabled for the experimental scheduler.
 
 | Target | Behavior |
 | --- | --- |
-| `make build_bios` | Builds the BIOS stages and kernel, then constructs the image |
-| `make TARGET_BIOS=false build_efi` | Builds the UEFI application and kernel, then constructs the image |
-| `make buildimg` | Assembles the selected image from existing outputs; does not rebuild all its inputs |
-| `make all` | Builds the selected boot path and starts QEMU |
-| `make run` | Starts QEMU with an existing image |
-| `make debug` / `make debug_all` | Starts QEMU and GDB, optionally building first |
-| `make clean` | Removes outputs for the selected path; does not clean every userspace/GNU-EFI component |
-| Bare `make` / `make init` | Cleans and builds GNU-EFI, even with BIOS selected |
+| `make` / `make build` / `make init` | Builds the selected image; BIOS by default |
+| `make build_bios` | Builds BIOS stages, kernel, libc and programs, then packages them |
+| `make build_efi` | Builds GNU-EFI libraries/loader, kernel and programs, then packages them |
+| `make buildimg` | Packages existing outputs for `TARGET_BIOS`; does not compile |
+| `make all` | Builds the selected image and runs QEMU |
+| `make run` | Runs the existing image with TCG and a graphical QEMU window |
+| `make debug` | Starts QEMU paused with GDB on loopback port 1234 |
+| `make clean` | Removes project build outputs and the generated GNU-EFI x86-64 tree |
 
-BIOS is the default. Use `TARGET_BIOS=false` consistently for UEFI, including
-run/debug targets. Both modes write `bin/HackOS.img`, so switching modes replaces
-the previous image.
+Both direct Make paths write `bin/HackOS.img`. Do not build both firmware images
+concurrently in the same checkout. Object/link dependencies and generated C/C++
+and NASM dependency files support parallel builds within one selected path.
+Clean when switching toolchains or overriding compiler flags.
 
-A complete build needs this dependency order:
-
-1. Create output directories and select the full target toolchain.
-2. Build `libs/libc`, then `libs/shell` and `libs/test`; `make -C util/libc copy`
-   performs that sequence and copies programs into the image-input directory.
-3. Build the selected loader. For UEFI, GNU-EFI's `lib` and `gnuefi` outputs
-   must exist before the `bootloader` target links.
-4. Build the kernel and retain both its debug ELF and the stripped BIOS copy.
-5. Check payload sizes, then create/populate the selected disk image.
-
-The top-level build currently omits step 2 and assumes some directories and
-GNU-EFI outputs already exist. Generated programs are no longer tracked, so a
-fresh checkout must build them explicitly. The dependency graph needs fixing
-before this sequence can become a reliable top-level target.
-
-Do not use parallel Make yet: several targets list `link` and object files as
-sibling prerequisites, allowing linking to race compilation. Header and NASM
-include changes also lack complete dependency tracking. Remove stale objects
-when switching compilers.
-
-The BIOS MBR and first stage can be assembled independently:
+For separate, always-clean output directories:
 
 ```sh
-mkdir -p bin
-make -C boot/BIOS/mbr mbr
-make -C boot/BIOS/stage_1 bootloader
+python3 tools/build.py --firmware bios
+python3 tools/build.py --firmware uefi
+python3 tools/run_qemu.py --firmware bios --image out/bios/HackOS.img
 ```
 
-## Current blockers
+## Images and debugging
 
-- `AHCIDevice::GetType()` does not match the base method's `const` signature.
-- BIOS stage-2 C has undeclared functions and implicit pointer/integer conversions
-  rejected by newer GCC releases.
-- The UEFI loader includes `<elf.h>`, which the bare toolchain does not supply.
-- `libs/test` includes a missing `framebuffer/framebuffer.h`.
-- The BIOS QEMU recipe has a broken continuation before `-net none`.
-- UEFI font paths, fallback executable naming, and `ExitBootServices` handling
-  need correction; see [boot documentation](../system/boot.md).
+[make_image.py](../../tools/make_image.py) creates FAT32 images with mtools,
+without mounts or root privileges. It checks every BIOS payload against its
+fixed sector allocation before creating the image, writes complete payloads,
+and only replaces the output after packaging succeeds. The boot copy of the
+kernel is stripped; `kernel/bin/kernel.elf` retains debug symbols. UEFI uses
+`EFI/BOOT/BOOTX64.EFI` and `UTIL/FONTS/zap-light16.psf`.
 
-The [TODO list](../TODO.md) includes the build-system repairs and their expected
-outcomes. Do not interpret a surviving local binary as proof of a clean build.
+The runner uses a temporary disk overlay and a fresh copy of OVMF VARS. Changes
+inside the guest disappear when it stops. Use a separate writable image for
+persistence experiments. Firmware templates and retained input assets stay
+unchanged.
 
-## Running and debugging an image
-
-Once a BIOS image exists, this direct QEMU command avoids the current broken
-`run` recipe and uses a temporary disk overlay:
+For native debugging, run `make debug` (add `TARGET_BIOS=false` for UEFI), then:
 
 ```sh
-qemu-system-x86_64 \
-  -drive file=bin/HackOS.img,format=raw \
-  -snapshot -m 1G -cpu qemu64 -machine q35 \
-  -smp cores=4,threads=1,sockets=1 \
-  -usb -device usb-ehci,id=ehci -device qemu-xhci,id=xhci \
-  -net none -rtc clock=host,base=localtime
+x86_64-elf-gdb kernel/bin/kernel.elf
+# In GDB:
+# target remote localhost:1234
+# break kernel_main
+# continue
 ```
 
-For UEFI, start with an image built for UEFI and copy the variable-store template
-into `bin` before attaching firmware:
-
-```sh
-cp boot/UEFI/OVMFbin/OVMF_VARS-pure-efi.fd bin/OVMF_VARS.fd
-```
-
-Add these drives to the QEMU command:
-
-```text
--drive if=pflash,format=raw,unit=0,file=boot/UEFI/OVMFbin/OVMF_CODE-pure-efi.fd,readonly=on
--drive if=pflash,format=raw,unit=1,file=bin/OVMF_VARS.fd
-```
-
-Use a QEMU window or VNC for the framebuffer. A headless serial console requires
-guest serial-output support; `-nographic` alone cannot show the graphical console.
-For debugging, add `-S -s` to wait for GDB on port 1234, then load symbols from
-`kernel/bin/kernel.elf` and connect with `target remote localhost:1234`.
-The existing debug recipes use `-s` without `-S`, so the guest can run before
-the debugger attaches. See the [QEMU options reference](https://www.qemu.org/docs/master/system/invocation.html).
-
-Inspect ELF headers and load segments with `x86_64-elf-readelf -h -l` and compare
-BIOS file sizes with the [sector allocation table](../system/boot.md).
-For persistence experiments, use a disposable writable image without `-snapshot`
-and keep it for post-run inspection.
-
-The legacy `make install` writes to `/dev/sdb`. It is unrelated to emulator setup
-and must not be used as a routine build or test step.
-
-## Test and build containers
-
-`tests/Dockerfile` packages the test tools and an automatically built
-`x86_64-elf` cross compiler. The Ubuntu base is pinned by digest; GCC 15.2.0 and
-binutils 2.47 source downloads are checked against SHA-256 hashes. No manual
-cross-compiler installation is needed inside this environment. The build
-still reports the source defects listed above.
-
-```sh
-docker build --platform linux/amd64 --target toolchain \
-  -t hackos-tests:toolchain -f tests/Dockerfile tests
-mkdir -p tests/out
-docker run --rm --platform linux/amd64 --network none \
-  --user "$(id -u):$(id -g)" \
-  --mount "type=bind,source=$PWD,target=/work,readonly" \
-  --mount "type=bind,source=$PWD/tests/out,target=/work/tests/out" \
-  hackos-tests:toolchain python3 tests/build_images.py --firmware bios
-```
-
-Repeat with `--firmware uefi`. The harness builds tracked source inputs in a
-disposable copy, supplies missing directories and tool selection, and runs the
-unchanged Makefiles serially. Successful builds export `HackOS.img` and a debug
-`kernel.elf` under `tests/out/build-bios/` or `build-uefi/`. No stale local output
-is reused. This isolates testing while the production build rules await repair.
-
-Use the `host` Docker target for sanitizer tests without building GCC from
-source. See [testing](testing.md) for the commands, runtime limitations, and CI.
-
-On Apple Silicon, replace `linux/amd64` with `linux/arm64` in both toolchain
-commands to build and run the cross compiler natively. Its output is still
-x86-64 ELF. Keep the host-test container on `linux/amd64`, since those tests
-execute x86 assembly. Emulating GCC itself adds considerable build time. See Docker's
-[multi-platform build guidance](https://docs.docker.com/build/building/multi-platform/).
-
-Both targets include QEMU with TCG and GDB for headless tests. Interactive VNC
-and KVM acceleration remain optional future additions. The mtools image builder
-needs neither privileged containers nor host disk access. Docker packages the
-tools and emulator; HackOS still runs as the guest operating system.
+`gdb-multiarch` is another suitable debugger. The automated boot runner uses a
+private Unix socket and a bounded timeout; see [testing](testing.md). A
+framebuffer requires a graphical window or VNC: `-nographic` does not turn it
+into a text console.

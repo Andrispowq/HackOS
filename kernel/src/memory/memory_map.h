@@ -14,8 +14,12 @@ struct MemoryMapEntry
 class MemoryMap
 {
 public:
-    MemoryMap(MemoryMapEntry* firstEntry, uint64_t entryCount)
-        : firstEntry(firstEntry), entryCount(entryCount) {}
+    MemoryMap(MemoryMapEntry* firstEntry, uint64_t entryCount);
+    ~MemoryMap();
+    MemoryMap(const MemoryMap&) = delete;
+    MemoryMap& operator=(const MemoryMap&) = delete;
+
+    void Reset(MemoryMapEntry* entries, uint64_t count);
 
     bool IsUsuableMemory(size_t entry);
     MemoryMapEntry** GetUsuableMemory();
@@ -29,6 +33,10 @@ public:
 public:
     MemoryMapEntry* firstEntry;
     uint64_t entryCount;
+
+private:
+    uint32_t usableType;
+    MemoryMapEntry** usableMemory = nullptr;
 };
 
 #endif

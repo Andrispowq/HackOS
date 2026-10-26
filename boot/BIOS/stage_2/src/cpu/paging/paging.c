@@ -22,7 +22,7 @@ static void set_frame(uint64_t frame_addr)
     uint64_t idx = INDEX_FROM_BIT(frame);
     uint64_t off = OFFSET_FROM_BIT(frame);
 
-    bitmap[idx] |= (0x1 << off);
+    bitmap[idx] |= (1ULL << off);
 }
 
 static void clear_frame(uint64_t frame_addr)
@@ -31,16 +31,16 @@ static void clear_frame(uint64_t frame_addr)
     uint64_t idx = INDEX_FROM_BIT(frame);
     uint64_t off = OFFSET_FROM_BIT(frame);
 
-    bitmap[idx] &= ~(0x1 << off);
+    bitmap[idx] &= ~(1ULL << off);
 }
 
-static uint32_t test_frame(uint64_t frame_addr)
+static uint64_t test_frame(uint64_t frame_addr)
 {
     uint64_t frame = frame_addr / 0x1000;
     uint64_t idx = INDEX_FROM_BIT(frame);
     uint64_t off = OFFSET_FROM_BIT(frame);
 
-    return (bitmap[idx] & (0x1 << off));
+    return (bitmap[idx] & (1ULL << off));
 }
 
 static uint64_t first_frame()
@@ -52,7 +52,7 @@ static uint64_t first_frame()
         {
             for (j = 0; j < 64; j++)
             {
-                uint64_t toTest = 0x1 << j;
+                uint64_t toTest = 1ULL << j;
                 if (!(bitmap[i] & toTest))
                 {
                     return i * 8 * 8 + j;
@@ -61,7 +61,7 @@ static uint64_t first_frame()
         }
     }
 
-    return frameCount * 64;
+    for (;;) asm("cli; hlt");
 }
 
 void LockPages(vaddr_t address, uint64_t pageCount)
@@ -127,27 +127,28 @@ void* RequestPage()
 
 void InitPaging(MemoryMapEntry* entries)
 {
-    uint64_t memorySize = 0x10000000; //Assume this big memory
-    freeMemory = memorySize;
-    frameCount = memorySize / 0x1000;
-    frameCount /= 64;
-    frameCount += 1;
-
-    bitmap = (uint64_t*)kmalloc(frameCount);
-    memset(bitmap, 0, frameCount * sizeof(uint64_t));
-
-    ReservePages(0x0, 0x50);
-
-    kernel_directory = RequestPage();
-    memset(kernel_directory, 0, 0x1000);
-
-    for(uint64_t i = 0; i < 0x1000000; i += 0x1000)
-    {
-        MapMemory(i, i);
+    // Bootstrap page tables use only firmware-reported RAM below 16 MiB.
+    frameCount = (0x1000000 / 4096) / 64;
+    bitmap = (uint64_t*)kmalloc(frameCount * sizeof(uint64_t));
+    memset(bitmap, 0xff, frameCount * sizeof(uint64_t));
+    freeMemory = usedMemory = 0;
+    reservedMemory = 0x1000000;
+    for (uint32_t i = 0; i < MemoryRegionCount; ++i) {
+        if (entries[i].type != 1) continue;
+        uint64_t start = (entries[i].address + 4095) & ~4095ULL;
+        uint64_t end = entries[i].address + entries[i].length;
+        if (end > 0x1000000) end = 0x1000000;
+        for (uint64_t address = start; address + 4096 <= end; address += 4096) {
+            // Low loader/ELF buffers, VGA/ROM and the kernel load area stay reserved.
+            if (address < 0x50000 || (address >= 0x90000 && address < 0x200000)) continue;
+            clear_frame(address);
+            freeMemory += 4096;
+            reservedMemory -= 4096;
+        }
     }
-
-    SetIDTGate(IRQ15, IDT_TA_InterruptGate, (uint64_t)PageFaultHandler);
-
+    kernel_directory = RequestPage();
+    memset(kernel_directory, 0, 4096);
+    for (uint64_t i = 0; i < 0x1000000; i += 4096) MapMemory(i, i);
     asm volatile("mov %0, %%cr3" : : "r"(kernel_directory));
 }
 

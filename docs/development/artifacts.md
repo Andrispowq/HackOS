@@ -15,15 +15,17 @@ control. Their source, build rules, and input fixtures belong in the repository.
 | BIOS `bin/` and `bin-int/` directories | Per-stage Makefiles and NASM/C sources |
 | GNU-EFI `x86_64/` | Vendored library, application sources, and custom bootloader |
 | `libs/*/bin/`, `libs/*/bin-int/` | Libc, shell, and example-program Makefiles |
-| `util/libc/shell`, `util/libc/test` | `make -C util/libc copy` after toolchain/build repairs |
+| `util/libc/shell`, `util/libc/test` | Legacy copies; current images take programs directly from `libs/*/bin/` |
+| `out/` | Fresh source copies, disk images, debug symbols, and tool versions from `tools/build.py` |
 | Initrd utility executables | Host compilation of their adjacent `.c` files |
 | `initrd.img` and the initrd utility's image | Three text fixtures passed to `init_rd_creator` |
 | `.DS_Store`, `out.txt`, emulator logs | Local metadata and diagnostics; not build inputs |
 
-The build does not yet recreate every prerequisite automatically. In particular,
-userspace binaries and GNU-EFI libraries need explicit dependency ordering;
-see [building](building.md). Ignored local outputs may still exist after a
-repository cleanup and must not be relied on by a fresh checkout.
+The image targets build their kernel, loader, and userspace prerequisites in
+dependency order; see [building](building.md). Ignored local outputs may still
+exist after a repository cleanup and must not be relied on by a fresh checkout.
+Docker keeps its fresh builds in the named `build-output` volume instead of the
+source tree.
 
 ## Retained binary inputs
 

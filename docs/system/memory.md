@@ -21,13 +21,15 @@ physical address. Exhaustion currently prints an error and halts.
 
 `ReservePages`/`UnreservePages` describe memory unavailable to ordinary
 allocation; `LockPages`/`FreePages` account for allocated memory. Callers must
-balance these operations. The counters are adjusted on every call, so repeated
-free/reserve operations are not automatically harmless.
+balance these operations. Counters change only when the bitmap changes, but the
+single bitmap does not distinguish every ownership category; callers must not
+free a reserved frame as though they owned it.
 
-The allocator currently sizes its bitmap from the sum of region lengths.
-Physical maps can contain gaps: the sum of lengths is not necessarily the
-highest physical address. Bitmap sizing, bounds, and initial mappings need to
-be checked against sparse maps before supporting larger memory configurations.
+Bitmap capacity follows the highest usable physical page, including gaps. It
+starts fully reserved and releases only whole usable pages. Kernel bump
+allocations and the page-aligned bitmap are protected. Large reserved PCI
+windows do not inflate the allocator's RAM limit. Highly sparse maps still need
+a more space-efficient representation and broader guest coverage.
 
 ## Page tables
 
@@ -43,8 +45,10 @@ needed. Its main operations are:
 | `Clone()` | Shares entries equal to the kernel mappings and copies other mappings through the clone helpers |
 
 `KernelDirectory` is the global kernel address space. [InitPaging](../../kernel/src/arch/x86_64/paging/paging.cpp)
-builds identity mappings up to `GetTotalSystemMemory()` and activates the new
-directory. Device discovery adds mappings for hardware registers later.
+identity-maps reported RAM/firmware regions and the low boot handoff area,
+rather than treating the sum of region lengths as an address. High reserved
+PCI windows are left to device discovery; EFI MMIO regions are mapped by their
+consumers. Device discovery adds mappings for hardware registers later.
 
 The flag definitions include user access, cache controls, and execute-disable.
 Their presence does not establish complete permission enforcement or process
@@ -77,11 +81,12 @@ explicit lifetime and mapping rules. Allocation must not reclaim data still
 referenced after a page-table switch. Kernel and user address-space teardown
 also need a clear ownership model before task isolation can be enabled.
 
-The support routines in [lib/memory.cpp](../../kernel/src/lib/memory.cpp) are
-not drop-in standard libc functions. For example, `memset` writes word-sized
-values on aligned portions and is used to fill pixels; `memcmp` returns an
-equality-style result rather than a conventional ordering result. Changing these
-semantics requires updating callers and the copies in other components.
+The support routines in [lib/memory.cpp](../../kernel/src/lib/memory.cpp) use
+standard byte-memory semantics: `memset` repeats an unsigned byte, `memcmp`
+compares unsigned bytes, and copies return the destination. Kernel/userspace
+memory primitives use NASM helpers; BIOS stage 2 uses C. Framebuffer colour fills
+use explicit pixel operations. String comparisons stop at NUL and `strcpy`
+copies the terminator and returns the original destination.
 
 See the [testing plan](../development/testing.md) for allocator, map, and
 support-library cases, and [TODO](../TODO.md) for the immediate repairs.

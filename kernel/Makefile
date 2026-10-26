@@ -19,31 +19,41 @@ OBJS = $(patsubst $(SRC_DIR)/%.cpp, $(OBJ_DIR)/%.o, $(SRC))
 OBJS += $(patsubst $(SRC_DIR)/%.asm, $(OBJ_DIR)/%.o, $(ASM_SRC))
 DIRS = $(wildcard $(SRC_DIR)/*)
 
-CC = gcc
+CROSS_COMPILE ?= x86_64-elf-
+CC = $(CROSS_COMPILE)gcc
+CXX = $(CROSS_COMPILE)g++
 ASM = nasm
-LD = ld
+LD = $(CROSS_COMPILE)ld
+AR = $(CROSS_COMPILE)ar
+OBJCOPY = $(CROSS_COMPILE)objcopy
 
 LDS = link_BIOS.ld
-CFLAGS = -m64 -ffreestanding -mno-red-zone -fno-rtti -fno-exceptions -c -g -I src
+CFLAGS = -std=gnu++17 -fno-pie -fno-stack-protector -fno-omit-frame-pointer -MMD -MP -m64 -ffreestanding -mno-red-zone -fno-rtti -fno-exceptions -c -g -I src
 ASM_FLAGS = -f elf64
 LDFLAGS = -T $(LDS) -static -Bsymbolic -nostdlib
 
-kernel: $(OBJS) link
+.PHONY: kernel link clean
+kernel: $(BUILD_DIR)/kernel.elf
+link: $(BIN_DIR)/kernel.elf
 
-$(OBJ_DIR)/%.o: $(SRC_DIR)/%.cpp
+$(OBJ_DIR)/%.o: $(SRC_DIR)/%.cpp Makefile
 	@ echo !==== COMPILING $^
 	@ mkdir -p $(@D)
-	$(CC) $(CFLAGS) -c $^ -o $@
+	$(CXX) $(CFLAGS) -c $< -o $@
 	
-$(OBJ_DIR)/%.o: $(SRC_DIR)/%.asm
+$(OBJ_DIR)/%.o: $(SRC_DIR)/%.asm $(call rwildcard,$(SRC_DIR),*.inc)
 	@ echo !==== COMPILING $^
 	@ mkdir -p $(@D)
-	$(ASM) $(ASM_FLAGS) $^ -o $@
+	$(ASM) $(ASM_FLAGS) -MD $(@:.o=.d) $< -o $@
 	 
-link:
+$(BIN_DIR)/kernel.elf: $(OBJS) $(LDS)
+	@ mkdir -p $(@D)
 	@ echo !==== LINKING
 	$(LD) $(LDFLAGS) -o $(BIN_DIR)/kernel.elf $(OBJS)
-	objcopy --strip-debug $(BIN_DIR)/kernel.elf $(BUILD_DIR)/kernel.elf
+
+$(BUILD_DIR)/kernel.elf: $(BIN_DIR)/kernel.elf
+	@ mkdir -p $(@D)
+	$(OBJCOPY) --strip-all $< $@
 
 # cleaning
 clean:
@@ -51,3 +61,4 @@ clean:
 	rm -rf ${BIN_DIR}
 	mkdir ${OBJ_DIR}
 	mkdir ${BIN_DIR}
+-include $(OBJS:.o=.d)

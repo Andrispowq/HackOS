@@ -1,11 +1,7 @@
 #!/bin/sh
-
-sudo apt-get update
-sudo apt install nasm
-sudo apt install gcc
-sudo apt install qemu-system-x86
-sudo apt install make
-sudo apt install mtools
-
-make init
-echo "You can now run the OS by 'make all'"
+set -eu
+cd "$(dirname "$0")"
+command -v docker >/dev/null 2>&1 || { echo 'Install Docker with Compose, then rerun setup.' >&2; exit 1; }
+docker compose version >/dev/null
+docker compose build bios
+printf '%s\n' 'Ready. Run: docker compose up bios' 'Console: http://localhost:6080/vnc.html?autoconnect=true&resize=scale'

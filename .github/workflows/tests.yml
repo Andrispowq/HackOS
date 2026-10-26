@@ -100,6 +100,15 @@ jobs:
             --mount "type=bind,source=$PWD,target=/work,readonly" \
             --mount "type=bind,source=$PWD/tests/out,target=/work/tests/out" \
             hackos-tests:toolchain python3 tests/build_images.py --firmware "$FIRMWARE"
+      - name: Check public parallel build and Compose configuration
+        env:
+          FIRMWARE: ${{ matrix.firmware }}
+        run: |
+          docker compose config --quiet
+          docker run --rm --network none --user "$(id -u):$(id -g)" \
+            --mount "type=bind,source=$PWD,target=/work,readonly" \
+            --mount "type=bind,source=$PWD/tests/out,target=/work/tests/out" \
+            hackos-tests:toolchain python3 tools/build.py --firmware "$FIRMWARE" --output tests/out/portable-build
       - name: Observe kernel and timer milestones
         if: ${{ !cancelled() && steps.build.outcome != 'skipped' }}
         env:

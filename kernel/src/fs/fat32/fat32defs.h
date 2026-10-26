@@ -123,7 +123,11 @@ struct DirEntry
 	uint8_t attributes = 0;
 
 	uint32_t parentCluster = 0;
-	uint32_t offsetInParentCluster = 0; 
+	uint32_t offsetInParentCluster = 0;
+	// Locations of the validated on-disk records; these fields are not serialized.
+	uint32_t directoryCluster = 0;
+	uint32_t firstDirectoryIndex = 0;
+	uint32_t directoryEntryCount = 0;
 };
 
 #endif

@@ -55,11 +55,10 @@ void printf_backspace()
 
 void clear_screen()
 {
-    uint32_t* addr = (uint32_t*)(uint64_t)curr_display->framebuffer.address;
-    uint32_t size = curr_display->framebuffer.width * curr_display->framebuffer.height * 4;
-    uint32_t colour = curr_display->console.bgColour;
-
-    memset(addr, colour, size);
+    FRAMEBUFFER* fb = &curr_display->framebuffer;
+    for (uint32_t y = 0; y < fb->height; ++y)
+        for (uint32_t x = 0; x < fb->width; ++x)
+            fb->address[(uint64_t)y * fb->pitch + x] = curr_display->console.bgColour;
 }
 
 void put_backspace()
@@ -82,7 +81,7 @@ int put_string(const char* str)
 void putchar_at(char character, uint32_t xOff, uint32_t yOff)
 {
     uint32_t* addr = curr_display->framebuffer.address;
-    uint32_t pitch = curr_display->framebuffer.width;
+    uint32_t pitch = curr_display->framebuffer.pitch;
     
     uint32_t charWidth = curr_display->console.char_width;
     uint32_t charHeight = curr_display->console.char_height;
@@ -108,7 +107,7 @@ void putchar_at(char character, uint32_t xOff, uint32_t yOff)
 void empty_char_at(uint32_t xOff, uint32_t yOff)
 {
     uint32_t* addr = curr_display->framebuffer.address;
-    uint32_t pitch = curr_display->framebuffer.width;
+    uint32_t pitch = curr_display->framebuffer.pitch;
     
     uint32_t charWidth = curr_display->console.char_width;
     uint32_t charHeight = curr_display->console.char_height;
@@ -209,15 +208,13 @@ void scroll_up()
     CONSOLE con = curr_display->console;
     FRAMEBUFFER fb = curr_display->framebuffer;
 
-    uint32_t scroll_width = fb.width;
-    uint32_t scroll_height = fb.height - con.con_height;
-    
-    void* addr = fb.address;
-
-    //Move everything up
-    memcpy((void*)((uint64_t)addr + scroll_width * 4), addr, scroll_width * scroll_height * 4);
-
-    //Clear the last row
-    memset((void*)((uint64_t)addr + scroll_width * scroll_height * 4),
-        0, con.con_height * scroll_width * 4);
+    uint32_t rows = con.char_height;
+    if (rows >= fb.height) { clear_screen(); return; }
+    for (uint32_t y = 0; y < fb.height - rows; ++y)
+        memcpy(fb.address + (uint64_t)y * fb.pitch,
+               fb.address + (uint64_t)(y + rows) * fb.pitch,
+               fb.width * sizeof(uint32_t));
+    for (uint32_t y = fb.height - rows; y < fb.height; ++y)
+        for (uint32_t x = 0; x < fb.width; ++x)
+            fb.address[(uint64_t)y * fb.pitch + x] = con.bgColour;
 }

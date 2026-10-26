@@ -1,127 +1,68 @@
 #include "vfs.h"
 #include "filesystem.h"
-
 #include "lib/memory.h"
 #include "lib/string.h"
 
-extern Filesystem* filesystems[MAX_FILESYSTEMS];
-
 void* fopen(const char* path, int flags)
 {
-    char fs_name[6]; //fs12:/USR/BIN/... where fs12: is the important part
-    char* to_search = nullptr;
-
-    int fs_index = -1;
-    size_t path_length = strlen((char*)path);
-    size_t to_search_length = 0;
-    for(size_t i = 0; i < path_length; i++)
+    if (!path || path[0] != 'f' || path[1] != 's') return nullptr;
+    size_t position = 2;
+    size_t index = 0;
+    if (path[position] < '0' || path[position] > '9') return nullptr;
+    while (path[position] >= '0' && path[position] <= '9')
     {
-        if(path[i] == '/')
+        index = index * 10 + path[position++] - '0';
+        if (index >= MAX_FILESYSTEMS) return nullptr;
+    }
+    if (path[position] != ':' || path[position + 1] != '/') return nullptr;
+    Filesystem* fs = filesystems[index];
+    if (!fs) return nullptr;
+
+    const char* suffix = path + position + 1;
+    size_t length = strlen((char*)suffix);
+    char* translated = new char[length + 2];
+    translated[0] = '~';
+    memcpy(translated + 1, suffix, length + 1);
+    ActiveFile* file = fs->OpenFile(translated);
+    if (!file && (flags & O_CREAT))
+    {
+        size_t last = length;
+        while (last && translated[last] != '/') --last;
+        if (translated[last + 1])
         {
-            memset(fs_name, 0, 6);
-            memcpy(fs_name, (const void*)path, i);
-
-            fs_index = (char)fs_name[2] - '0';
-            if(i > 4) //2 digits 
-            {
-                fs_index += ((char)fs_name[3] - '0') * 10;
-            }
-
-            to_search_length = path_length - i + 2;
-            to_search = new char[to_search_length + 1];
-            memset(to_search, 0, to_search_length + 1);
-            to_search[0] = '~';
-            memcpy(&to_search[1], &path[i], to_search_length - 1);
-            break;
+            translated[last] = 0;
+            file = fs->CreateFile(translated, translated + last + 1, ARCHIVE);
         }
     }
+    delete[] translated;
+    if (file) file->fs_index = index;
+    return file;
+}
 
-    if(fs_index == -1)
-    {
-        return nullptr;
-    }
-
-    Filesystem* fs = filesystems[fs_index];
-    if(fs == nullptr)
-    {
-        return nullptr;
-    }
-
-    ActiveFile* file = fs->OpenFile(to_search);
-    if((file == nullptr) && ((flags & O_CREAT) == O_CREAT))
-    {
-        int last_index = -1;
-        for(size_t i = 0; i < to_search_length; i++)
-        {
-            if(to_search[i] == '/')
-            {
-                last_index = i;
-            }
-        }
-
-        char* path = new char[last_index + 1];
-        memset(path, 0, last_index + 1);
-        memcpy(path, to_search, last_index);
-        
-        file = fs->CreateFile(path, &to_search[last_index + 1], ARCHIVE);
-    }
-
-    file->fs_index = fs_index;
-    return (void*)file;
+static Filesystem* FileSystemFor(void* handle)
+{
+    if (!handle) return nullptr;
+    ActiveFile* file = (ActiveFile*)handle;
+    if (file->fs_index >= MAX_FILESYSTEMS) return nullptr;
+    return filesystems[file->fs_index];
 }
 
 int fread(void* buffer, int size, int n, void* file)
 {
-    ActiveFile* _file = (ActiveFile*)file;
-    int fs_index = _file->fs_index;
-    if(fs_index == -1)
-    {
-        return -1;
-    }
-
-    Filesystem* fs = filesystems[fs_index];
-    if(fs == nullptr)
-    {
-        return -1;
-    }
-
-    int ret = fs->Read(_file, buffer, size * n);
-    return ret;
+    Filesystem* fs = FileSystemFor(file);
+    if (!fs || size < 0 || n < 0 || (!buffer && size && n)) return -1;
+    return fs->Read((ActiveFile*)file, buffer, (uint64_t)size * (uint64_t)n);
 }
 
 int fwrite(void* buffer, int size, int n, void* file)
 {
-    ActiveFile* _file = (ActiveFile*)file;
-    int fs_index = _file->fs_index;
-    if(fs_index == -1)
-    {
-        return -1;
-    }
-
-    Filesystem* fs = filesystems[fs_index];
-    if(fs == nullptr)
-    {
-        return -1;
-    }
-
-    int ret = fs->Write(_file, buffer, size * n);
-    return ret;
+    Filesystem* fs = FileSystemFor(file);
+    if (!fs || size < 0 || n < 0 || (!buffer && size && n)) return -1;
+    return fs->Write((ActiveFile*)file, buffer, (uint64_t)size * (uint64_t)n);
 }
 
 void fclose(void* file)
 {
-    ActiveFile* _file = (ActiveFile*)file;
-    int fs_index = _file->fs_index;
-    if(fs_index == -1)
-    {
-        return;
-    }
-
-    Filesystem* fs = filesystems[fs_index];
-    if(fs == nullptr)
-    {
-        return;
-    }
-
-    fs->CloseFile(_file);
+    Filesystem* fs = FileSystemFor(file);
+    if (fs) fs->CloseFile((ActiveFile*)file);
 }

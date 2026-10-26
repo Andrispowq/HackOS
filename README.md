@@ -32,10 +32,16 @@ experimental, and there is no networking stack.
 
 ## Getting started
 
-Read the [build guide](docs/development/building.md) before running Make. The
-build currently needs toolchain and source fixes; having a compiler installed
-is not enough for a clean build. BIOS and UEFI have separate build targets and
-must be checked independently.
+With Docker and Compose installed, run:
+
+```sh
+docker compose up --build bios
+```
+
+Open [the browser console](http://localhost:6080/vnc.html?autoconnect=true&resize=scale).
+For UEFI, stop BIOS and run `docker compose --profile uefi up --build uefi`.
+The [build guide](docs/development/building.md) covers native builds, output
+files, debugging, and the automatically built cross-compiler.
 
 Generated binaries and copied programs are ignored and should be rebuilt from
 source. The [artifact guide](docs/development/artifacts.md) explains which binary
@@ -43,8 +49,8 @@ inputs remain in the repository and how the generated files fit into the build.
 
 Run `make -C tests test` for host checks, boot assets, and the BIOS loader-chain
 probe. The [testing guide](docs/development/testing.md) covers dependencies,
-Docker, coverage reports, full BIOS/UEFI boot checks, and GitHub Actions. Tests
-currently expose existing defects; production source fixes are still needed.
+Docker, coverage reports, full BIOS/UEFI boot checks, and GitHub Actions. Host tests enforce standard C semantics; BIOS and UEFI boot checks require
+kernel entry and repeated timer interrupts.
 
 ## License
 

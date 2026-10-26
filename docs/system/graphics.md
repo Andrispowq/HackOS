@@ -17,11 +17,11 @@ The `COLOUR(r, g, b, a)` macro in
 `0xAARRGGBB`. That representation does not by itself negotiate firmware pixel
 formats or provide alpha blending.
 
-Drawing and copying currently assume tightly packed 32-bit pixels and often
-use `width` as the row stride rather than the supplied pitch. Supporting other
-GOP/VBE modes requires checking pixel masks/order, pitch units, and clipping at
-every buffer boundary. Palette names or legacy VGA colour choices should be
-converted to this pixel representation at the drawing boundary.
+The framebuffer API measures pitch in 32-bit pixels. The BIOS adapter converts
+VBE's byte stride; GOP already supplies pixels per scanline. Pixel access,
+rectangles, glyphs, scrolling and backbuffer copies use that stride. Rectangle
+width and height are clipped independently. Other pixel formats need explicit
+conversion; the UEFI loader currently accepts BGR output only.
 
 ## Display and backbuffer
 
@@ -36,10 +36,9 @@ PSF1 glyphs and handle newline, carriage return, tab, backspace, and scrolling.
 The console is configured around 8-by-16 character cells and the bundled
 [zap-light16.psf](../../util/fonts/zap-light16.psf).
 
-Colour fills currently rely on the project's word-oriented `memset` behavior.
-Replacing it with a standard byte-fill implementation without changing these
-callers would alter the displayed colours. A separate pixel-fill operation
-would make that distinction explicit.
+Colour fills use `Framebuffer::Clear`/`DrawRect`, keeping complete RGB values.
+`memset` is reserved for byte fills. Window buffer pitch is also expressed in
+pixels, matching the kernel and userspace framebuffer APIs.
 
 ## Windows
 

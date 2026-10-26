@@ -23,13 +23,14 @@ static uint8_t elf_check_file(Elf64_Ehdr* hdr)
 
 Elf64_Ehdr* LoadProgram(void* address, uint64_t* mem)
 {
-	uint64_t memory = kmalloc(512 * 256);	
+	uint64_t memory = (uint64_t)address;
 	*mem = memory;
 
-	memcpy((void*)memory, address, 512 * 256);
 
 	Elf64_Ehdr* header = (Elf64_Ehdr*)memory;
-	if(elf_check_file(header) != 0)
+	if (elf_check_file(header) != 0 && header->e_phentsize == sizeof(Elf64_Phdr) &&
+        header->e_phoff <= 512 * 256 && header->e_phnum &&
+        header->e_phnum <= (512 * 256 - header->e_phoff) / sizeof(Elf64_Phdr))
 	{
 		return header;
 	}

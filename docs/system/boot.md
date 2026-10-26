@@ -38,10 +38,10 @@ the second contains the FAT32 filesystem.
 | Stripped kernel ELF | 78 | 256 | 131,072 |
 | FAT32 data | 334 | 93,750 | 48,000,000 |
 
-These numbers appear in the [root Makefile](../../Makefile), the MBR partition
-table, and the stage-1/stage-2 assembly. Changing only one of them breaks the
-image contract. The image recipe uses `dd count=...`, which can silently truncate
-an oversized loader or kernel; explicit size checks are needed.
+These numbers appear in [make_image.py](../../tools/make_image.py), the MBR
+partition table, and the stage-1/stage-2 assembly. Changing only one breaks the
+image contract. Packaging rejects oversized payloads and writes complete files.
+The boot kernel has all symbols stripped; a separate ELF retains debug symbols.
 
 The relocated MBR at `0x0600` is also used later by the kernel's FAT32 discovery.
 That memory must stay intact while the filesystem is initialized.
@@ -54,20 +54,19 @@ memory for loadable segments, and read them into place. It obtains a GOP
 framebuffer, loads a PSF1 font, collects the EFI memory map and ACPI root, then
 calls `ExitBootServices` before entering the kernel.
 
-The image is a FAT32 volume beginning at LBA 0. The build puts the loader at
-`EFI/BOOT/main.efi`; [startup.nsh](../../kernel/startup.nsh) searches volumes and
-launches it from a firmware shell. Packaging it as `EFI/BOOT/BOOTX64.EFI` would
-allow the standard x64 fallback boot path without that shell dependency.
+The image is a FAT32 volume beginning at LBA 0. The loader is installed as
+`EFI/BOOT/BOOTX64.EFI`, the x64 fallback entry. An included `startup.nsh` also
+launches that entry when the bundled OVMF starts its shell first. It opens the font at
+`UTIL/FONTS/zap-light16.psf` and requires 32-bit BGR GOP output.
 
-Several details need correction before this path is dependable:
-
-- The loader opens `zap-light16.psf` at the volume root, while the build puts it
-  under `UTIL/FONTS`.
-- The first `GetMemoryMap` call uses an uninitialized `MapSize`.
-- Further allocations occur after obtaining `MapKey`, but `ExitBootServices`
-  is called without checking its result or refreshing the map and retrying.
-- File, allocation, and firmware-call failures need consistent handling before
-  dereferencing returned pointers or continuing to the kernel.
+File/header/segment reads and allocations are checked before use. The loader
+allocates memory-map storage before the final map request, converts that map,
+and calls `ExitBootServices` without intervening allocations or logging. It
+retries a stale map key once, using the existing buffers. No firmware services
+are called after a successful exit. See the
+[UEFI boot-services contract](https://uefi.org/specs/UEFI/2.10/07_Services_Boot_Services.html).
+The shared eight-bit map count remains a limitation: maps exceeding 255 entries
+are rejected rather than silently truncated.
 
 ## Shared boot information
 

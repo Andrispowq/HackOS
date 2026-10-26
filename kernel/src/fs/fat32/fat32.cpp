@@ -4,7 +4,7 @@
 #include "lib/string.h"
 #include "lib/stdio.h"
 
-extern uint8_t fromUEFI;
+extern bool fromUEFI;
 
 void LocateFilesystemsFAT32(Device* device)
 {
@@ -98,7 +98,8 @@ void FAT32::CloseFile(ActiveFile* file)
 
 ActiveFile* FAT32::CreateFile(const char* path, const char* name, permissions_t permissions)
 {
-	uint32_t size = 512;
+	if (!path || !name || strlen((char*)name) >= sizeof(DirEntry::name)) return nullptr;
+	uint32_t size = 0;
 	uint8_t attributes = 0;
 	attributes |= ((permissions & READ_ONLY) == READ_ONLY) << 0;
 	attributes |= ((permissions & HIDDEN) == HIDDEN) << 1;
@@ -137,9 +138,9 @@ ActiveFile* FAT32::CreateFile(const char* path, const char* name, permissions_t 
 
 void FAT32::ResizeFile(ActiveFile* file, uint64_t new_size)
 {
-	driver->ResizeFile(((FAT32_ActiveFile*)file)->entry, new_size);
-	((FAT32_ActiveFile*)file)->entry.size = new_size;
-	file->seek_position = 0;
+	if (!file || new_size > 0xffffffff) return;
+	if (driver->ResizeFile(((FAT32_ActiveFile*)file)->entry, new_size) == 0)
+		file->seek_position = 0;
 }
 
 void FAT32::DeleteFile(ActiveFile* file)
@@ -152,7 +153,7 @@ uint64_t FAT32::GetDirectoryEntryCount(const char* path)
 {
 	DirEntry entry;
 	int ret = driver->OpenFile(path, &entry);
-	if	(ret != 0)
+	if (ret != 0 || !(entry.attributes & FILE_DIRECTORY))
 	{
 		return 0;
 	}
@@ -164,7 +165,7 @@ uint64_t FAT32::GetDirectoryEntryCount(const char* path)
 ActiveFile* FAT32::GetFile(const char* path, uint64_t index)
 {
 	DirEntry entry;
-	driver->OpenFile(path, &entry);
+	if (driver->OpenFile(path, &entry) || !(entry.attributes & FILE_DIRECTORY)) return nullptr;
 
 	vector<DirEntry> entries = driver->GetDirectories(entry.cluster, 0, false);
 
@@ -192,23 +193,19 @@ ActiveFile* FAT32::GetFile(const char* path, uint64_t index)
 
 int FAT32::Read(ActiveFile* file, void* buffer, uint64_t nBytes)
 {
-	uint64_t seek_pos = file->seek_position;
-	driver->ReadFile(((FAT32_ActiveFile*)file)->entry, seek_pos, buffer, nBytes);
-	file->seek_position += nBytes;
-
-	return 0;
+    if (!file) return -1;
+    auto& entry = ((FAT32_ActiveFile*)file)->entry;
+    uint64_t available = file->seek_position < entry.size ? entry.size - file->seek_position : 0;
+    if (nBytes > available) nBytes = available;
+    int result = driver->ReadFile(entry, file->seek_position, buffer, nBytes);
+    if (!result) file->seek_position += nBytes;
+    return result;
 }
 
 int FAT32::Write(ActiveFile* file, void* buffer, uint64_t nBytes)
 {
-	uint64_t seek_pos = file->seek_position;
-	driver->WriteFile(((FAT32_ActiveFile*)file)->entry, seek_pos, buffer, nBytes);
-	file->seek_position += nBytes;
-
-	if (((FAT32_ActiveFile*)file)->entry.size < file->seek_position)
-	{
-		((FAT32_ActiveFile*)file)->entry.size = (uint32_t)file->seek_position;
-	}
-
-	return 0;
+    if (!file) return -1;
+    int result = driver->WriteFile(((FAT32_ActiveFile*)file)->entry, file->seek_position, buffer, nBytes);
+    if (!result) file->seek_position += nBytes;
+    return result;
 }

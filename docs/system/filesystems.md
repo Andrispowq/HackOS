@@ -2,9 +2,8 @@
 
 [System index](index.md) · [Storage devices](devices.md)
 
-File access is layered through a small VFS, a filesystem interface, and a
-FAT32 driver. All persistent storage currently reaches a `Device` that performs
-sector I/O.
+File access passes through the VFS, the `Filesystem`/`ActiveFile` interfaces,
+the FAT32 adapter, and finally a block `Device`.
 
 ```mermaid
 flowchart LR
@@ -15,68 +14,72 @@ flowchart LR
     Driver --> Device[Device: ATA or AHCI]
 ```
 
-## Mounting and partition assumptions
+## Mounting and paths
 
 [LocateFilesystemsFAT32](../../kernel/src/fs/fat32/fat32.cpp) scans the relocated
-BIOS MBR for type `0x0B` partitions. UEFI assumes an unpartitioned FAT32 volume
-at LBA 0. These assumptions match the project's [image layouts](boot.md).
+BIOS MBR for type `0x0B` partitions. UEFI assumes a FAT32 volume at LBA 0, matching
+the generated images. The driver honors the partition offset supplied by this
+discovery layer. Selecting a device/partition beyond these boot assumptions still
+needs work.
 
-There is an additional coupling in the
-[FAT32Driver constructor](../../kernel/src/fs/fat32/fat32driver.cpp): it replaces
-the supplied partition offset with the second BIOS partition's offset, or zero
-for UEFI. General partition discovery therefore needs both the discovery code
-and the driver constructor to change.
+The VFS translates `fs12:/USR/FILE` to `~/USR/FILE` on filesystem 12. It checks
+the decimal volume index, path prefix, failed opens, null handles and registry
+bounds before dispatch. The shell and ELF loader also use `~/...` directly
+against `filesystems[0]`.
 
-## Interfaces and paths
+The returned `void*` is an `ActiveFile` object pointer. Null/index checks do not
+make arbitrary pointers safe; these handles are not a protected userspace API.
+Access-mode enforcement for `O_READ` and `O_WRITE` is also unfinished.
 
-[filesystem.h](../../kernel/src/fs/filesystem.h) defines:
+## File I/O contract
 
-- `Filesystem`: open/close, create/resize/delete, enumeration, and byte reads/writes.
-- `ActiveFile`: file metadata accessors, a seek position, and an owning
-  filesystem index.
-- A registry of filesystem instances, sized from the device registry.
+`fread`/`fwrite` return a status code, not a stdio element count: zero means
+success and a negative result indicates failure. FAT32 reads clamp to EOF and
+advance the seek position only by the bytes actually read. A read starting past
+EOF succeeds without changing the buffer or position. Writes advance on success,
+grow the file when needed, and preserve bytes outside the written range.
 
-[vfs.cpp](../../kernel/src/fs/vfs.cpp) exposes `fopen`, `fread`, `fwrite`, and
-`fclose`. A VFS path such as `fs0:/USR/HELLO_2.TXT` selects filesystem 0 and is
-translated to `~/USR/HELLO_2.TXT` for the filesystem implementation. The shell
-and ELF loader also use `~/...` directly against `filesystems[0]`.
+New regular files start empty. Resizing to zero releases the entire chain;
+growth zeroes newly exposed bytes, including gaps before a seeked write.
+Read-only FAT entries reject modification. File sizes remain limited to FAT32's
+32-bit size field. The common resize/delete API still returns `void`, so callers
+cannot observe every failed metadata operation through that interface.
 
-These interfaces resemble stdio but have different contracts. `fread` and
-`fwrite` multiply `size * n` and return the filesystem's status; the FAT32
-adapter currently returns zero, rather than a count of transferred elements.
-`O_CREAT` triggers creation on a missing file, while access enforcement for
-`O_READ` and `O_WRITE` is not implemented in the VFS dispatch.
+## FAT32 structures
 
-The VFS needs bounds and failure handling before it can be a userspace boundary:
-filesystem indices are parsed into a small buffer, missing-file results can
-be dereferenced, and read/write/close assume a usable handle. The returned
-`void*` is currently a kernel object pointer, not an isolated file descriptor.
+[FAT32Driver](../../kernel/src/fs/fat32/fat32driver.cpp) validates the BPB before
+allocating buffers: signatures, 512-byte sector size, power-of-two cluster size,
+FAT count/capacity, data extent, root cluster, and active FAT selection. The
+block-device API currently has no capacity query, so it cannot yet validate the
+claimed volume extent against the actual device size.
 
-## FAT32 implementation
+Cluster chains are range-checked and cyclic chains are rejected. Allocation
+zeroes new clusters and rolls back a partial allocation when space runs out.
+The directory walker processes records in disk order, including long names
+crossing cluster boundaries. Long-name order and checksum must agree with the
+following short record; invalid or unsupported names fall back to their 8.3
+alias. Lookup is case-insensitive for ASCII.
 
-[fat32.cpp](../../kernel/src/fs/fat32/fat32.cpp) adapts the common interfaces to
-`FAT32_ActiveFile` and `FAT32Driver`. The lower-level driver handles:
+The public name buffer supports up to 127 ASCII bytes. Creation validates names,
+generates unique 8.3 aliases when needed, and extends directory chains. Full
+Unicode/255-character FAT names remain unsupported. Each open entry records its
+actual directory locations so updates and deletion touch the right records.
+Directory deletion requires an empty directory; it does not recursively follow
+potentially corrupt directory graphs.
 
-- Reading the BPB and calculating FAT/data-region offsets and cluster sizes.
-- Caching FAT entries and walking, allocating, resizing, and freeing cluster chains.
-- Directory enumeration and modification, including short/long filename records.
-- Path traversal and file creation, reading, writing, resizing, and deletion.
+## Persistence and limits
 
-Reads/writes advance the handle's seek position. The adapter currently advances
-by the requested size and discards the lower-level result, so EOF, partial I/O,
-and errors need a deliberate contract rather than assuming stdio semantics.
+Data and directory changes are written through the block interface. Allocation
+changes flush the cached FAT to the configured active/mirrored copies and mark
+FSInfo free-space hints unknown. The destructor flushes any remaining dirty FAT;
+read-only mounts do not rewrite boot sectors. Host mutation tests save the image
+and read it with mtools to check the persisted representation independently.
 
-## Persistence and ownership
+There is no journal, transaction rollback after device failure, or device cache
+flush command. `Device::Read` and `Write` return `void`, so hardware errors still
+cannot reach FAT32 or VFS. Open handles also cache metadata; concurrent opens,
+writes and deletion need explicit ownership and synchronization rules.
 
-Cluster writes go through the storage driver. FAT metadata is cached, and the
-driver destructor writes the boot sector, backup boot sector, and FAT copies.
-Closing an `ActiveFile` does not destroy the filesystem driver. A defined
-flush/unmount operation is needed to make persistence reliable across shutdown,
-restart, or emulator termination.
-
-Use disposable disk images for write experiments. A meaningful filesystem test
-must reopen the image after the intended flush boundary, not only read data
-back from the same in-memory cache. The existing `Device` boundary is a good
-place for an in-memory disk adapter; see the [testing plan](../development/testing.md).
-
-Priority fixes and malformed-image cases are listed in [TODO](../TODO.md).
+Use disposable images for write experiments. The normal Docker/QEMU runner
+uses a snapshot overlay, so its guest writes do not persist after shutdown.
+See [testing](../development/testing.md) and [TODO](../TODO.md).

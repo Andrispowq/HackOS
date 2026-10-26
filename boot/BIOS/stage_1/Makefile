@@ -1,14 +1,10 @@
-
 BUILD_DIR = ../../../bin
-
 ASM = nasm
-ASM_FLAGS = -f bin
-
-bootloader: boot_loader.asm
-	make clean
-	${ASM} ${ASM_FLAGS} -o bin/bootloader.bin $^
-	cp bin/bootloader.bin ${BUILD_DIR}/bootloader.bin
-
+.PHONY: bootloader clean
+bootloader: $(BUILD_DIR)/bootloader.bin
+$(BUILD_DIR)/bootloader.bin: boot_loader.asm
+	mkdir -p bin $(BUILD_DIR)
+	$(ASM) -f bin -o bin/bootloader.bin $<
+	cp bin/bootloader.bin $@
 clean:
 	rm -rf bin
-	mkdir bin

@@ -32,7 +32,7 @@ class ActiveFile
 {
 public:
     ActiveFile() : seek_position(0) {}
-    ~ActiveFile() {}
+    virtual ~ActiveFile() {}
 
     virtual uint64_t GetSize() const = 0;
     virtual const char* GetName() const = 0;
@@ -49,7 +49,7 @@ class Filesystem
 {
 public:
     Filesystem(Device* device, uint32_t part_start) : device(device), PartitionStart(part_start) {}
-    ~Filesystem() {}
+    virtual ~Filesystem() {}
 
     virtual ActiveFile* OpenFile(const char* path) = 0;
     virtual void CloseFile(ActiveFile* file) = 0;

@@ -10,8 +10,8 @@ used by the timer, keyboard, and mouse.
 
 [gdt.cpp](../../kernel/src/arch/x86_64/gdt/gdt.cpp) installs kernel code/data,
 user code/data, and TSS entries. Kernel code/data selectors are `0x08`/`0x10`;
-the user descriptors occupy `0x18`/`0x20`. EFI startup also retains extra
-descriptor slots for its transition.
+the user descriptors occupy `0x18`/`0x20`. The 64-bit TSS descriptor starts at
+`0x28` and occupies two slots, including its upper address and reserved fields.
 
 The presence of user descriptors is preparatory. The TSS stack initialization
 is commented out, and normal process construction selects kernel privilege.
@@ -31,10 +31,11 @@ callback; `ISRHandler` dispatches exceptions/software interrupts and
 `IRQHandler` dispatches hardware IRQs and sends end-of-interrupt notifications.
 
 Page-fault reporting lives in [paging.cpp](../../kernel/src/arch/x86_64/paging/paging.cpp).
-`InitPaging` currently replaces vector 14 with the C++ `PageFaultHandler`
-address directly. This must be reconciled with the assembly saved-frame and
-interrupt-return convention rather than treating a normal C++ function as an
-interrupt entry stub.
+`InitPaging` registers `PageFaultHandler` through the callback table, preserving
+the vector-14 assembly entry. XMM saves use unaligned moves, the C++ call stack
+is aligned for SysV, and XMM11 is restored to its own register. `iretq` restores
+the interrupted interrupt-enable state; the epilogue does not enable interrupts
+early. Error-code and no-error-code vectors use matching stubs.
 
 ## Hardware IRQs
 

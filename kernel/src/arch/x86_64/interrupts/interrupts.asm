@@ -31,22 +31,22 @@ __set_idt:
     push    rdi
 
     sub     rsp, 256
-    movdqa  [rsp + 15 * 16], xmm15
-    movdqa  [rsp + 14 * 16], xmm14
-    movdqa  [rsp + 13 * 16], xmm13
-    movdqa  [rsp + 12 * 16], xmm12
-    movdqa  [rsp + 11 * 16], xmm11
-    movdqa  [rsp + 10 * 16], xmm10
-    movdqa  [rsp + 9 * 16], xmm9
-    movdqa  [rsp + 8 * 16], xmm8
-    movdqa  [rsp + 7 * 16], xmm7
-    movdqa  [rsp + 6 * 16], xmm6
-    movdqa  [rsp + 5 * 16], xmm5
-    movdqa  [rsp + 4 * 16], xmm4
-    movdqa  [rsp + 3 * 16], xmm3
-    movdqa  [rsp + 2 * 16], xmm2
-    movdqa  [rsp + 1 * 16], xmm1
-    movdqa  [rsp + 0 * 16], xmm0
+    movdqu  [rsp + 15 * 16], xmm15
+    movdqu  [rsp + 14 * 16], xmm14
+    movdqu  [rsp + 13 * 16], xmm13
+    movdqu  [rsp + 12 * 16], xmm12
+    movdqu  [rsp + 11 * 16], xmm11
+    movdqu  [rsp + 10 * 16], xmm10
+    movdqu  [rsp + 9 * 16], xmm9
+    movdqu  [rsp + 8 * 16], xmm8
+    movdqu  [rsp + 7 * 16], xmm7
+    movdqu  [rsp + 6 * 16], xmm6
+    movdqu  [rsp + 5 * 16], xmm5
+    movdqu  [rsp + 4 * 16], xmm4
+    movdqu  [rsp + 3 * 16], xmm3
+    movdqu  [rsp + 2 * 16], xmm2
+    movdqu  [rsp + 1 * 16], xmm1
+    movdqu  [rsp + 0 * 16], xmm0
 
     xor     rax, rax
     mov     ax, ds              ; Lower 16-bits of rax = ds.
@@ -66,22 +66,22 @@ __set_idt:
     mov     fs, bx
     mov     gs, bx
 
-    movdqa  xmm15, [rsp + 15 * 16]
-    movdqa  xmm14, [rsp + 14 * 16]
-    movdqa  xmm13, [rsp + 13 * 16]
-    movdqa  xmm12, [rsp + 12 * 16]
-    movdqa  xmm12, [rsp + 11 * 16]
-    movdqa  xmm10, [rsp + 10 * 16]
-    movdqa  xmm9, [rsp + 9 * 16]
-    movdqa  xmm8, [rsp + 8 * 16]
-    movdqa  xmm7, [rsp + 7 * 16]
-    movdqa  xmm6, [rsp + 6 * 16]
-    movdqa  xmm5, [rsp + 5 * 16]
-    movdqa  xmm4, [rsp + 4 * 16]
-    movdqa  xmm3, [rsp + 3 * 16]
-    movdqa  xmm2, [rsp + 2 * 16]
-    movdqa  xmm1, [rsp + 1 * 16]
-    movdqa  xmm0, [rsp + 0 * 16]
+    movdqu  xmm15, [rsp + 15 * 16]
+    movdqu  xmm14, [rsp + 14 * 16]
+    movdqu  xmm13, [rsp + 13 * 16]
+    movdqu  xmm12, [rsp + 12 * 16]
+    movdqu  xmm11, [rsp + 11 * 16]
+    movdqu  xmm10, [rsp + 10 * 16]
+    movdqu  xmm9, [rsp + 9 * 16]
+    movdqu  xmm8, [rsp + 8 * 16]
+    movdqu  xmm7, [rsp + 7 * 16]
+    movdqu  xmm6, [rsp + 6 * 16]
+    movdqu  xmm5, [rsp + 5 * 16]
+    movdqu  xmm4, [rsp + 4 * 16]
+    movdqu  xmm3, [rsp + 3 * 16]
+    movdqu  xmm2, [rsp + 2 * 16]
+    movdqu  xmm1, [rsp + 1 * 16]
+    movdqu  xmm0, [rsp + 0 * 16]
     add     rsp, 256
 
     pop     rdi
@@ -110,30 +110,30 @@ isr_common_stub:
 	PUSHALL
 
     mov     rdi, rsp
-    sub     rsp, 0x28
+    ; Registers stays unchanged; reserve 32 bytes with SysV call alignment.
+    sub     rsp, 0x20
 
     cld
 	call    ISRHandler
-    add     rsp, 0x28
+    add     rsp, 0x20
 
     POPALL
 
-    sti
 	iretq
 
 irq_common_stub:
     PUSHALL
 
     mov     rdi, rsp
-    sub     rsp, 0x28
+    ; Registers stays unchanged; reserve 32 bytes with SysV call alignment.
+    sub     rsp, 0x20
 
     cld
     call    IRQHandler
-    add     rsp, 0x28
+    add     rsp, 0x20
 
 	POPALL
 
-    sti
 	iretq
 
 ; We don't get information about which interrupt was caller
@@ -266,46 +266,46 @@ ISR_ERR 13
 ISR_ERR 14
 
 ; 15: Reserved Exception
-ISR_ERR 15
+ISR_NOERR 15
 
 ; 16: Floating Point Exception
-ISR_ERR 16
+ISR_NOERR 16
 
 ; 17: Alignment Check Exception
 ISR_ERR 17
 
 ; 18: Machine Check Exception
-ISR_ERR 18
+ISR_NOERR 18
 
 ; 19: Reserved
-ISR_ERR 19
+ISR_NOERR 19
 
 ; 20: Reserved
-ISR_ERR 20
+ISR_NOERR 20
 
 ; 21: Reserved
 ISR_ERR 21
 
 ; 22: Reserved
-ISR_ERR 22
+ISR_NOERR 22
 
 ; 23: Reserved
-ISR_ERR 23
+ISR_NOERR 23
 
 ; 24: Reserved
-ISR_ERR 24
+ISR_NOERR 24
 
 ; 25: Reserved
-ISR_ERR 25
+ISR_NOERR 25
 
 ; 26: Reserved
-ISR_ERR 26
+ISR_NOERR 26
 
 ; 27: Reserved
-ISR_ERR 27
+ISR_NOERR 27
 
 ; 28: Reserved
-ISR_ERR 28
+ISR_NOERR 28
 
 ; 29: Reserved
 ISR_ERR 29
@@ -314,7 +314,7 @@ ISR_ERR 29
 ISR_ERR 30
 
 ; 31: Reserved
-ISR_ERR 31
+ISR_NOERR 31
 
 ; IRQ handlers
 IRQ 0

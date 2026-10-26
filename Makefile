@@ -1,179 +1,48 @@
+.DEFAULT_GOAL := build
+CROSS_COMPILE ?= x86_64-elf-
+export CROSS_COMPILE
+TARGET_BIOS ?= true
+FIRMWARE := $(if $(filter true,$(TARGET_BIOS)),bios,uefi)
+PYTHON ?= python3
 
-OS_NAME = HackOS
+.PHONY: build all init build_bios build_efi bios uefi kernel userspace buildimg run debug clean
+build: $(if $(filter true,$(TARGET_BIOS)),build_bios,build_efi)
+init: build
+all: build
+	$(MAKE) run
 
-BOOTLOADER_DIR = boot
-
-KERNEL_DIR = kernel
-BUILD_DIR := bin
-
-TARGET_BIOS = true
-
-ifneq ($(TARGET_BIOS), true)
-
-GNU_EFI = $(BOOTLOADER_DIR)/UEFI/gnu-efi
-OVMF_DIR = $(BOOTLOADER_DIR)/UEFI/OVMFbin
-
-BOOT_EFI := $(GNU_EFI)/x86_64/bootloader/main.efi
-
-init:
-	make clean
-	make -C boot/UEFI/gnu-efi
-
-all:
-	make build_efi
-	make run
-
-debug_all:
-	make build_efi
-	make debug
-
-build_efi:
-	make -C $(GNU_EFI) bootloader
-	make -C $(KERNEL_DIR) kernel
-	make buildimg	
-
+build_bios: bios kernel userspace
+	$(PYTHON) tools/make_image.py --firmware bios
+build_efi: uefi kernel userspace
+	$(PYTHON) tools/make_image.py --firmware uefi
+bios:
+	$(MAKE) -C boot/BIOS/mbr mbr
+	$(MAKE) -C boot/BIOS/stage_1 bootloader
+	$(MAKE) -C boot/BIOS/stage_2 second_stage
+uefi:
+	$(MAKE) -C boot/UEFI/gnu-efi ARCH=x86_64 lib
+	$(MAKE) -C boot/UEFI/gnu-efi ARCH=x86_64 gnuefi
+	$(MAKE) -C boot/UEFI/gnu-efi ARCH=x86_64 bootloader
+kernel:
+	$(MAKE) -C kernel kernel
+userspace:
+	$(MAKE) -C libs/libc
+	$(MAKE) -C libs/shell
+	$(MAKE) -C libs/test
 buildimg:
-	dd if=/dev/zero of=$(BUILD_DIR)/$(OS_NAME).img bs=512 count=93750
-	mformat -i $(BUILD_DIR)/$(OS_NAME).img -F ::
-	mmd -i $(BUILD_DIR)/$(OS_NAME).img ::/EFI
-	mmd -i $(BUILD_DIR)/$(OS_NAME).img ::/EFI/BOOT
-	mmd -i $(BUILD_DIR)/$(OS_NAME).img ::/USR
-	mmd -i $(BUILD_DIR)/$(OS_NAME).img ::/USR/BIN
-	mmd -i $(BUILD_DIR)/$(OS_NAME).img ::/UTIL
-	mmd -i $(BUILD_DIR)/$(OS_NAME).img ::/UTIL/FONTS
-	mcopy -i $(BUILD_DIR)/$(OS_NAME).img $(BOOT_EFI) ::/EFI/BOOT
-	mcopy -i $(BUILD_DIR)/$(OS_NAME).img $(KERNEL_DIR)/startup.nsh ::
-	mcopy -i $(BUILD_DIR)/$(OS_NAME).img $(KERNEL_DIR)/bin/kernel.elf ::
-	mcopy -i $(BUILD_DIR)/$(OS_NAME).img util/fonts/zap-light16.psf ::/UTIL/FONTS
-	mcopy -i $(BUILD_DIR)/$(OS_NAME).img util/usertest/usertest.elf ::/USR/BIN
-	mcopy -i $(BUILD_DIR)/$(OS_NAME).img hello.txt ::/USR
-	mcopy -i $(BUILD_DIR)/$(OS_NAME).img util/libc/test ::/USR/BIN
-	mcopy -i $(BUILD_DIR)/$(OS_NAME).img util/libc/shell ::/USR/BIN
-
+	$(PYTHON) tools/make_image.py --firmware $(FIRMWARE)
 run:
-	qemu-system-x86_64 \
-	-drive file=$(BUILD_DIR)/$(OS_NAME).img \
-	-m 1G \
-	-cpu qemu64 \
-	-machine q35 \
-	-smp cores=4,threads=1,sockets=1 \
-	-drive if=pflash,format=raw,unit=0,file="$(OVMF_DIR)/OVMF_CODE-pure-efi.fd",readonly=on \
-	-drive if=pflash,format=raw,unit=1,file="$(OVMF_DIR)/OVMF_VARS-pure-efi.fd" \
-	-usb \
-	-device usb-ehci,id=ehci \
-	-device qemu-xhci,id=xhci \
-	-net none \
-
+	$(PYTHON) tools/run_qemu.py --firmware $(FIRMWARE) --image bin/HackOS.img
+# GDB listens only on loopback; attach separately to localhost:1234.
 debug:
-	qemu-system-x86_64 \
-	-s \
-	-drive file=$(BUILD_DIR)/$(OS_NAME).img \
-	-m 1G \
-	-cpu qemu64 \
-	-machine q35 \
-	-smp cores=4,threads=1,sockets=1 \
-	-drive if=pflash,format=raw,unit=0,file="$(OVMF_DIR)/OVMF_CODE-pure-efi.fd",readonly=on \
-	-drive if=pflash,format=raw,unit=1,file="$(OVMF_DIR)/OVMF_VARS-pure-efi.fd" \
-	-usb \
-	-device usb-ehci,id=ehci \
-	-device qemu-xhci,id=xhci \
-	-net none \
-	-d guest_errors,cpu_reset,int \
-	-no-reboot -no-shutdown & \
-	gdb -ex "target remote localhost:1234" -ex "symbol-file kernel/bin/kernel.elf" \
-
+	$(PYTHON) tools/run_qemu.py --firmware $(FIRMWARE) --image bin/HackOS.img --debug
 clean:
-	make -C kernel clean
-	rm -rf $(GNU_EFI)/x86_64/bootloader
-
-else
-
-MBR_DIR = $(BOOTLOADER_DIR)/BIOS/mbr
-FIRST_STAGE_DIR = $(BOOTLOADER_DIR)/BIOS/stage_1
-SECOND_STAGE_DIR = $(BOOTLOADER_DIR)/BIOS/stage_2
-
-init:
-	make clean
-	make -C boot/UEFI/gnu-efi
-
-all:
-	make build_bios
-	make run
-
-debug_all:
-	make build_bios
-	make debug
-
-build_bios:
-	make -C $(MBR_DIR) mbr
-	make -C $(FIRST_STAGE_DIR) bootloader
-	make -C $(SECOND_STAGE_DIR) second_stage
-	make -C $(KERNEL_DIR) kernel
-	make buildimg
-
-buildimg:
-	dd if=/dev/zero of=$(BUILD_DIR)/HackOS_FAT.img bs=512 count=93750
-	mformat -i $(BUILD_DIR)/HackOS_FAT.img -F -B bin/bootloader.bin ::
-	mmd -i $(BUILD_DIR)/HackOS_FAT.img ::/SYSTEM
-	mmd -i $(BUILD_DIR)/HackOS_FAT.img ::/USR
-	mmd -i $(BUILD_DIR)/HackOS_FAT.img ::/USR/BIN
-	mmd -i $(BUILD_DIR)/HackOS_FAT.img ::/UTIL
-	mmd -i $(BUILD_DIR)/HackOS_FAT.img ::/UTIL/FONTS
-	mcopy -i $(BUILD_DIR)/HackOS_FAT.img util/usertest/usertest.elf ::/USR/BIN
-	mcopy -i $(BUILD_DIR)/HackOS_FAT.img hello.txt ::/USR
-	mcopy -i $(BUILD_DIR)/HackOS_FAT.img util/fonts/zap-light16.psf ::/UTIL/FONTS
-	mcopy -i $(BUILD_DIR)/HackOS_FAT.img util/libc/test ::/USR/BIN
-	mcopy -i $(BUILD_DIR)/HackOS_FAT.img util/libc/shell ::/USR/BIN
-
-	dd if=$(BUILD_DIR)/mbr.bin of=$(BUILD_DIR)/$(OS_NAME).img bs=512 seek=0 count=1
-	dd if=$(BUILD_DIR)/bootloader.bin of=$(BUILD_DIR)/$(OS_NAME).img bs=512 seek=1 count=1
-	dd if=$(BUILD_DIR)/second_stage.bin of=$(BUILD_DIR)/$(OS_NAME).img bs=512 seek=2 count=64
-	dd if=util/fonts/zap-light16.psf of=$(BUILD_DIR)/$(OS_NAME).img bs=512 seek=66 count=12
-	dd if=$(BUILD_DIR)/kernel.elf of=$(BUILD_DIR)/$(OS_NAME).img bs=512 seek=78 count=256
-	dd if=$(BUILD_DIR)/HackOS_FAT.img of=$(BUILD_DIR)/$(OS_NAME).img bs=512 seek=334 count=93750
-	
-run:
-	qemu-system-x86_64 \
-	-drive file=$(BUILD_DIR)/$(OS_NAME).img,format=raw \
-	-m 1G \
-	-cpu qemu64 \
-	-machine q35 \
-	-smp cores=4,threads=1,sockets=1 \
-	-usb \
-	-device usb-ehci,id=ehci \
-	-device qemu-xhci,id=xhci \
-	
-	-net none \
-	-rtc clock=host,base=localtime \
-
-# ,if=none,id=stick
-# -device usb-storage,bus=xhci.0,drive=stick \
-
-install:
-	sudo dd if=bin/HackOS.img of=/dev/sdb
-
-debug:
-	qemu-system-x86_64 \
-	-s \
-	-drive file=$(BUILD_DIR)/$(OS_NAME).img,format=raw \
-	-m 1G \
-	-cpu qemu64 \
-	-machine q35 \
-	-smp cores=4,threads=1,sockets=1 \
-	-usb \
-	-device usb-ehci,id=ehci \
-	-device qemu-xhci,id=xhci \
-	-net none \
-	-d guest_errors,cpu_reset & \
-	gdb -ex "target remote localhost:1234" -ex "symbol-file kernel/bin/kernel.elf" \
-
-# boot/BIOS/stage_2/bin/second_stage.elf
-clean:
-	rm -rf $(BUILD_DIR)
-	mkdir $(BUILD_DIR)
-	make -C $(KERNEL_DIR) clean
-	make -C $(SECOND_STAGE_DIR) clean
-	make -C $(FIRST_STAGE_DIR) clean
-	make -C $(MBR_DIR) clean
-
-endif
+	rm -rf bin
+	$(MAKE) -C kernel clean
+	$(MAKE) -C boot/BIOS/mbr clean
+	$(MAKE) -C boot/BIOS/stage_1 clean
+	$(MAKE) -C boot/BIOS/stage_2 clean
+	$(MAKE) -C libs/libc clean
+	$(MAKE) -C libs/shell clean
+	$(MAKE) -C libs/test clean
+	rm -rf boot/UEFI/gnu-efi/x86_64

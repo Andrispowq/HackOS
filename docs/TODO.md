@@ -2,132 +2,73 @@
 
 [Documentation index](index.md) · [Build guide](development/building.md) · [Testing](development/testing.md)
 
-The first goal is a clean source build and dependable boot through both firmware
-paths. Filesystem integrity and memory ownership come before enabling general
-userspace or adding more devices.
+The build and regression tests provide a base for the next changes. Memory
+ownership, storage failures and the userspace boundary take priority over adding
+more devices.
 
-## 1. Make a clean build work
+## Boot and memory
 
-- [ ] Fix `AHCIDevice::GetType()` to match `Device::GetType() const`.
-- [ ] Fix BIOS stage-2 declarations and pointer/address conversions rejected by
-  newer GCC releases. Keep the freestanding headers complete.
-- [ ] Give the UEFI loader portable ELF declarations instead of depending on a
-  host `<elf.h>` header absent from the bare toolchain.
-- [ ] Restore or replace the missing framebuffer header used by `libs/test`.
-- [ ] Centralize target `CC`, `CXX`, `LD`, `AR`, and `OBJCOPY`; keep host tools
-  separate and pass the selection through all recursive builds.
-- [ ] Specify component-appropriate language standards and ABI/code-generation
-  flags, including red-zone, PIE, stack-protection, and frame-pointer policy.
-- [ ] Make output files depend on objects/linker scripts, create directories on
-  demand, track header/NASM includes, declare utility targets phony, and use
-  `$(MAKE)` for recursion.
-- [ ] Build libc and programs before image creation; build GNU-EFI libraries
-  before its loader. A fresh checkout must not depend on ignored local binaries.
-- [ ] Replace the duplicate setup scripts with one fail-fast bootstrap and a
-  prerequisite check. Choose an explicit default Make target; BIOS setup should
-  not require building GNU-EFI.
-- [ ] Correct the BIOS QEMU continuation and remove the hard-coded physical-disk
-  destination from the ordinary build workflow.
+- [ ] Share boot-information declarations and add layout assertions across both
+  loaders and the kernel. Widen the eight-bit memory-map count.
+- [ ] Centralize BIOS slot constants across assembly, image construction and
+  tests. Reconcile the unused EFI linker script with the active kernel entry.
+- [ ] Strengthen BIOS ELF validation and both loaders' malformed-input cleanup.
+  Extend firmware tests to missing files, unsupported GOP formats and map overflow.
+- [ ] Add a serial/debug reporting path for failures before graphics is available.
+- [ ] Replace dense physical-page bookkeeping for highly sparse memory maps;
+  distinguish reserved/allocated ownership and test high-RAM guests.
+- [ ] Define page-table/frame ownership on clone and process exit. Return a
+  controlled failure when translating unmapped addresses.
+- [ ] Honor heap alignment requests and audit DMA buffers for physical
+  contiguity. Test heap splitting, coalescing, exhaustion and allocation failure.
+- [ ] Test deliberate exceptions and floating-point control-state preservation.
+  Review the TSS and initial process frames before enabling scheduling.
 
-Done when a clean checkout can build each image with an explicitly selected
-toolchain, rebuild changed headers, and run parallel compilation without racing
-the linker.
+## Storage and filesystems
 
-## 2. Make both boot paths dependable
+- [ ] Give `Device` a capacity query, explicit I/O result and flush operation;
+  propagate failures through FAT32 and VFS, including resize/delete results.
+- [ ] Discover partitions from each selected device rather than relying on the
+  boot MBR, a fixed device index or an unpartitioned UEFI volume.
+- [ ] Test media faults, full volumes, fragmented files, remounts and dirty
+  shutdowns. FAT writes are not atomic or journaled.
+- [ ] Define metadata lifetime and synchronization for multiple open handles.
+- [ ] Add Unicode/longer filename support and more malformed LFN fixtures.
+- [ ] Audit AHCI DMA sizes/address translation and ATA sector-count narrowing.
+- [ ] Enforce VFS access modes and replace raw object pointers with owned handles.
 
-- [ ] Centralize BIOS sector offsets and reject oversized stage-2/font/kernel
-  payloads before constructing the image.
-- [ ] Share boot-information declarations across both loaders and the kernel;
-  assert layout/field offsets and widen the memory-map count.
-- [ ] Reconcile the kernel linker scripts and use the actual `kernel_main`
-  entry consistently.
-- [ ] Fix the UEFI font path and package the x64 fallback loader filename.
-- [ ] Initialize and size EFI memory-map requests correctly; obtain a fresh map
-  key at the exit boundary, check `ExitBootServices`, and retry as required.
-- [ ] Check loader file, allocation, and firmware-call errors before using
-  returned pointers or handing control to the kernel.
-- [ ] Copy OVMF VARS into the output directory for every isolated run.
-- [ ] Add a simple serial/debug reporting path for boot milestones and failures.
+## Userspace and scheduling
 
-Done when both firmware paths reach the kernel reliably from freshly created
-images and fresh firmware state, and failures identify the stage that stopped.
+- [ ] Load programs into process-owned memory with appropriate permissions;
+  validated ELF ranges alone do not make physical destinations safe.
+- [ ] Complete TSS/kernel entry stacks and deliberate ring-3 entry.
+- [ ] Choose and finish the syscall mechanism, permit intended user entry and
+  reconcile argument registers, including the fifth-argument mismatch.
+- [ ] Validate/copy user buffers and remove exposed kernel objects.
+- [ ] Test context switching, initial stack frames, task exit and resource
+  cleanup before enabling `InitialiseTasking()` in normal startup.
+- [ ] Replace binary-only `usertest.elf` with a source-built fixture.
+- [ ] Move shell work and long operations out of keyboard interrupt context.
 
-## 3. Protect memory and interrupt state
+## Tests and development
 
-- [ ] Size physical-memory bookkeeping for sparse address ranges, protect
-  firmware/loader data for as long as it is referenced, and bound bitmap access.
-- [ ] Define page-table/frame ownership and release it correctly on process exit;
-  make translation of unmapped addresses return a controlled failure.
-- [ ] Honor aligned allocations after heap initialization and review DMA callers'
-  assumptions about physical contiguity.
-- [ ] Route page faults through the correct assembly entry/return convention.
-- [ ] Fix XMM11 restoration in task switching and verify the shared register
-  frame, stack alignment, and frame-pointer assumptions.
-- [ ] Define standard byte-memory operations separately from pixel fills and
-  reconcile the duplicated memory/string support routines.
-- [ ] Fix 32-bit bitmap shifts, full-bitmap bounds, vector self-assignment,
-  per-instance usable-memory lists, and early allocator alignment above 4 GiB.
-
-See [memory](system/memory.md) and [interrupts](system/interrupts.md).
-
-## 4. Make file operations trustworthy
-
-- [ ] Honor the discovered partition offset in `FAT32Driver`; stop assuming the
-  second BIOS partition and `devices[0]` are always the intended volume.
-- [ ] Validate BPB fields, cluster ranges/chains, directory records, and arithmetic
-  before using disk data as addresses or allocation sizes.
-- [ ] Validate VFS paths, filesystem indices, failed opens, and file handles.
-- [ ] Define EOF, partial I/O, and return-value behavior; propagate storage errors
-  through `Device`, FAT32, and VFS instead of discarding them.
-- [ ] Add explicit metadata flush/unmount behavior and verify data survives a
-  restart rather than only being readable from the live cache.
-- [ ] Fix nonzero-offset FAT32 reads and the directory-name bounds error reached
-  by file mutations. Keep the new persistence assertions failing until repaired.
-- [ ] Review AHCI DMA transfers and ATA argument narrowing against the documented
-  sector-count interface.
-
-See [filesystems](system/filesystems.md) and [devices](system/devices.md).
-
-## 5. Establish a real userspace boundary
-
-- [ ] Validate ELF bounds, ranges, and entry points; zero the complete BSS and
-  load segments into a process-owned address space with suitable permissions.
-- [ ] Complete the TSS/kernel entry stack and a deliberate ring-3 entry path.
-- [ ] Choose and finish the syscall entry mechanism, permit the intended user
-  entry, and reconcile argument registers, including the fifth-argument mismatch.
-- [ ] Replace exposed kernel objects with handles and validate/copy user buffers.
-- [ ] Repair task lifecycle and context switching before enabling tasking in
-  normal startup; define per-process resource cleanup and fault behavior.
-- [ ] Replace the binary-only `usertest.elf` with a source-built fixture and turn
-  the shell experiment into a usable program once the runtime is stable.
-
-See [programs and userspace](system/userspace.md).
-
-## 6. Extend tests and improve the development loop
-
-- [x] Add host assertions, image checks, an early BIOS probe, and a bounded
-  debugger runner for BIOS/UEFI kernel milestones.
-- [x] Generate FAT32 fixtures and test persistence against an independent reader.
-- [x] Add GitHub Actions, toolchain containers, coverage, and diagnostic artifacts.
-- [ ] Resolve current failures and reach the full kernel milestones through both
-  firmware paths. A working early BIOS probe does not complete this task.
-- [ ] Extend malformed FAT/ELF cases, allocation-failure tests, and real heap/paging
-  coverage as the existing defects are repaired; see the [testing guide](development/testing.md).
-- [ ] Add guest assertions for faults, repeated IRQ delivery, input, and disk
-  persistence; add controlled graphics scenes and optional VNC access.
+- [ ] Extend host tests to the real heap and physical allocator, with failure
+  injection and sparse-memory fixtures; keep the hardware adapters explicit.
+- [ ] Add guest assertions for exceptions, PS/2 input, disk persistence and
+  controlled framebuffer scenes. Test timer return state beyond repeated ticks.
+- [ ] Add native amd64/arm64 container build checks and Windows/macOS launch
+  checks. Keep full ASan+UBSan on native x86-64 CI.
+- [ ] Lock package snapshots and image timestamps if byte-identical build
+  artifacts become a requirement; current containers pin compiler sources and
+  the base image but still receive distribution package updates.
 - [ ] Replace machine-specific editor settings with portable target settings.
-- [ ] Inspect/export useful contents of the legacy ext2 image, then remove or
-  replace it with a documented fixture recipe.
-- [ ] Either retire the unused initrd experiment or fix its bounds, error
-  handling, headers, and deterministic on-disk serialization.
+- [ ] Inspect/export useful contents of the legacy ext2 image before removing it.
+- [ ] Retire the unused initrd experiment or fix its bounds and serialization.
 
 ## Later work
 
-- [ ] Respect framebuffer pitch/pixel format, separate byte fills from colour
-  fills, and add clipping tests for drawing/window operations.
-- [ ] Move keyboard command execution out of interrupt context into queued work.
-- [ ] Extend USB support beyond the current UHCI experiment.
-- [ ] Add secondary-processor startup, synchronization, and a scheduler designed
-  for multiple CPUs before treating QEMU's core count as SMP support.
-- [ ] Add networking and a useful set of user programs after process isolation
-  and storage behavior are reliable.
+- [ ] Support additional framebuffer formats and test window/glyph clipping.
+- [ ] Extend USB support beyond the UHCI experiment.
+- [ ] Add secondary CPU startup and synchronization before claiming SMP support.
+- [ ] Add networking and useful user programs after isolation and storage
+  behavior are reliable.

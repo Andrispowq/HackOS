@@ -46,269 +46,178 @@ typedef struct _bootinfo
 	uint8_t booted_from_BIOS;
 } BOOTINFO;
 
-int memcmp(const void* aptr, const void* bptr, size_t n)
+static int EqualBytes(const void* a, const void* b, UINTN size)
 {
-	const unsigned char* a = aptr, *b = bptr;
-
-	for (size_t i = 0; i < n; i++)
-	{
-		if (a[i] < b[i]) 
-			return -1;
-		else if (a[i] > b[i]) 
-			return 1;
-	}
-
-	return 0;
+    const UINT8* left = a;
+    const UINT8* right = b;
+    for (UINTN i = 0; i < size; ++i) if (left[i] != right[i]) return 0;
+    return 1;
 }
 
-UINTN strcmp(CHAR8* a, CHAR8* b, UINTN length)
+static EFI_STATUS ReadAt(EFI_FILE* file, UINT64 offset, void* buffer, UINTN size)
 {
-	for (UINTN i = 0; i < length; i++)
-	{
-		if (*a != *b) 
-			return 0;
-	}
-
-	return 1;
+    EFI_STATUS status = file->SetPosition(file, offset);
+    if (EFI_ERROR(status)) return status;
+    UINTN actual = size;
+    status = file->Read(file, &actual, buffer);
+    return EFI_ERROR(status) ? status : actual == size ? EFI_SUCCESS : EFI_LOAD_ERROR;
 }
 
-void _memset(void* dst, int v, size_t n)
+static EFI_FILE* LoadFile(CHAR16* path, EFI_HANDLE image)
 {
-	for(UINTN i = 0; i < n; i++)
-	{
-		((uint8_t*)dst)[i] = (uint8_t)v;
-	}
+    EFI_LOADED_IMAGE_PROTOCOL* loaded;
+    EFI_SIMPLE_FILE_SYSTEM_PROTOCOL* filesystem;
+    EFI_FILE* directory;
+    EFI_FILE* file = NULL;
+    if (EFI_ERROR(BS->HandleProtocol(image, &gEfiLoadedImageProtocolGuid, (void**)&loaded)) ||
+        EFI_ERROR(BS->HandleProtocol(loaded->DeviceHandle, &gEfiSimpleFileSystemProtocolGuid, (void**)&filesystem)) ||
+        EFI_ERROR(filesystem->OpenVolume(filesystem, &directory))) return NULL;
+    EFI_STATUS status = directory->Open(directory, &file, path, EFI_FILE_MODE_READ, 0);
+    directory->Close(directory);
+    return EFI_ERROR(status) ? NULL : file;
 }
 
-Framebuffer framebuffer;
-Framebuffer* InitializeGOP()
+static PSF1_FONT* LoadFont(EFI_HANDLE image)
 {
-	EFI_GUID gopGuid = EFI_GRAPHICS_OUTPUT_PROTOCOL_GUID;
-	EFI_GRAPHICS_OUTPUT_PROTOCOL* gop;
-	EFI_STATUS status;
-
-	status = uefi_call_wrapper(BS->LocateProtocol, 3, &gopGuid, NULL, (void**)&gop);
-	if(EFI_ERROR(status))
-	{
-		Print(L"Unable to locate Graphics Output Protocol!\n");
-		return NULL;
-	}
-	else
-	{
-		Print(L"Graphics Output Protocol located!\n");
-	}
-
-	framebuffer.address = (unsigned int*)gop->Mode->FrameBufferBase;
-	framebuffer.width = gop->Mode->Info->HorizontalResolution;
-	framebuffer.height = gop->Mode->Info->VerticalResolution;
-	framebuffer.bpp = 32;
-	framebuffer.pitch = gop->Mode->Info->PixelsPerScanLine;
-
-	return &framebuffer;	
+    EFI_FILE* file = LoadFile(L"\\UTIL\\FONTS\\zap-light16.psf", image);
+    if (!file) return NULL;
+    PSF1_FONT* font = AllocateZeroPool(sizeof(*font));
+    if (!font) { file->Close(file); return NULL; }
+    font->psf1_Header = AllocatePool(sizeof(PSF1_HEADER));
+    if (!font->psf1_Header) goto failed;
+    if (EFI_ERROR(ReadAt(file, 0, font->psf1_Header, sizeof(PSF1_HEADER))) ||
+        font->psf1_Header->magic[0] != PSF1_MAGIC0 || font->psf1_Header->magic[1] != PSF1_MAGIC1 ||
+        font->psf1_Header->charsize != 16) goto failed;
+    UINTN size = font->psf1_Header->charsize * ((font->psf1_Header->mode & 1) ? 512 : 256);
+    font->glyphBuffer = AllocatePool(size);
+    if (!font->glyphBuffer || EFI_ERROR(ReadAt(file, sizeof(PSF1_HEADER), font->glyphBuffer, size))) goto failed;
+    file->Close(file);
+    return font;
+failed:
+    if (font->glyphBuffer) FreePool(font->glyphBuffer);
+    if (font->psf1_Header) FreePool(font->psf1_Header);
+    FreePool(font);
+    file->Close(file);
+    return NULL;
 }
 
-EFI_FILE* LoadFile(EFI_FILE* Directory, CHAR16* Path, EFI_HANDLE ImageHandle, EFI_SYSTEM_TABLE* SystemTable)
+static EFI_STATUS LoadKernel(EFI_FILE* file, UINT64* entry)
 {
-	EFI_FILE* LoadedFile;
-
-	EFI_LOADED_IMAGE_PROTOCOL* LoadedImage;
-	SystemTable->BootServices->HandleProtocol(ImageHandle, &gEfiLoadedImageProtocolGuid, (void**)&LoadedImage);
-
-	EFI_SIMPLE_FILE_SYSTEM_PROTOCOL* FileSystem;
-	SystemTable->BootServices->HandleProtocol(LoadedImage->DeviceHandle, &gEfiSimpleFileSystemProtocolGuid, (void**)&FileSystem);
-
-	if (Directory == NULL)
-	{
-		FileSystem->OpenVolume(FileSystem, &Directory);
-	}
-
-	EFI_STATUS s = Directory->Open(Directory, &LoadedFile, Path, EFI_FILE_MODE_READ, EFI_FILE_READ_ONLY);
-	if (s != EFI_SUCCESS)
-	{
-		return NULL;
-	}
-
-	return LoadedFile;
+    EFI_FILE_INFO* info = LibFileInfo(file);
+    if (!info) return EFI_LOAD_ERROR;
+    UINT64 fileSize = info->FileSize;
+    FreePool(info);
+    Elf64_Ehdr header;
+    if (EFI_ERROR(ReadAt(file, 0, &header, sizeof header)) ||
+        !EqualBytes(header.e_ident, ELFMAG, SELFMAG) || header.e_ident[EI_CLASS] != ELFCLASS64 ||
+        header.e_ident[EI_DATA] != ELFDATA2LSB || header.e_ident[EI_VERSION] != EV_CURRENT ||
+        header.e_type != ET_EXEC || header.e_machine != EM_X86_64 || header.e_version != EV_CURRENT ||
+        header.e_ehsize != sizeof header || header.e_phentsize != sizeof(Elf64_Phdr) ||
+        !header.e_phnum || header.e_phoff > fileSize ||
+        header.e_phnum > (fileSize - header.e_phoff) / sizeof(Elf64_Phdr)) return EFI_LOAD_ERROR;
+    UINTN bytes = header.e_phnum * sizeof(Elf64_Phdr);
+    Elf64_Phdr* segments = AllocatePool(bytes);
+    if (!segments) return EFI_OUT_OF_RESOURCES;
+    EFI_STATUS status = ReadAt(file, header.e_phoff, segments, bytes);
+    int entryFound = 0;
+    if (EFI_ERROR(status)) { FreePool(segments); return status; }
+    for (UINTN i = 0; i < header.e_phnum; ++i) {
+        Elf64_Phdr* p = &segments[i];
+        if (p->p_type != PT_LOAD) continue;
+        if (p->p_filesz > p->p_memsz || p->p_offset > fileSize || p->p_filesz > fileSize - p->p_offset ||
+            p->p_vaddr != p->p_paddr || p->p_paddr < 0x100000 || p->p_paddr % 4096 ||
+            p->p_memsz > (~(UINT64)0) - p->p_paddr - 4095) { status = EFI_LOAD_ERROR; goto done; }
+        if ((p->p_flags & 1) && header.e_entry >= p->p_vaddr && header.e_entry - p->p_vaddr < p->p_memsz)
+            entryFound = 1;
+    }
+    if (!entryFound) { status = EFI_LOAD_ERROR; goto done; }
+    for (UINTN i = 0; i < header.e_phnum; ++i) {
+        Elf64_Phdr* p = &segments[i];
+        if (p->p_type != PT_LOAD || !p->p_memsz) continue;
+        EFI_PHYSICAL_ADDRESS address = p->p_paddr;
+        status = BS->AllocatePages(AllocateAddress, EfiLoaderData, (p->p_memsz + 4095) / 4096, &address);
+        if (EFI_ERROR(status)) goto done;
+        SetMem((void*)address, p->p_memsz, 0);
+        status = ReadAt(file, p->p_offset, (void*)address, p->p_filesz);
+        if (EFI_ERROR(status)) goto done;
+    }
+    *entry = header.e_entry;
+done:
+    FreePool(segments);
+    return status;
 }
 
-PSF1_FONT* LoadPSF1Font(EFI_FILE* Directory, CHAR16* Path, EFI_HANDLE ImageHandle, EFI_SYSTEM_TABLE* SystemTable)
+EFI_STATUS efi_main(EFI_HANDLE image, EFI_SYSTEM_TABLE* system)
 {
-	EFI_FILE* font = LoadFile(Directory, Path, ImageHandle, SystemTable);
-	if (font == NULL) 
-		return NULL;
+    InitializeLib(image, system);
+    BS->SetWatchdogTimer(0, 0, 0, NULL);
+    EFI_FILE* kernel = LoadFile(L"\\kernel.elf", image);
+    if (!kernel) { Print(L"Cannot open kernel.elf\n"); return EFI_NOT_FOUND; }
+    UINT64 entry;
+    EFI_STATUS status = LoadKernel(kernel, &entry);
+    kernel->Close(kernel);
+    if (EFI_ERROR(status)) { Print(L"Cannot load kernel: %r\n", status); return status; }
 
-	PSF1_HEADER* fontHeader;
-	SystemTable->BootServices->AllocatePool(EfiLoaderData, sizeof(PSF1_HEADER), (void**)&fontHeader);
-	UINTN size = sizeof(PSF1_HEADER);
-	font->Read(font, &size, fontHeader);
-
-	if (fontHeader->magic[0] != PSF1_MAGIC0 || fontHeader->magic[1] != PSF1_MAGIC1)
-	{
-		return NULL;
-	}
-
-	UINTN glyphBufferSize = fontHeader->charsize * 256;
-	if (fontHeader->mode == 1) 
-	{
-		glyphBufferSize = fontHeader->charsize * 512;
-	}
-
-	void* glyphBuffer;
-	{
-		font->SetPosition(font, sizeof(PSF1_HEADER));
-		SystemTable->BootServices->AllocatePool(EfiLoaderData, glyphBufferSize, (void**)&glyphBuffer);
-		font->Read(font, &glyphBufferSize, glyphBuffer);
-	}
-
-	PSF1_FONT* finishedFont;
-	SystemTable->BootServices->AllocatePool(EfiLoaderData, sizeof(PSF1_FONT), (void**)&finishedFont);
-	finishedFont->psf1_Header = fontHeader;
-	finishedFont->glyphBuffer = glyphBuffer;
-	return finishedFont;
-}
-
-EFI_STATUS efi_main(EFI_HANDLE ImageHandle, EFI_SYSTEM_TABLE *SystemTable) 
-{
-	InitializeLib(ImageHandle, SystemTable);
-	Print(L"Initialised the EFI library!\n");
-
-	EFI_FILE* Kernel = LoadFile(NULL, L"kernel.elf", ImageHandle, SystemTable);
-	if (Kernel == NULL)
-	{
-		Print(L"Could not load kernel!\n");
-	}
-
-	Elf64_Ehdr header;
-	{
-		UINTN FileInfoSize;
-		EFI_FILE_INFO* FileInfo;
-		Kernel->GetInfo(Kernel, &gEfiFileInfoGuid, &FileInfoSize, NULL);
-		SystemTable->BootServices->AllocatePool(EfiLoaderData, FileInfoSize, (void**)&FileInfo);
-		Kernel->GetInfo(Kernel, &gEfiFileInfoGuid, &FileInfoSize, (void**)&FileInfo);
-
-		UINTN size = sizeof(header);
-		Kernel->Read(Kernel, &size, &header);
-	}
-
-	if (
-		memcmp(&header.e_ident[EI_MAG0], ELFMAG, SELFMAG) != 0 ||
-		header.e_ident[EI_CLASS] != ELFCLASS64 ||
-		header.e_ident[EI_DATA] != ELFDATA2LSB ||
-		header.e_type != ET_EXEC ||
-		header.e_machine != EM_X86_64 ||
-		header.e_version != EV_CURRENT
-	)
-	{
-		Print(L"Kernel format is bad!\n");
-	}
-
-	Elf64_Phdr* phdrs;
-	{
-		Kernel->SetPosition(Kernel, header.e_phoff);
-		UINTN size = header.e_phnum * header.e_phentsize;
-		SystemTable->BootServices->AllocatePool(EfiLoaderData, size, (void**)&phdrs);
-		Kernel->Read(Kernel, &size, phdrs);
-	}
-
-	for (
-		Elf64_Phdr* phdr = phdrs;
-		(char*)phdr < (char*)phdrs + header.e_phnum * header.e_phentsize;
-		phdr = (Elf64_Phdr*)((char*)phdr + header.e_phentsize)
-	)
-	{
-		switch (phdr->p_type)
-		{
-			case PT_LOAD:
-			{
-				int pages = (phdr->p_memsz + 0x1000 - 1) / 0x1000;
-				Elf64_Addr segment = phdr->p_paddr;
-				SystemTable->BootServices->AllocatePages(AllocateAddress, EfiLoaderData, pages, &segment);
-				_memset((void*)segment, 0, phdr->p_memsz);
-
-				Kernel->SetPosition(Kernel, phdr->p_offset);
-				UINTN size = phdr->p_filesz;
-				Kernel->Read(Kernel, &size, (void*)segment);
-				break;
-			}
-		}
-	}
-
-	PSF1_FONT* newFont = LoadPSF1Font(NULL, L"zap-light16.psf", ImageHandle, SystemTable);
-	if (newFont == NULL)
-	{
-		Print(L"Font is not valid or is not found!\n");
-	}
-
-	Framebuffer* newBuffer = InitializeGOP();
-
-	EFI_MEMORY_DESCRIPTOR* Map = NULL;
-	UINTN MapSize, MapKey;
-	UINTN DescriptorSize;
-	UINT32 DescriptorVersion;
-	{
-		
-		SystemTable->BootServices->GetMemoryMap(&MapSize, Map, &MapKey, &DescriptorSize, &DescriptorVersion);
-		SystemTable->BootServices->AllocatePool(EfiLoaderData, MapSize, (void**)&Map);
-		SystemTable->BootServices->GetMemoryMap(&MapSize, Map, &MapKey, &DescriptorSize, &DescriptorVersion);
-
-	}
-
-	EFI_CONFIGURATION_TABLE* configTable = SystemTable->ConfigurationTable;
-	void* rsdp = NULL; 
-	EFI_GUID Acpi2TableGuid = ACPI_20_TABLE_GUID;
-
-	for (UINTN index = 0; index < SystemTable->NumberOfTableEntries; index++)
-	{
-		if (CompareGuid(&configTable[index].VendorGuid, &Acpi2TableGuid))
-		{
-			if (strcmp((CHAR8*)"RSD PTR ", (CHAR8*)configTable->VendorTable, 8))
-			{
-				rsdp = (void*)configTable->VendorTable;
-			}
-		}
-		configTable++;
-	}
-
-	Print(L"Address: 0x%x, Base: 0x%x\nSize: %d * %d\n",
-	newBuffer,
-	newBuffer->address, 
-	newBuffer->width, 
-	newBuffer->height);
-
-	uint64_t memMapEntries = MapSize / DescriptorSize;
-
-	MemoryMapEntry* entries;
-	SystemTable->BootServices->AllocatePool(EfiLoaderData, sizeof(MemoryMapEntry) * memMapEntries, (void**)&entries);
-	
-	Print(L"Memory map start address: 0x%x, size: %d, count: %d\n", Map, DescriptorSize, MapSize / DescriptorSize);
-
-	for(UINTN i = 0; i < memMapEntries; i++)
-	{
-		EFI_MEMORY_DESCRIPTOR* curr = (EFI_MEMORY_DESCRIPTOR*)((uint64_t)Map + DescriptorSize * i);
-		
-		MemoryMapEntry* entry = entries + i;
-		entry->address = curr->PhysicalStart;
-		entry->length = curr->NumberOfPages * 0x1000;
-		entry->type = curr->Type;
-		entry->extended_attributes = (uint32_t)curr->Attribute;
-	}
-
-	BOOTINFO info;
-	info.framebuffer = *newBuffer;
-	info.font = newFont;
-	info.memMap = entries;
-	info.memMapEntries = memMapEntries;
-	info.rsdp = rsdp;
-	info.memMapEntrySize = sizeof(MemoryMapEntry);
-	info.rsdp_revision = 1;
-	info.booted_from_BIOS = 0;
-
-	SystemTable->BootServices->ExitBootServices(ImageHandle, MapKey);
-
-	int(*KernelStart)(BOOTINFO*) = ((__attribute__((sysv_abi)) int(*)(BOOTINFO*)) header.e_entry);
-	int ret = KernelStart(&info);
-
-	Print(L"Kernel returned with code %d\n", ret);
-
-	return EFI_SUCCESS;
+    BOOTINFO info = {0};
+    info.font = LoadFont(image);
+    if (!info.font) { Print(L"Cannot load the PSF1 font\n"); return EFI_NOT_FOUND; }
+    EFI_GUID gopGuid = EFI_GRAPHICS_OUTPUT_PROTOCOL_GUID;
+    EFI_GRAPHICS_OUTPUT_PROTOCOL* gop;
+    status = BS->LocateProtocol(&gopGuid, NULL, (void**)&gop);
+    if (EFI_ERROR(status)) return status;
+    if (gop->Mode->Info->PixelFormat != PixelBlueGreenRedReserved8BitPerColor) {
+        Print(L"A 32-bit BGR framebuffer is required\n");
+        return EFI_UNSUPPORTED;
+    }
+    info.framebuffer.address = (unsigned int*)gop->Mode->FrameBufferBase;
+    info.framebuffer.width = gop->Mode->Info->HorizontalResolution;
+    info.framebuffer.height = gop->Mode->Info->VerticalResolution;
+    info.framebuffer.pitch = gop->Mode->Info->PixelsPerScanLine;
+    info.framebuffer.bpp = 32;
+    EFI_GUID acpi2 = ACPI_20_TABLE_GUID, acpi1 = ACPI_TABLE_GUID;
+    for (UINTN i = 0; i < system->NumberOfTableEntries; ++i) {
+        EFI_CONFIGURATION_TABLE* table = &system->ConfigurationTable[i];
+        if (CompareGuid(&table->VendorGuid, &acpi2) == 0 ||
+            (!info.rsdp && CompareGuid(&table->VendorGuid, &acpi1) == 0)) {
+            if (EqualBytes(table->VendorTable, "RSD PTR ", 8)) info.rsdp = table->VendorTable;
+        }
+    }
+    if (!info.rsdp) { Print(L"ACPI RSDP unavailable\n"); return EFI_NOT_FOUND; }
+    info.rsdp_revision = ((UINT8*)info.rsdp)[15];
+    info.memMapEntrySize = sizeof(MemoryMapEntry);
+    // The shared boot ABI has an 8-bit entry count. Reject overflow instead of truncating it.
+    info.memMap = AllocatePool(255 * sizeof(MemoryMapEntry));
+    if (!info.memMap) return EFI_OUT_OF_RESOURCES;
+    Print(L"Starting HackOS (%dx%d)\n", info.framebuffer.width, info.framebuffer.height);
+    UINTN size = 0, key = 0, stride = 0;
+    UINT32 version;
+    status = BS->GetMemoryMap(&size, NULL, &key, &stride, &version);
+    if (status != EFI_BUFFER_TOO_SMALL || stride < sizeof(EFI_MEMORY_DESCRIPTOR)) return EFI_LOAD_ERROR;
+    UINTN capacity = size + 32 * stride;
+    EFI_MEMORY_DESCRIPTOR* map = AllocatePool(capacity);
+    if (!map) return EFI_OUT_OF_RESOURCES;
+    for (unsigned attempt = 0; attempt < 2; ++attempt) {
+        size = capacity;
+        status = BS->GetMemoryMap(&size, map, &key, &stride, &version);
+        if (EFI_ERROR(status) || stride < sizeof(*map) || size / stride > 255) break;
+        info.memMapEntries = size / stride;
+        for (UINTN i = 0; i < info.memMapEntries; ++i) {
+            EFI_MEMORY_DESCRIPTOR* descriptor = (EFI_MEMORY_DESCRIPTOR*)((UINT8*)map + i * stride);
+            info.memMap[i].address = descriptor->PhysicalStart;
+            info.memMap[i].length = descriptor->NumberOfPages * 4096;
+            info.memMap[i].type = descriptor->Type;
+            info.memMap[i].extended_attributes = descriptor->Attribute;
+        }
+        // No allocations, logging or protocol calls between the final map and ExitBootServices.
+        status = BS->ExitBootServices(image, key);
+        if (status == EFI_SUCCESS) {
+            __asm__ volatile("cli");
+            typedef int (__attribute__((sysv_abi)) *KernelEntry)(BOOTINFO*);
+            ((KernelEntry)entry)(&info);
+            break;
+        }
+        if (status != EFI_INVALID_PARAMETER) break;
+    }
+    // Firmware services cannot be used after attempting ExitBootServices.
+    for (;;) __asm__ volatile("cli; hlt");
 }

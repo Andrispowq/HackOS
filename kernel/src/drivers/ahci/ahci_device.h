@@ -171,7 +171,7 @@ namespace AHCI
     public:
         AHCIDevice(Port* port);
 
-        virtual DeviceType GetType() override { return DeviceType::AHCI; };
+        virtual DeviceType GetType() const override { return DeviceType::AHCI; };
 
         virtual void Read(uint64_t LBA, void* buffer, uint64_t size) override;
         virtual void Write(uint64_t LBA, void* buffer, uint64_t size) override;

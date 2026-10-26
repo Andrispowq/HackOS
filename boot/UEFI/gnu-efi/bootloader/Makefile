@@ -64,9 +64,9 @@ TARGET_RTDRIVERS =
 
 ifneq ($(HAVE_EFI_OBJCOPY),)
 
-FORMAT		:= --target efi-app-$(ARCH)
-$(TARGET_BSDRIVERS): FORMAT=--target efi-bsdrv-$(ARCH)
-$(TARGET_RTDRIVERS): FORMAT=--target efi-rtdrv-$(ARCH)
+FORMAT		:= --output-target efi-app-$(ARCH)
+$(TARGET_BSDRIVERS): FORMAT=--output-target efi-bsdrv-$(ARCH)
+$(TARGET_RTDRIVERS): FORMAT=--output-target efi-rtdrv-$(ARCH)
 
 else
 
