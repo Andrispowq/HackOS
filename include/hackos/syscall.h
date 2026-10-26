@@ -1,10 +1,10 @@
 #pragma once
 #include "hackos/types.h"
 #include "hackos/syscall_numbers.h"
-#include <stdarg.h>
+#include "hackos/abi.h"
 
 // int 0x80: RAX=number; RDI, RSI, RDX, RCX, R8=arguments; RAX=result.
-// Raw pointers and va_list are retained for compatibility, not a ring-3 ABI.
+// Pointer arguments are user virtual addresses validated and copied by the kernel.
 extern "C" uint64_t MakeSyscall(uint64_t number, uint64_t p0, uint64_t p1,
                                 uint64_t p2, uint64_t p3, uint64_t p4);
 

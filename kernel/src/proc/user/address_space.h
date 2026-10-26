@@ -19,6 +19,9 @@ public:
     bool Initialise();
     void* AddPage(uint64_t address, bool writable, bool executable);
     bool CopyFromUser(void* destination, uint64_t source, uint64_t length) const;
+    bool WritableRange(uint64_t destination, uint64_t length) const;
+    bool CopyToUser(uint64_t destination, const void* source, uint64_t length) const;
+    bool CopyString(char* destination, uint64_t source, uint64_t capacity) const;
     PageTableManager directory;
 private:
     void* AllocatePage();

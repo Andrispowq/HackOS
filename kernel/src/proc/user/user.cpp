@@ -7,7 +7,7 @@
 #include "lib/stdio.h"
 #include "drivers/screen/screen.h"
 
-bool LoadUserProgramTask(const char* path)
+uint64_t LoadUserProgramTask(const char* path, bool systemShell)
 {
     PreemptionGuard guard;
     uint64_t address;
@@ -67,6 +67,7 @@ bool LoadUserProgramTask(const char* path)
         return false;
     }
     auto process = new Process(path, (void*)header->e_entry);
+    process->systemShell = systemShell;
     process->userSpace = space;
     process->pageTable = &space->directory;
     auto frame = (Registers*)process->rsp;
@@ -79,7 +80,7 @@ bool LoadUserProgramTask(const char* path)
     kfree(header);
     AddProcess(process);
     kprintf("Started user process %d: %s\n", process->pid, path);
-    return true;
+    return process->pid;
 }
 
 uint64_t user_write(const char* buffer, uint64_t length)

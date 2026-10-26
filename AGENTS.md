@@ -14,12 +14,13 @@ experimental code, not a claim that every device or boot path currently works.
 The [documentation index](docs/index.md) links to the system and development
 guides. Keep those pages consistent with changes to component contracts.
 
-Tasking is enabled for ring-0 kernel threads. Idle reaps exited tasks and
-`kernel_task` runs the interactive PS/2 shell. Trusted ring-0 tasks share `KernelDirectory`; only one legacy fixed-address ELF
-program may run at a time. The `user` loader supports concurrent isolated ring-3
-programs with private frames, supervisor-only kernel mappings, and print/exit
-syscalls. The shell remains a ring-0 task. See `docs/system/userspace.md` for lifecycle,
-preemption guards and shell commands.
+Tasking supports idle plus isolated ring-3 programs. The standalone shell at
+`~/USR/BIN/SHELL` starts automatically; idle refreshes the console and reaps
+exited tasks. User programs own private frames and page tables, with shared
+supervisor-only kernel mappings. Both `./` and `user` launch ring-3 programs.
+All active syscalls are user interfaces; kernel code calls internal functions
+directly. Only the boot shell has input, console editing, kill and power rights.
+See `docs/system/userspace.md` for ABI, ownership and lifecycle contracts.
 
 ## Where to look
 
@@ -40,7 +41,7 @@ preemption guards and shell commands.
 | Graphics, console, windows | `kernel/src/drivers/screen/`; packed RGB colour macro is `COLOUR` in `screen.h`, PSF1 font rendering is in `screen.cpp` |
 | Filesystems | `kernel/src/fs/filesystem.*`, `vfs.*`, `fat32/`; low-level FAT operations are in `fat32driver.*` |
 | Program loading and scheduling | `kernel/src/proc/{elf,tasking}/` |
-| Kernel shell | `kernel/src/shell/shell.cpp` |
+| Standalone shell | `libs/shell/src/main.cpp`; shared line editing in `common/include/hackos/runtime/line_buffer.h` |
 | Userspace runtime and programs | `libs/libc/`, `libs/shell/`, `libs/test/`; root Makefile builds them and `tools/make_image.py` packages their outputs |
 | Minimal support routines | `kernel/src/lib/`; similar code also exists in BIOS stage 2 and `libs/libc/`, with independent build rules |
 | Assets and old experiments | `util/fonts/zap-light16.psf`, `util/usertest/usertest.elf`, `util/tools/`; the retained ext2 image and generated initrd images are not used by the current image recipes |
@@ -88,10 +89,10 @@ framebuffer/font/memory-map layouts across all three. The BIOS/EFI memory type
 numbers differ; the kernel uses `booted_from_BIOS` to select interpretation.
 
 `kernel_main` initializes display/GDT/IDT/paging, then heap, devices/filesystems,
-ACPI/PCI, filesystem/program smoke code, shell, windows, syscalls and IRQs.
-Tasking is initialized before IRQs are enabled. `kernel_main` becomes idle and
-reclaims zombie stacks; `kernel_task` drains queued keyboard input and refreshes
-the console. It does not launch the experimental userspace window shell.
+ACPI/PCI, windows, syscalls and tasking. It loads the standalone shell before
+enabling IRQs. `kernel_main` becomes idle, refreshes the console and reclaims
+zombie stacks, private user pages and file handles. Keyboard decoding remains
+in the kernel; command parsing and line editing run in the ring-3 shell.
 
 ## Build and validation
 

@@ -2,191 +2,138 @@
 
 [System index](index.md) · [Memory](memory.md) · [Interrupts](interrupts.md)
 
-HackOS runs preemptive kernel threads, an interactive kernel shell, and minimal
-isolated ring-3 programs. `user USR/BIN/RING3` launches the bundled print/exit
-demo. The older `./` loader and libc applications remain trusted ring-0 code.
+HackOS boots directly into the standalone ring-3 shell at `~/USR/BIN/SHELL`.
+`InitialiseKernel` initializes filesystems and syscalls, creates idle, loads the
+shell, then enables IRQs. The first scheduling pass enters userspace. A missing
+or invalid shell produces an explicit boot error; there is no kernel-shell
+fallback. `kernel_main` remains idle, refreshes the console and reaps dead tasks.
 
-## Isolated ring-3 programs
+## Isolated programs
 
 [proc/user](../../kernel/src/proc/user/) loads static x86-64 ELF executables into
-private physical frames. Each process owns its four page-table pages and up to
-64 data/code/stack pages. Its 2 MiB virtual arena starts at
-`0x0000400000000000`; the last 16 KiB is a zeroed, non-executable user stack,
-preceded by an unmapped guard page. Kernel mappings are shared but supervisor-only.
-Identical programs can run concurrently at the same virtual addresses.
+private physical frames. Each process owns four page-table pages and up to 64
+code/data/stack pages. Its 2 MiB virtual arena starts at `0x0000400000000000`;
+the last 16 KiB is a zeroed, non-executable stack preceded by an unmapped guard
+page. Shared kernel mappings remain supervisor-only. Multiple programs can use
+the same virtual addresses without sharing their private frames.
 
-The loader requires readable segments, rejects writable executable pages,
-page-sharing segments, interpreters, dynamic linking and TLS, and caps ELF files
-at 1 MiB. Code is read-only/executable; data and stacks are non-executable.
-Empty load segments are allowed. BSS and page padding are zeroed. CPUs without
-NX support cannot launch user programs. CR0.WP and EFER.NXE enforce permissions.
-This path does not use the legacy page-table clone helpers.
+The loader validates file and virtual ranges, requires readable segments,
+rejects writable executable pages, page-sharing segments, dynamic linking,
+interpreters and TLS, and caps ELF files at 1 MiB. Empty load segments are allowed.
+BSS and page padding are zeroed. CR0.WP and EFER.NXE enforce permissions; CPUs
+without NX cannot launch user programs. Spawn permits at most 16 queued tasks,
+including idle and zombies awaiting reclamation.
 
 The initial interrupt frame enters CPL3 with CS `0x1b`, SS `0x23`, IF enabled,
-and IOPL zero. TSS.RSP0 selects the task's separate kernel stack on interrupts
-and syscalls. Timer scheduling switches CR3 and restores the existing complete
-register/FPU frame. Exit and ordinary user exceptions mark the task dead;
-idle reclaims its kernel stack, private frames and page tables after switching
-away. Kernel faults, NMI, double fault and machine check retain kernel handling.
+and IOPL zero. TSS.RSP0 selects a separate kernel stack. Timer scheduling switches
+CR3 and restores the 704-byte register/FPU frame. User yield uses the existing
+kernel scheduling mechanism without sleeping inside a preemption guard.
+Exit and ordinary user exceptions mark the task dead. Idle closes its remaining
+file handles and frees private frames, page tables, name and kernel stack after
+switching away. Kernel faults, NMI, double fault and machine check retain kernel
+handling. Scheduling is single-CPU; AVX context is not supported.
 
-The minimal ABI exposes only exit and bounded console writes. There is no user
-heap, terminal input, file-handle API, dynamic linker, or standalone user shell
-yet. The scheduler still runs on one CPU. This is a tested minimal isolation
-boundary, not a hardened general-purpose sandbox.
+The old trusted ELF helpers remain internal code. The binary-only `USERTEST.ELF`
+asset is retained but no longer called during boot. Neither shell launch syntax
+can execute a program in ring 0. Old fixed-address libc/window binaries are
+incompatible with the active ABI and must be ported and rebuilt.
 
-## Trusted ring-0 ELF loading
+## Standalone shell
 
-[proc/elf/elf.cpp](../../kernel/src/proc/elf/elf.cpp) opens programs through the
-first filesystem and checks for little-endian x86-64 ELF64 executable files.
-`PrepareProgram` walks `PT_LOAD` segments, identity-maps their physical-address
-fields through `KernelDirectory`, and copies file data to those addresses.
-
-`program_task` calls the ELF entry point as a function with an `argc`/`argv`
-pair. `LoadProgramTask` owns a copy of the path and permits one loaded ELF
-program at a time, since the program linker scripts use the same addresses. The kernel startup smoke path also directly calls
-the retained `USERTEST.ELF` entry.
-
-The loader validates ELF version, header sizes, aligned program-header tables,
-file-backed ranges, address overflow, segment alignment, non-overlap and an
-executable entry point. It copies file bytes and zeros `p_memsz - p_filesz`.
-Physical and virtual segment addresses must match this identity-loading model.
-These checks do not provide isolation: destination ownership, segment permissions
-and a process-owned address space are still needed before accepting untrusted
-programs.
-
-## Processes and scheduling
-
-[Process](../../kernel/src/proc/tasking/process.cpp) owns its name and a 16 KiB
-kernel stack. Kernel threads reference shared kernel page tables; user tasks additionally own
-a private address space. `InitialiseTasking` creates the idle and shell tasks before IRQs
-are enabled. Idle keeps the original boot stack; its first timer interrupt
-captures its context.
-
-Each new thread starts through a trampoline with SysV stack alignment and a
-synthetic interrupt frame. Returning from the entry function terminates the
-thread. IRQ0 saves the current frame and selects the next live task from a
-null-terminated queue, wrapping to idle at the end. The interrupt epilogue
-restores that task's frame. Vector `0x81` provides a ring-0 voluntary yield.
-There is no compiler-frame-pointer walk. The scheduler switches CR3 when the
-address space changes and updates the TSS kernel entry stack.
-
-Exit marks the current task as a zombie and yields without returning. Killing
-another task marks it as a zombie so it cannot be selected again. Idle unlinks
-and deletes zombies only after execution has left their stacks. Stack and name
-storage are freed once; private user pages are reclaimed and shared kernel
-page tables stay alive. Program-owned file
-handles, heap allocations and windows still require explicit cleanup by the
-program; automatic resource tracking is future work.
-
-The scheduler runs only on the bootstrap CPU. Nested `PreemptionGuard` scopes
-protect shared heap, console, shell commands and program loading while allowing
-hardware IRQ delivery. Queue operations use short interrupt-disabled sections.
-Do not sleep, yield or exit inside a preemption guard. These guards are not SMP
-locks. `SleepFor` waits on PIT ticks and does not remove a task from the ready queue.
-
-## Interactive kernel shell
-
-The shell thread consumes decoded PS/2 characters and refreshes the display when
-console output changes. Keyboard IRQs only decode and enqueue input. The console
-stays visible; the experimental window application in `libs/shell` is not started
-automatically.
+[libs/shell/src/main.cpp](../../libs/shell/src/main.cpp) owns command parsing,
+line editing, working-directory state, formatting and its current file handle.
+Keyboard IRQs only decode and enqueue characters. The boot shell reads those
+characters through the input syscall and yields when the queue is empty.
+Console rendering and hardware operations remain kernel services.
 
 | Command | Behavior |
 | --- | --- |
 | `help`, `clear` | Show commands or clear the console |
 | `print <text>` | Print literal text, including percent signs |
-| `print tick`, `print time`, `print date` | Show the monotonic tick count or RTC |
-| `ps`, `kill <pid>` | List tasks or stop a program; idle and shell are protected |
-| `ls`, `wd`, `cd <path>` | Browse the first filesystem; `~` is its root |
-| `open <path>`, `read`, `close` | Open a file, read up to 512 bytes, close it |
-| `user <path>` | Launch an isolated ring-3 ELF, for example `user USR/BIN/RING3` |
-| `./<program>` | Launch a trusted ELF program, for example `./USR/BIN/TEST` |
-| `shutdown`, `restart` | Use the existing platform power-management paths |
+| `print tick`, `print time`, `print date` | Show monotonic ticks or RTC values |
+| `ps`, `kill <pid>` | List tasks or stop a user program; idle and boot shell are protected |
+| `ls`, `wd`, `cd <path>` | Browse the first filesystem; `~` denotes its root |
+| `open <path>`, `read`, `close` | Open a read-only handle, read up to 512 bytes, close it |
+| `./<program>`, `user <path>` | Launch an isolated program; e.g. `./USR/BIN/TEST` or `user USR/BIN/RING3` |
+| `shutdown`, `restart` | Request kernel ACPI power-off or platform restart |
 
-Input uses the US keyboard layout, including Shift and Caps Lock. Backspace edits
-the current line. Enter submits it. Lines longer than 255 characters are discarded;
-a queue overflow also discards input and requires Enter before a fresh command.
-There is no history, tab completion or interactive userspace terminal yet.
-Power management and the example window programs remain hardware-dependent and
-experimental.
+Input supports the US layout, Shift, Caps Lock and Backspace. Lines longer than
+255 characters are discarded. Queue overflow discards input until Enter. There
+is no history, completion, argument passing, foreground job control or blocking
+terminal API yet. Program output shares the console with the shell.
 
-## Syscalls
+Only the process designated by the kernel at boot owns terminal input, console
+editing, task-kill and power privileges. Spawning another copy of SHELL does not
+inherit those privileges. Ordinary programs can print, inspect processes, read
+files, spawn, yield and exit. This is a minimal single-user permission model,
+not a hardened multi-user security system. Power returns zero when the hardware request is issued, or an error when it
+cannot be issued. Actual completion is confirmed by guest shutdown, not just a
+return value or printed message.
 
-The kernel's [syscall implementation](../../kernel/src/arch/x86_64/syscall/)
-and the userspace [kernel interface](../../libs/libc/src/kernel_interface/)
-share numbered calls through `int 0x80`.
+## Syscall ABI
 
-[include/hackos/syscalls.def](../../include/hackos/syscalls.def) is the single
-catalogue of syscall numbers, argument types and kernel targets. It generates
-the public declarations/numbers, common wrappers and kernel dispatch entries.
-The wrappers and `MakeSyscall` assembly are compiled separately into the kernel
-and libc. Existing numbers and register conventions are preserved; centralizing
-the declarations alone does not validate pointers. The dispatcher selects a
-restricted ABI when the saved CS indicates CPL3.
+[include/hackos/syscalls.def](../../include/hackos/syscalls.def) defines all active
+call numbers and wrapper signatures. Every active call is available from ring 3,
+subject to the permissions above. Kernel code calls internal functions directly;
+ring-0 `int 0x80` requests are rejected and no syscall wrappers are linked into
+the kernel. Slots 1–13 are reserved for the retired raw-pointer/window ABI and
+return an error rather than being reinterpreted as new operations.
 
-| Number | Operation |
-| ---: | --- |
-| 0 | Exit current task |
-| 1 | Formatted kernel output |
-| 2 | Console backspace |
-| 3 | Open file |
-| 4 | Read file |
-| 5 | Write file |
-| 6 | Close file |
-| 7 | Allocate memory |
-| 8 | Free memory |
-| 9 | Read buffered input |
-| 10 | Create window |
-| 11 | Destroy window |
-| 12 | Get window buffer |
-| 13 | Set window title |
-| 14 | Bounded literal console write |
+| Number | Call | Result/contract |
+| ---: | --- | --- |
+| 0 | `exit(status)` | Does not return; libc uses it when `main` returns |
+| 14 | `user_write(buffer, length)` | Literal console bytes, maximum 1024; returns count |
+| 15 | `input()` | Character, 0 if empty, 256 for queue overflow; boot shell only |
+| 16 | `console(operation)` | 0 backspace, 1 clear; boot shell only |
+| 17 | `clock(out)` | Copies ticks and RTC fields; RTC retains existing BCD representation |
+| 18 | `process_info(index, out)` | Copies one process record; 1 found, 0 end |
+| 19 | `kill(pid)` | Stops another user task; boot shell only |
+| 20 | `spawn(path)` | Copies a bounded path and loads an isolated ELF; returns PID |
+| 21 | `open(path)` | Returns an opaque read-only file handle |
+| 22 | `read(handle, out, length)` | At most 512 bytes; returns bytes read, 0 at EOF |
+| 23 | `close(handle)` | Closes a handle owned by the caller |
+| 24 | `stat(path, out)` | Copies file size, attributes and name |
+| 25 | `readdir(path, index, out)` | Copies one directory entry; 1 found, 0 end |
+| 26 | `power(operation)` | 0 ACPI shutdown, 1 restart; boot shell only |
+| 27 | `yield()` | Gives another runnable task a scheduling opportunity |
 
-`MakeSyscall` puts the call number in RAX and arguments in RDI, RSI, RDX, RCX,
-and R8. The dispatcher uses the same registers and aligns the stack before
-calling the C++ implementation. Results return through saved RAX; unknown syscall
-numbers return `-1`.
+Calls use `int 0x80`: RAX is the number, RDI/RSI/RDX/RCX/R8 hold arguments,
+and saved RAX receives the result. Successful operations without another result
+return zero. `HACKOS_ERROR` (`UINT64_MAX`) denotes failure;
+`HACKOS_DENIED` (`UINT64_MAX-1`) denotes insufficient permission. Unknown and
+retired calls return `HACKOS_ERROR`. The fast `syscall` instruction remains
+disabled; vector `0x81` remains kernel-only.
 
-Vector `0x80` is a DPL3 interrupt gate. CPL3 callers may use only 0 (exit,
-status in RDI) and 14 (write, pointer in RDI and byte count in RSI). Writes
-accept at most 1024 bytes, validate the entire mapped user range before copying,
-and print literal bytes. They return the byte count or `-1`; zero-length writes
-return zero. Calls 1–13 and unknown numbers return `-1` from ring 3. Vector
-`0x81` remains kernel-only. The unfinished fast `syscall` path is disabled.
+[abi.h](../../include/hackos/abi.h) contains fixed-width, pointer-free output
+records with pinned sizes and zeroed padding. Paths are NUL-terminated within
+256 bytes and start with `~`. Copy-in validates mapped user pages; copy-out
+also requires writable pages and validates the whole range before touching it.
+Read validates the destination before advancing a file offset. No syscall
+returns kernel addresses, virtual objects, format strings or `va_list` objects.
 
-The legacy ring-0 API still passes raw pointers, `va_list`, and kernel objects.
-Its kernel/libc `ActiveFile` declarations must match, including virtual method
-order and fields. Host and guest tests retain coverage of that trusted ABI.
-Future user file/window APIs need handles and per-process resource ownership.
+Each process can own eight file handles. Monotonically allocated opaque tokens
+are checked against the caller's live slots; closed, stale and foreign tokens
+are rejected. Exit, fault and kill close all outstanding handles. This version
+has no user file-write or window API: those need explicit safe interfaces rather
+than access to the old kernel object layout.
 
-## Runtime and programs
+## Runtime and tests
 
-[libs/ring3](../../libs/ring3/) supplies a source-built standalone demo with its
-own linker script and the shared syscall assembly stub. It does not link the
-legacy libc.
+The active [libc Makefile](../../libs/libc/Makefile) builds startup assembly,
+user-side printing/number formatting, shared memory/string/bitmap primitives,
+and generated syscall wrappers. It excludes the older allocation, file-object,
+and window helpers still present in that directory. The active public headers
+are `hackos/user.h`, `hackos/syscall.h` and `hackos/abi.h`. There is no user heap
+API yet; shell buffers are bounded stack/static storage.
 
-[libs/libc](../../libs/libc/) supplies startup assembly, small C++ support
-routines, syscall wrappers, and drawing helpers. `_start` aligns the stack and
-calls `_entry`, which calls `main` and then requests exit. The linker scripts
-place programs at `0x01000000`.
+Kernel and user code compile shared primitives with their own flags. Line editing
+is shared with host tests through `common/include/hackos/runtime/line_buffer.h`.
+All active programs use the isolated linker layout in `libs/ring3/userspace.ld`.
+The test program reads a file through the safe ABI; the ring3 demo exercises
+print, timer preemption and exit. The old split adapters retain host coverage,
+but allocation-dependent legacy libc helpers are not linked into user programs.
 
-Kernel and libc share memory/string primitives, bitmap, vector/list helpers and
-PSF font declarations through [common](../../common/). Allocation and output
-remain component-specific. `split()` uses the same C implementation in BIOS
-stage 2, the kernel and libc, with a local allocator adapter. It preserves empty
-fields, including leading/trailing delimiters; empty input yields one empty
-string. The result contains `count` separately allocated, terminated strings
-and a null pointer sentinel. Callers free the strings and then the array using
-their own allocator. Invalid input or allocation failure returns null and sets
-`count` to zero when supplied. The BIOS bump allocator still cannot reclaim
-memory (`kfree` is a no-op).
-
-[libs/shell](../../libs/shell/) is a window/font experiment with much of its
-interactive loop commented out. It is distinct from the
-[kernel shell](../../kernel/src/shell/shell.cpp).
-[libs/test](../../libs/test/) is an example application exercising arguments,
-windows, and file I/O; it is not an automated test suite.
-
-The [test suite](../development/testing.md) exercises ELF validation, register
-preservation, shell input, task exit and reclamation on both firmware paths. The remaining
-implementation work is prioritized in [TODO](../TODO.md).
+The [testing guide](../development/testing.md) covers shell CPL3 entry, input,
+file handles, bad pointers, concurrent programs, register preservation, resource
+cleanup and actual guest ACPI shutdown on both BIOS and UEFI. Further work is
+listed in [TODO](../TODO.md).

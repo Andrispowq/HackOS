@@ -63,9 +63,9 @@ sanitizers; there is no automatic downgrade.
 | VFS and registration | Volume selection, path translation, missing files/volumes, invalid indices/handles, create/read/write/close dispatch, error propagation, slot reuse |
 | FAT32 | Small, empty, long-name and cross-cluster files; seeked reads; enumeration; rewrite/create/delete persistence; partial writes, EOF, empty-file growth, zero-fill, directory extension, invalid BPBs and cyclic chains |
 | ELF | Identity, malformed/truncated headers, program-header bounds, filesystem loading, segment copying and BSS zeroing |
-| User address spaces | Private frames, supervisor kernel mappings, W/X rejection, checked cross-page copies, holes/overflow, allocation failure and reclamation with an explicit physical allocator adapter |
+| User address spaces | Private frames, supervisor kernel mappings, W/X rejection, checked cross-page copies in both directions, read-only output rejection, bounded strings, holes/overflow, allocation failure and reclamation with an explicit physical allocator adapter |
 | Keyboard and line input | Make/break bounds, Shift/Caps Lock, punctuation, extended/Pause sequences, FIFO wrap/overflow, editing and command-length limits |
-| ABI | Kernel/libc `ActiveFile` virtual calls from separate translation units, interrupt-frame offsets, real syscall-bridge assembly alignment and five arguments |
+| ABI | Fixed-width syscall record layouts and interrupt-frame offsets; historical `ActiveFile` layout checks remain for the unlinked legacy sources |
 
 Memory/string functions are required to follow standard C semantics. A
 nonstandard `memset`, `memcmp`, `strncmp`, or `strcpy` is a failure, even if
@@ -162,28 +162,34 @@ literal percent signs, overlong-command rejection, directory changes, file reads
 repeated close, task listing and the monotonic clock. Console characters are
 captured through port `0xe9`; a framebuffer screenshot is saved as `screen.ppm`.
 
-The runner builds small guest programs against the image's real libc and copies
-them into a disposable image. The ABI probe calls the kernel-created `ActiveFile`
-virtual methods, reads a file, allocates/frees memory, splits a string through
-the shared runtime and releases its allocations, checks unknown-syscall
-failure, and prints a floating-point argument through `int 0x80`. Its assembly
-routine checks general registers, XMM0–15, x87 data/control state, MXCSR, CF and
-DF across timer preemption. A test-only linker alias to the kernel's scheduler
-counter proves switches happened during that routine; there are no production
-test entry points.
+GDB first stops the shell in the syscall dispatcher and checks its saved CS/SS,
+private CR3 and boot-shell privilege flag. This verifies actual automatic CPL3
+execution before keyboard commands begin. The runner builds guest programs
+against the active libc and copies them into a disposable image. The ABI probe
+checks read-only file metadata/read/EOF, malformed and read-only output pointers,
+unterminated paths, stale/foreign handles, the eight-handle limit, rejected legacy
+calls, and denied power/input/kill privileges for ordinary programs. It leaves
+handles open deliberately so exit cleanup can be checked.
 
-Three probe launches test repeated syscall exit and stack reuse. A missing program
-exercises the task-entry return trampoline. A spinning program verifies that the
-shell stays responsive, rejects a second fixed-address ELF, protects idle/shell,
-handles an unknown PID, and kills another task. Finally GDB checks that idle has
-reaped all five terminated tasks, only idle/shell remain, and both reference
-`KernelDirectory`. Each awaited milestone has a timeout. QEMU is stopped on
-failure, and the source image and firmware variables remain untouched.
+Its assembly routine checks general registers, XMM0–15, x87 data/control state,
+MXCSR, CF and DF across timer preemption. The safe clock syscall verifies timer
+progress; the isolation suite independently checks per-task preemption counters.
+Three sequential launches test return-through-libc exit and reuse. A fourth runs
+alongside a spinning task, which the shell then kills while it owns an open file.
+The shell's own open handle stays isolated throughout. Missing programs are
+rejected before task creation. Idle and shell are protected from `kill`.
 
-Reports, console/debugger logs, guest binaries, the disposable image and screenshot
-live in `tests/out/qemu-shell-bios/` or `qemu-shell-uefi/`. These tests exercise
-ring-0 threads, not privilege transitions or automatic cleanup of every resource
-a program might leave open. They do not establish physical-PC compatibility.
+GDB checks that all five terminated tasks were reaped, only idle and the isolated
+shell remain, user-page accounting matches the shell's live ownership, and no
+file handles leaked. Finally the harness types `shutdown` and requires QEMU to
+exit successfully with a QMP `SHUTDOWN` event whose reason is `guest-shutdown`.
+A log message alone cannot pass this check. No debug-exit or monitor quit is used
+to satisfy the power-off assertion.
+
+Reports, console/debugger logs, QMP events, guest binaries, the disposable image
+and screenshot live in `tests/out/qemu-shell-bios/` or `qemu-shell-uefi/`.
+Each awaited milestone has a timeout. Source images and firmware variables remain
+untouched. These tests do not establish physical-PC compatibility.
 
 ## Isolated ring-3 regressions
 
@@ -203,7 +209,8 @@ Nine separate tasks attempt kernel reads/writes, text writes, stack execution,
 port I/O, CLI, kernel-only software interrupts, disabled SYSCALL, and stack-guard
 access. Each must fault with the expected exception while the shell survives.
 Malformed ELF policies are rejected before task creation. Finally, GDB verifies
-all twelve task stacks were reaped and no private user frames/tables remain.
+all twelve test-task stacks were reaped and only the boot shell's private
+frames/tables remain.
 Reports, console/GDB logs and a framebuffer screenshot are saved under
 `tests/out/qemu-user-bios/` or `qemu-user-uefi/`. These checks cover QEMU's
 configured CPU and firmware; they do not establish physical-PC compatibility.

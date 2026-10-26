@@ -19,7 +19,7 @@ SOURCES = [
     "kernel/src/fs/vfs.cpp", "kernel/src/fs/fat32/fat32.cpp",
     "kernel/src/fs/fat32/fat32driver.cpp",
     "boot/BIOS/stage_2/src/libc/memory.c", "boot/BIOS/stage_2/src/libc/string.c",
-    "libs/libc/src/memory.cpp", "libs/libc/src/string.cpp",
+    "libs/libc/src/string.cpp",
     "common/src/split.c", "kernel/src/proc/user/address_space.cpp",
     *[f"tests/host/{s}.cpp" for s in ("adapters", "main", "library_tests", "graphics_tests", "fs_tests", "elf_tests", "bios_tests", "user_tests", "input_tests", "file_abi_provider", "file_abi_consumer", "syscall_tests", "split_tests", "user_address_tests")],
 ]
@@ -80,8 +80,6 @@ def compile_host(directory, sanitizers):
         objects.append(obj)
     assembly_sources = [(prefix,folder,s) for prefix,folder in [("","common/src/x86_64"),("hackos_user_","common/src/x86_64")]
                         for s in ("_memory","_string")]
-    assembly_sources += [("", "kernel/src/arch/x86_64/syscall", "syscall_impl"),
-                         ("", "tests/fixtures", "syscall_target")]
     for prefix,folder,source in assembly_sources:
         obj = directory/(prefix+source+".o")
         args = ["nasm", "-f", "macho64" if sys.platform=="darwin" else "elf64"]

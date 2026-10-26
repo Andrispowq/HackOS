@@ -1,57 +1,30 @@
-
-SRC_DIR := src
-BIN_DIR := bin
-OBJ_DIR := bin-int
-
-rwildcard=$(foreach d,$(wildcard $(1:=/*)),$(call rwildcard,$d,$2) $(filter $(subst *,%,$2),$d))
-
-SRC = $(call rwildcard,$(SRC_DIR),*.cpp)  
-ASM_SRC = $(call rwildcard,$(SRC_DIR),*.asm)  
-OBJS = $(patsubst $(SRC_DIR)/%.cpp, $(OBJ_DIR)/%.o, $(SRC))
-OBJS += $(patsubst $(SRC_DIR)/%.asm, $(OBJ_DIR)/%.o, $(ASM_SRC))
-DIRS = $(wildcard $(SRC_DIR)/*)
-
+# The active ring-3 runtime. Old window/raw-pointer sources are not ABI-compatible
+# and are deliberately excluded until they have safe user implementations.
 CROSS_COMPILE ?= x86_64-elf-
-CC = $(CROSS_COMPILE)gcc
 CXX = $(CROSS_COMPILE)g++
-ASM = nasm
-LD = $(CROSS_COMPILE)ld
 AR = $(CROSS_COMPILE)ar
-OBJCOPY = $(CROSS_COMPILE)objcopy
-
-LDS = userspace.ld
-CFLAGS = -std=gnu++17 -fno-pie -fno-stack-protector -fno-omit-frame-pointer -MMD -MP -m64 -ffreestanding -mno-red-zone -fno-rtti -fno-exceptions -c -g -I src
+CC = $(CROSS_COMPILE)gcc
+ASM = nasm
 ASM_FLAGS = -f elf64
-LDFLAGS = -T $(LDS) -static -Bsymbolic -nostdlib
-
-.DEFAULT_GOAL := all
+OBJ_DIR = bin-int
+CFLAGS = -std=gnu++17 -O2 -g -ffreestanding -mno-red-zone -mcmodel=large -fno-pie -fno-stack-protector -fno-omit-frame-pointer -fno-exceptions -fno-rtti -MMD -MP -I ../../include -I ../../common/include
+OBJS = bin-int/user.o bin-int/start.o
 COMMON_DIR := ../../common
+COMMON_NO_SPLIT := true
 include $(COMMON_DIR)/runtime.mk
-
-.PHONY: all link clean
-all: $(BIN_DIR)/libc.a
-link: $(BIN_DIR)/libc.a
-
-$(OBJ_DIR)/%.o: $(SRC_DIR)/%.cpp Makefile $(COMMON_DIR)/runtime.mk
-	@ echo !==== COMPILING $^
-	@ mkdir -p $(@D)
+.DEFAULT_GOAL := all
+.PHONY: all clean
+all: bin/libc.a
+bin-int/user.o: src/user.cpp Makefile
+	@mkdir -p $(@D)
 	$(CXX) $(CFLAGS) -c $< -o $@
-	
-$(OBJ_DIR)/%.o: $(SRC_DIR)/%.asm $(call rwildcard,$(SRC_DIR),*.inc)
-	@ echo !==== COMPILING $^
-	@ mkdir -p $(@D)
-	$(ASM) $(ASM_FLAGS) -MD $(@:.o=.d) $< -o $@
-
-$(BIN_DIR)/libc.a: $(OBJS) Makefile $(COMMON_DIR)/runtime.mk
-	@ mkdir -p $(@D)
-	@ echo !==== LINKING
+bin-int/start.o: src/start.asm Makefile
+	@mkdir -p $(@D)
+	$(ASM) -f elf64 -MD $(@:.o=.d) $< -o $@
+bin/libc.a: $(OBJS) Makefile
+	@mkdir -p $(@D)
 	rm -f $@
 	$(AR) rcs $@ $(OBJS)
-
-# cleaning
 clean:
-	rm -rf ${OBJ_DIR}
-	rm -rf ${BIN_DIR}
-	mkdir ${OBJ_DIR}
-	mkdir ${BIN_DIR}
+	rm -rf bin bin-int
 -include $(OBJS:.o=.d)

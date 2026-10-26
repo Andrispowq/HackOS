@@ -34,6 +34,5 @@ struct KernelInfo
 
 void InitialiseDisplay(struct KernelInfo* info);
 void InitialiseKernel(struct KernelInfo* info);
-void InitialiseFilesystem();
 
 #endif

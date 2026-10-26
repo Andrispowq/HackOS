@@ -1,9 +1,10 @@
 #include "support.hpp"
 #include "../../libs/libc/src/memory.h"
 #include "../../libs/libc/src/string.h"
-// Syscall allocation is a seam; no userspace transition is exercised.
-uint64_t syscall_kmalloc_int(uint64_t size,int,uint64_t*) { return (uint64_t)test_alloc(size); }
-uint64_t syscall_kfree(void* pointer) { test_free(pointer); return 0; }
+// Explicit allocator adapter for the retained split implementation; the active
+// ring-3 runtime has no heap API and does not link this legacy adapter.
+uint64_t malloc(uint64_t size) { return (uint64_t)test_alloc(size); }
+void free(void* pointer) { test_free(pointer); }
 static void prepare_split_allocator() {  }
 static void release_split_allocation(void* p) { free(p); }
 #define LIBRARY_CASE(name) TEST(user_##name)

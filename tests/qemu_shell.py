@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Exercise the real PS/2 shell, libc ABI, preemption and task exit in QEMU."""
+"""Exercise the ring-3 PS/2 shell, safe ABI, preemption, cleanup and shutdown in QEMU."""
 import argparse
 import json
 import os
@@ -16,6 +16,7 @@ from common import ROOT, OUT, Report, command, require_success
 
 class QMP:
     def __init__(self, path):
+        self.events = []
         self.socket = socket.socket(socket.AF_UNIX)
         self.socket.settimeout(10)
         self.socket.connect(str(path))
@@ -33,6 +34,7 @@ class QMP:
             if not raw:
                 raise RuntimeError("QMP disconnected")
             result = json.loads(raw)
+            if "event" in result: self.events.append(result)
             if "error" in result:
                 raise RuntimeError(str(result["error"]))
             if "return" in result:
@@ -57,16 +59,12 @@ class QMP:
 def build_probe(directory, source, waiting=False):
     cross = os.environ.get("CROSS_COMPILE", "x86_64-elf-")
     obj, asm, program = (directory/n for n in (("wait.o", "context.o", "WAITPROBE") if waiting else ("probe.o", "context.o", "ABIPROBE")))
-    symbols = require_success(command([cross+"nm", source/"kernel/bin/kernel.elf"]), "read kernel symbols")
-    address = re.search(r"^([0-9a-f]+) [A-Za-z] scheduler_switches$", symbols, re.MULTILINE)
-    if not address: raise RuntimeError("Scheduler counter symbol missing")
     commands = [
         [cross+"g++", "-std=gnu++17", "-O0", "-g", "-ffreestanding", "-mno-red-zone",
-         "-fno-pie", "-fno-stack-protector", "-fno-exceptions", "-fno-rtti",
+         "-mcmodel=large", "-fno-pie", "-fno-stack-protector", "-fno-exceptions", "-fno-rtti",
          "-I", ROOT/"libs/libc/src", "-I", ROOT/"common/include", "-I", ROOT/"include", "-c", ROOT/("tests/guest/wait_probe.cpp" if waiting else "tests/guest/abi_probe.cpp"), "-o", obj],
         ["nasm", "-f", "elf64", ROOT/"tests/guest/context_probe.asm", "-o", asm],
-        [cross+"ld", "-T", ROOT/"libs/test/userspace.ld", "-static", "-nostdlib",
-         "--defsym=guest_switches=0x"+address[1],
+        [cross+"ld", "-T", ROOT/"libs/ring3/userspace.ld", "-static", "-nostdlib",
          "-o", program, obj, asm, source/"libs/libc/bin/libc.a"]]
     log = []
     for args in commands:
@@ -129,6 +127,25 @@ def test(firmware, timeout):
                     qmp = QMP(qmp_path)
                     wait_text("root@root:~$ ")
 
+                    qmp.call("stop")
+                    boot_script = directory/"shell-entry.gdb"
+                    boot_script.write_text("set pagination off\nset confirm off\ntarget remote " + str(gdb_path) + "\npython\nimport gdb\n" + """
+bp = gdb.Breakpoint("syscall_handler", type=gdb.BP_HARDWARE_BREAKPOINT)
+gdb.execute("continue")
+r = gdb.parse_and_eval("r").dereference()
+p = gdb.parse_and_eval("current_process")
+assert int(p["pid"]) == 2 and int(p["systemShell"]) and int(p["userSpace"])
+assert int(r["cs"]) == 0x1b and int(r["ss"]) == 0x23
+assert int(gdb.parse_and_eval("$cr3")) == int(p["pageTable"]["pml4"])
+print("SHELL_CPL3_OK")
+bp.delete()
+""" + "end\ndetach\nquit\n")
+                    result = command([os.environ.get("GDB", "gdb"), "--batch", "--nx", "-q", built/"kernel.elf", "-x", boot_script], timeout=20)
+                    (directory/"shell-entry.log").write_text(result.stdout)
+                    require_success(result, "inspect shell privilege")
+                    assert "SHELL_CPL3_OK" in result.stdout, result.stdout
+                    qmp.call("cont")
+
                     def enter(text, expected):
                         offset = len(output())
                         qmp.type(text+"\n")
@@ -140,7 +157,7 @@ def test(firmware, timeout):
                     enter("print", "\nroot@root:")
                     enter("print tick", "Ticks: ")
                     first_tick = int(re.findall(r"Ticks: (\d+)", output())[-1])
-                    enter("ps", "kernel shell (2) ALIVE")
+                    enter("ps", "~/USR/BIN/SHELL (2) ALIVE")
                     enter("ls", "USR/")
                     enter("cd USR", "root@root:~/USR$ ")
                     enter("open HELLO.TXT", "File opened.")
@@ -152,23 +169,24 @@ def test(firmware, timeout):
                     enter("x"*255 + "\b"*256, "\nroot@root:~$ ")
                     enter("x"*256, "Command too long")
                     enter("print recovered", "\nrecovered\n")
-                    enter("./MISSING", "Cannot load program:")
+                    enter("./MISSING", "Cannot load user program:")
+                    enter("open USR/HELLO.TXT", "File opened.")
                     for iteration in range(3):
                         offset = len(output())
                         qmp.type("./USR/BIN/ABIPROBE\n")
                         wait_text("PROBE_CONTEXT_BEGIN", offset)
                         wait_text("PROBE_OK", offset)
                         assert "PROBE_FAIL" not in output()[offset:], "Guest ABI/context check failed"
-                        assert "PROBE_FLOAT=1.25000000" in output()[offset:], "Floating syscall argument/alignment failed"
-                        enter("ps", "kernel shell (2) ALIVE")
+                        enter("ps", "~/USR/BIN/SHELL (2) ALIVE")
                     enter("./USR/BIN/WAITPROBE", "WAIT_PROBE_READY")
-                    enter("./USR/BIN/ABIPROBE", "A program is already running.")
+                    enter("./USR/BIN/ABIPROBE", "PROBE_OK")
                     enter("ps", "WAITPROBE")
                     pid = re.findall(r"Process: ~/USR/BIN/WAITPROBE \((\d+)\) ALIVE", output())[-1]
                     enter("kill 1", "Cannot stop the idle or shell task.")
                     enter("kill 2", "Cannot stop the idle or shell task.")
                     enter("kill 99999", "No running task with that PID.")
                     enter("kill " + pid, "Task stopped.")
+                    enter("close", "root@root:~$ ")
                     enter("print tick", "Ticks: ")
                     assert int(re.findall(r"Ticks: (\d+)", output())[-1]) > first_tick, "Clock did not advance"
                     assert "Exception:" not in output(), "Kernel exception during shell test"
@@ -179,7 +197,7 @@ def test(firmware, timeout):
                     script.write_text("set pagination off\nset confirm off\ntarget remote "+str(gdb_path)+"\n"+'''python
 import gdb
 # Stop after the shell flushes its dirty backbuffer, not mid-copy.
-bp = gdb.Breakpoint("SleepFor(unsigned int)", type=gdb.BP_HARDWARE_BREAKPOINT)
+bp = gdb.Breakpoint("ReapExitedProcesses()", type=gdb.BP_HARDWARE_BREAKPOINT)
 assert bp.locations, "Shell refresh milestone missing"
 gdb.execute("continue")
 assert int(gdb.parse_and_eval("$pc")) in [location.address for location in bp.locations]
@@ -193,10 +211,16 @@ labels = []
 while int(p):
     assert len(labels) < 3, "Leaked task or queue cycle"
     assert int(p["state"]) == 0
-    assert int(p["pageTable"]) == int(gdb.parse_and_eval("&KernelDirectory"))
+    if int(p["pid"]) == 2:
+        assert int(p["userSpace"]) and int(p["systemShell"])
+        assert int(p["pageTable"]) != int(gdb.parse_and_eval("&KernelDirectory"))
+        assert int(gdb.parse_and_eval("user_pages_live")) == int(p["userSpace"]["ownedCount"])
+    else:
+        assert not int(p["userSpace"])
     labels.append(p["name"].string())
     p = p["next"]
-assert labels == ["idle", "kernel shell"], labels
+assert labels == ["idle", "~/USR/BIN/SHELL"], labels
+assert int(gdb.parse_and_eval("user_files_live")) == 0
 print("SHELL_REGRESSION_OK switches=%d reaped=%d" % (switches, reaped))
 end
 detach
@@ -210,7 +234,19 @@ quit
                     assert "SHELL_REGRESSION_OK" in result.stdout
                     qmp.call("stop")
                     qmp.call("screendump", {"filename": str(directory/"screen.ppm")})
-                    return "PS/2 editing, command bounds, literal %, FAT reads, three ABI/context programs, normal return and syscall exit, non-current termination, deferred reclamation; " + result.stdout
+                    qmp.call("cont")
+                    offset = len(output())
+                    qmp.type("shutdown\n")
+                    process.wait(timeout=timeout)
+                    assert process.returncode == 0, "QEMU did not power off cleanly"
+                    assert "Stopping the CPU. Bye!" in output()[offset:]
+                    for raw in qmp.stream:
+                        event = json.loads(raw)
+                        if "event" in event: qmp.events.append(event)
+                    (directory/"qmp-events.json").write_text(json.dumps(qmp.events, indent=2))
+                    assert any(e.get("event") == "SHUTDOWN" and e["data"].get("guest") and
+                               e["data"].get("reason") == "guest-shutdown" for e in qmp.events), "No guest ACPI shutdown event"
+                    return "Auto-started CPL3 shell, PS/2 editing, safe file handles and bad pointers, register preservation, concurrent programs, exit/kill resource cleanup, and real guest ACPI shutdown; " + result.stdout
                 finally:
                     if qmp: qmp.close()
                     process.terminate()

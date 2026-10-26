@@ -15,11 +15,11 @@ docker compose up --build bios
 ```
 
 Open [the console](http://localhost:6080/vnc.html?autoconnect=true&resize=scale).
-It shows initialization output followed by the kernel shell. Click inside it
+It shows initialization output followed by the standalone ring-3 shell. Click inside it
 and try `help`, `ls`, `ps` or `print tick`. Input uses the US keyboard layout.
-The shell and legacy `./` programs run as ring-0 tasks. Use
-`user USR/BIN/RING3` for the isolated ring-3 print/preemption/exit demo. The
-standalone user shell and window desktop remain unfinished.
+Use `./USR/BIN/TEST` to read a file from ring 3, or `user USR/BIN/RING3` for
+the print/preemption/exit demo. `shutdown` requests kernel ACPI power-off. The
+old window demo and raw-pointer libc ABI are retired.
 The first image build compiles
 GCC and Binutils from source and takes considerably longer than later cached
 builds. Source changes are picked up when the service starts again.
@@ -131,7 +131,9 @@ uses only the C splitter from this library and retains its other C primitives.
 The old kernel/libc header paths forward to shared headers so existing source
 includes remain usable. Consumers also need `common/include` and `include` on
 their include path; the program Makefiles and guest-test builder supply both.
-Generated dependencies track the common headers and syscall catalogue.
+Generated dependencies track the common headers and syscall catalogue. The
+active libc omits allocation-dependent split adapters and old raw-pointer
+helpers; only userspace links syscall wrappers. The kernel calls services directly.
 
 Libc is recreated when relinking so archive members removed by an extraction
 cannot remain as stale definitions.

@@ -1,78 +1,159 @@
+#include "hackos/user.h"
+#include "hackos/runtime/line_buffer.h"
+using namespace User;
+static char workingDirectory[256] = "~";
+static uint64_t openFile = HACKOS_ERROR;
 
-#include "stdint.h"
-
-#include "kernel_interface/syscall.h"
-#include "screen/screen.h"
-#include "file/file.h"
-
-#include "memory.h"
-#include "string.h"
-#include "stdio.h"
-
-char working_dir[256];
-
-uint64_t initialise_window()
+static void Prompt()
 {
-    uint64_t winID = syscall_create_window(200, 200, 0);
-    syscall_set_window_title(winID, "Shell32.exe");
-    return winID;
+    char prompt[272];
+    Copy(prompt, "root@root:"); Copy(prompt + 10, workingDirectory);
+    Copy(prompt + 10 + Length(workingDirectory), "$ ");
+    Print(prompt);
 }
-
-Framebuffer* initialise_buffer(uint64_t winID)
+static bool PathFor(const char* name, char (&path)[256])
 {
-    Framebuffer* fb = (Framebuffer*)syscall_get_window_buffer(winID);
-    fb->Clear(0xFFFFFFFF);
-    return fb;
+    if (!*name) return false;
+    uint64_t prefix = *name == '~' ? 0 : Length(workingDirectory) + 1;
+    if (prefix + Length(name) >= sizeof(path)) { Print("Path too long.\n"); return false; }
+    if (prefix) { Copy(path, workingDirectory); path[prefix - 1] = '/'; }
+    Copy(path + prefix, name); return true;
 }
-
-PSF1_FONT* load_font()
+static void Command(char* input)
 {
-    ActiveFile* file = (ActiveFile*)syscall_fopen("fs0:/UTIL/FONTS/zap-light16.psf", 0x2);
-    if(file == 0)
+    if (!*input) return;
+    if (Equal(input, "help"))
     {
-        return 0;
+        Print("Commands: help, clear, print <text|tick|time|date>, ps, kill <pid>\n");
+        Print("Files: ls, wd, cd <path>, open <path>, read, close, ./<program>\n");
+        Print("User: user <path> (isolated ring 3). Power: shutdown, restart.\n");
     }
-
-    PSF1_FONT* font = (PSF1_FONT*)malloc(file->GetSize());
-    syscall_fread(font, 1, file->GetSize(), file);
-    syscall_fclose(file);
-
-    return font;
-}
-
-int main(int argc, char* argv[])
-{
-    printf("Yo kernel whats up\n");
-
-    memset(working_dir, 0, 256);
-    strcpy(working_dir, "~/");
-
-    uint64_t winID = initialise_window();
-    Framebuffer* fb = initialise_buffer(winID);
-    PSF1_FONT* font = load_font();
-
-    InitialiseDisplay(fb, font);
-    
-    /*Display::SharedDisplay()->puts("Hello");
-
-    char* input = nullptr;
-    while(true)
+    else if (Equal(input, "shutdown") || Equal(input, "restart"))
     {
-        input = (char*)syscall_kread();
-        if(input[0] == 0)
+        if (syscall_power(Equal(input, "shutdown") ? 0 : 1) != 0)
+            Print("Power request failed.\n");
+    }
+    else if (Equal(input, "clear")) syscall_console(1);
+    else if (Equal(input, "ps"))
+    {
+        HackosProcessInfo info;
+        for (uint64_t i = 0; syscall_process_info(i, &info) == 1; ++i)
         {
+            Print("Process: "); Print(info.name); Print(" ("); Number(info.pid);
+            Print(info.state == 0 ? ") ALIVE\n" : ") ZOMBIE\n");
+        }
+    }
+    else if (Starts(input, "kill "))
+    {
+        uint64_t pid = 0;
+        if (!input[5]) { Print("Invalid PID.\n"); return; }
+        for (const char* digit = input + 5; *digit; ++digit)
+        {
+            if (*digit < '0' || *digit > '9' || pid > (~0ULL - 9) / 10)
+            { Print("Invalid PID.\n"); return; }
+            pid = pid * 10 + *digit - '0';
+        }
+        uint64_t result = syscall_kill(pid);
+        Print(result == HACKOS_DENIED ? "Cannot stop the idle or shell task.\n" :
+              result == HACKOS_ERROR ? "No running task with that PID.\n" : "Task stopped.\n");
+    }
+    else if (Equal(input, "wd")) { Print(workingDirectory); Print("\n"); }
+    else if (Starts(input, "print "))
+    {
+        const char* text = input + 6;
+        HackosClock time;
+        if (Equal(text, "tick") || Equal(text, "time") || Equal(text, "date"))
+        {
+            if (syscall_clock(&time)) { Print("Clock unavailable.\n"); return; }
+            if (Equal(text, "tick")) { Print("Ticks: "); Number(time.ticks); }
+            else if (Equal(text, "time"))
+            { Print("Time: "); Number(time.hour,16); Print(":"); Number(time.minute,16); Print(":"); Number(time.second,16); }
+            else
+            { Print("Date: 20"); Number(time.year,16); Print("."); Number(time.month,16); Print("."); Number(time.day,16); }
+        }
+        else Print(text);
+        Print("\n");
+    }
+    else if (Equal(input, "print")) Print("\n");
+    else
+    {
+        char path[256];
+        if (Equal(input, "ls"))
+        {
+            HackosFileInfo info;
+            for (uint64_t i = 0; syscall_readdir(workingDirectory, i, &info) == 1; ++i)
+            { Print(info.name); Print(info.attributes & HACKOS_DIRECTORY ? "/ " : " "); }
+            Print("\n");
+        }
+        else if (Starts(input, "cd ") && PathFor(input + 3, path))
+        {
+            if (Equal(input + 3, ".."))
+            {
+                uint64_t length = Length(workingDirectory);
+                while (length && workingDirectory[length] != '/') --length;
+                if (length) workingDirectory[length] = 0;
+                return;
+            }
+            if (Equal(input + 3, ".")) return;
+            HackosFileInfo info;
+            if (syscall_stat(path, &info) != 0) Print("Directory not found.\n");
+            else if (!(info.attributes & HACKOS_DIRECTORY)) Print("Not a directory.\n");
+            else Copy(workingDirectory, path);
+        }
+        else if (Starts(input, "open ") && PathFor(input + 5, path))
+        {
+            if (openFile != HACKOS_ERROR) syscall_close(openFile);
+            openFile = syscall_open(path);
+            Print(openFile == HACKOS_ERROR ? "File not found.\n" : "File opened.\n");
+        }
+        else if (Equal(input, "close"))
+        {
+            if (openFile != HACKOS_ERROR) syscall_close(openFile);
+            openFile = HACKOS_ERROR;
+        }
+        else if (Equal(input, "read"))
+        {
+            if (openFile == HACKOS_ERROR) { Print("No open file.\n"); return; }
+            char buffer[512];
+            uint64_t length = syscall_read(openFile, buffer, sizeof(buffer));
+            if (length == HACKOS_ERROR) Print("Read failed.\n");
+            else { syscall_user_write(buffer, length); Print("\n"); }
+        }
+        else if ((Starts(input, "user ") && PathFor(input + 5, path)) ||
+                 (Starts(input, "./") && PathFor(input + 2, path)))
+        {
+            if (syscall_spawn(path) == HACKOS_ERROR) { Print("Cannot load user program: "); Print(path); Print("\n"); }
+        }
+        else { Print("Unknown command: "); Print(input); Print("\n"); }
+    }
+}
+int main()
+{
+    Print("\nHackOS ring-3 shell. Type 'help' for commands.\n");
+    Prompt();
+    LineBuffer line;
+    bool discard = false;
+    for (;;)
+    {
+        uint64_t value = syscall_input();
+        if (value == HACKOS_DENIED) { Print("Only the boot shell owns terminal input.\n"); return 1; }
+        if (!value) { syscall_yield(); continue; }
+        if (value == HACKOS_INPUT_OVERFLOW)
+        {
+            line.Reset(); discard = true;
+            Print("\nKeyboard queue overflow; press Enter to start a new command.\n");
             continue;
         }
-
-        if(input[0] == 'q')
+        char ch = (char)value;
+        if (discard) { if (ch == '\n') { discard = false; Prompt(); } continue; }
+        switch (line.Push(ch))
         {
-            break;
+        case LineBuffer::Echo: syscall_user_write(&ch, 1); break;
+        case LineBuffer::Erase: syscall_console(0); break;
+        case LineBuffer::Submit: Print("\n"); Command(line.Text()); line.Reset(); Prompt(); break;
+        case LineBuffer::Overflow:
+            Print("\nCommand too long (maximum 255 characters).\n"); line.Reset(); Prompt(); break;
+        default: break;
         }
-
-        Display::SharedDisplay()->putc(input[0]);
     }
-
-    syscall_destroy_window(winID);*/
-
-    return 0;
 }

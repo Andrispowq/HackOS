@@ -92,3 +92,41 @@ bool UserAddressSpace::CopyFromUser(void* destination, uint64_t source, uint64_t
     }
     return true;
 }
+
+bool UserAddressSpace::WritableRange(uint64_t destination, uint64_t length) const
+{
+    if (!length) return true;
+    if (!leaf || destination < USER_BASE || destination >= USER_END || length > USER_END - destination)
+        return false;
+    for (uint64_t i = (destination - USER_BASE) >> 12;
+         i <= (destination + length - 1 - USER_BASE) >> 12; ++i)
+        if (!leaf->entries[i].present || !leaf->entries[i].user_access || !leaf->entries[i].writeable)
+            return false;
+    return true;
+}
+
+bool UserAddressSpace::CopyToUser(uint64_t destination, const void* source, uint64_t length) const
+{
+    if (!WritableRange(destination, length)) return false;
+    auto input = (const uint8_t*)source;
+    while (length)
+    {
+        auto& entry = leaf->entries[(destination - USER_BASE) >> 12];
+        uint64_t offset = destination & 4095;
+        uint64_t size = 4096 - offset;
+        if (size > length) size = length;
+        memcpy((void*)(((uint64_t)entry.address << 12) + offset), input, size);
+        input += size; destination += size; length -= size;
+    }
+    return true;
+}
+
+bool UserAddressSpace::CopyString(char* destination, uint64_t source, uint64_t capacity) const
+{
+    for (uint64_t i = 0; i < capacity; ++i)
+    {
+        if (!CopyFromUser(destination + i, source + i, 1)) return false;
+        if (!destination[i]) return true;
+    }
+    return false;
+}

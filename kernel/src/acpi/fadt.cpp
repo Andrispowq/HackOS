@@ -112,11 +112,11 @@ namespace ACPI
         }
     }
 
-    void FADT::Shutdown()
+    bool FADT::Shutdown()
     {
-        if(SCI_EN != 1)
+        if(SCI_EN != 1 || !PM1a_CNT || !SLP_EN)
         {
-            return;
+            return false;
         }
 
         __outw((uint16_t)(uint64_t)PM1a_CNT, SLP_TYPa | SLP_EN);
@@ -125,6 +125,6 @@ namespace ACPI
             __outw((uint16_t)(uint64_t)PM1b_CNT, SLP_TYPb | SLP_EN);
         }
 
-        kprintf("ACPI shutdown failed!\n");
+        return true; // Firmware/emulators may complete power-off asynchronously.
     }
 };

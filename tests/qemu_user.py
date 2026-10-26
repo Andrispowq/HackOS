@@ -123,7 +123,7 @@ base = 0x400000000000
 p = gdb.parse_and_eval("ready_queue")
 users = []
 while int(p):
-    if int(p["userSpace"]): users.append(p.dereference())
+    if int(p["userSpace"]) and not int(p["systemShell"]): users.append(p.dereference())
     p = p["next"]
 assert len(users) == 2, "Concurrent user processes missing"
 roots = [int(p["pageTable"]["pml4"]) for p in users]
@@ -166,20 +166,23 @@ for p in users:
                     enter("print ring3_survived", "\nring3_survived\n")
                     time.sleep(0.1)
                     inspect("reclamation", '''
-bp = gdb.Breakpoint("SleepFor(unsigned int)", type=gdb.BP_HARDWARE_BREAKPOINT)
+bp = gdb.Breakpoint("ReapExitedProcesses()", type=gdb.BP_HARDWARE_BREAKPOINT)
 gdb.execute("continue")
 assert int(gdb.parse_and_eval("$pc")) in [l.address for l in bp.locations]
 bp.delete()
 assert int(gdb.parse_and_eval("tasks_reaped")) == 12, "User task stacks not reclaimed"
-assert int(gdb.parse_and_eval("user_pages_live")) == 0, "User frames/tables leaked"
+
 p = gdb.parse_and_eval("ready_queue")
 labels = []
 while int(p):
     assert len(labels) < 3
-    assert not int(p["userSpace"])
+    if int(p["systemShell"]):
+        assert int(gdb.parse_and_eval("user_pages_live")) == int(p["userSpace"]["ownedCount"])
+    else:
+        assert not int(p["userSpace"])
     labels.append(p["name"].string())
     p = p["next"]
-assert labels == ["idle", "kernel shell"]
+assert labels == ["idle", "~/USR/BIN/SHELL"]
 assert int(gdb.parse_and_eval("$cr3")) == int(gdb.parse_and_eval("KernelDirectory.pml4"))
 print("USER_RECLAIM_OK")
 ''')

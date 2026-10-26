@@ -44,11 +44,12 @@ more devices.
   TSS kernel entry stacks, timer preemption and exit reclamation on BIOS/UEFI.
 - [x] Expose a restricted `int 0x80` user ABI for exit and checked literal output;
   reject legacy raw-pointer calls from CPL3.
-- [ ] Add user terminal input and handle-based file/window APIs, then move the
-  shell into an automatically launched standalone user program. Define an
-  explicit authorized shutdown request for that shell.
-- [ ] Track program-owned files, allocations and windows for automatic cleanup
-  on exit or kill. Add blocking waits, priorities and broader scheduler stress tests.
+- [x] Start the standalone ring-3 shell automatically, expose copied terminal/
+  process/file data and process-owned read handles, and authorize shell shutdown.
+- [ ] Add blocking input, arguments, job control, a user heap, file writes and
+  owned window handles to the safe ABI. Port remaining legacy runtime helpers.
+- [ ] Extend the implemented automatic read-handle cleanup to future allocations
+  and windows. Add blocking waits, priorities and broader scheduler stress tests.
 - [ ] Replace binary-only `usertest.elf` with a source-built fixture.
 - [ ] Add shell history/completion and a terminal input API for programs.
   Integrate the window manager without clearing console output.

@@ -17,8 +17,8 @@ flowchart TD
     Display --> Heap[Kernel heap]
     Heap --> Devices[ACPI, PCI and storage]
     Devices --> FS[FAT32 and VFS]
-    FS --> Services[Program smoke code, shell, windows and syscalls]
-    Services --> Tasks[Create idle and kernel shell tasks]
+    FS --> Services[Windows and user syscall services]
+    Services --> Tasks[Create idle and load ring-3 shell]
     Tasks --> IRQ[Enable timer and PS/2 IRQs]
 ```
 
@@ -54,18 +54,15 @@ into two phases:
    framebuffer console.
 2. `InitialiseKernel` creates the heap, initializes device/filesystem registries,
    discovers ACPI/PCI devices, adds an ATA device, locates FAT32 on `devices[0]`,
-   runs the program-loading smoke path, creates shell/window state, registers
-   syscalls, creates idle/shell tasks, and enables IRQs.
+   creates window state, registers syscalls, creates idle, loads the standalone
+   ring-3 shell and enables IRQs.
 
-`InitialiseFilesystem` currently attempts to load and call `USERTEST.ELF`.
-It is executable smoke code in the startup path, not a filesystem mount routine
-or an automated test runner.
-
-The separate `kernel_task` function runs the interactive kernel shell. It drains
-the keyboard queue, executes commands outside interrupt context, and refreshes
-the console when output changes. The experimental userspace window shell is not
-launched automatically. The `user` command launches isolated ring-3 programs;
-the kernel shell and legacy `./` loader remain in ring 0.
+`kernel_main` remains idle, refreshes the dirty console and reaps exited tasks.
+The standalone `~/USR/BIN/SHELL` owns command parsing and PS/2 line editing in
+ring 3. Its checked syscall interface supplies terminal, file, process and power
+services. Both `./` and `user` launch isolated programs; no interactive command
+executes a ring-0 ELF. The binary-only `USERTEST.ELF` input remains packaged but
+is no longer called at boot.
 
 ## Important boundaries
 

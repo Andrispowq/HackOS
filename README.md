@@ -26,10 +26,10 @@ and mouse drivers, framebuffer graphics and a console, ACPI/PCI discovery,
 ATA/AHCI storage, FAT32, and a small VFS. There are also window primitives,
 an ELF loader, a scheduler, and an experimental userspace library.
 
-Preemptive kernel tasks and an interactive PS/2 shell run on both boot paths.
+An automatically started standalone ring-3 PS/2 shell runs on both boot paths.
 Try `help`, `ls`, `ps` or `print tick`. Run `user USR/BIN/RING3` for the minimal
-isolated ring-3 print/preemption/exit demo. The shell and legacy `./` programs
-still run in ring 0. USB support is experimental,
+isolated ring-3 print/preemption/exit demo. Both `./` and `user` launch isolated programs; `shutdown` requests kernel ACPI
+power-off. USB support is experimental,
 and there is no networking stack.
 
 ## Getting started

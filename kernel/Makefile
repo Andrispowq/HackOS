@@ -33,6 +33,7 @@ ASM_FLAGS = -f elf64
 LDFLAGS = -T $(LDS) -static -Bsymbolic -nostdlib
 
 .DEFAULT_GOAL := kernel
+COMMON_KERNEL := true
 COMMON_DIR := ../common
 include $(COMMON_DIR)/runtime.mk
 

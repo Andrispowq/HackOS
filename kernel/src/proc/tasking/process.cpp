@@ -3,7 +3,7 @@
 #include "lib/stdio.h"
 #include "lib/memory.h"
 #include "lib/string.h"
-#include "kernel.h"
+#include "fs/filesystem.h"
 #include "proc/user/address_space.h"
 #include "arch/x86_64/gdt/gdt.h"
 
@@ -14,6 +14,7 @@ static bool enabled;
 static uint64_t preemption_depth;
 uint64_t scheduler_switches;
 uint64_t tasks_reaped;
+uint64_t user_files_live;
 extern PageTableManager KernelDirectory;
 
 void DisablePreemption() { InterruptGuard guard; ++preemption_depth; }
@@ -54,6 +55,7 @@ Process::Process(const char* label, void* entry, void* parameter)
 
 Process::~Process()
 {
+    for (auto file : files) if (file) { filesystems[0]->CloseFile(file); --user_files_live; }
     delete userSpace;
     kfree(stack);
     delete[] name;
@@ -158,6 +160,5 @@ void InitialiseTasking()
     InterruptGuard guard;
     current_process = new Process("idle", nullptr);
     AddProcess(current_process);
-    AddProcess(new Process("kernel shell", (void*)kernel_task));
     enabled = true;
 }

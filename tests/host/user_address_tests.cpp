@@ -108,3 +108,32 @@ TEST(user_address_failure_and_page_limit_cleanup)
     CHECK(live_frames == 0 && user_pages_live == 0);
     return 0;
 }
+
+TEST(user_copyout_permissions_and_strings)
+{
+    setup_user_space();
+    {
+        UserAddressSpace space; CHECK(space.Initialise());
+        auto text = (char*)space.AddPage(USER_BASE, false, true);
+        auto data = (char*)space.AddPage(USER_BASE + 4096, true, false);
+        auto next = (char*)space.AddPage(USER_BASE + 8192, true, false);
+        CHECK(text && data && next);
+        CHECK(!space.CopyToUser(USER_BASE, "x", 1));
+        CHECK(!space.CopyToUser(USER_BASE + 4095, "xy", 2));
+        CHECK(!data[0] && !text[4095]);
+        CHECK(space.CopyToUser(USER_BASE + 8191, "xy", 2));
+        CHECK(data[4095] == 'x' && next[0] == 'y');
+        CHECK(!space.CopyToUser(USER_BASE + 12287, "xy", 2));
+        CHECK(!next[4095]);
+        CHECK(!space.CopyToUser(~0ULL - 1, "xy", 2));
+        CHECK(space.CopyToUser(0, nullptr, 0));
+        char buffer[4];
+        CHECK(space.CopyString(buffer, USER_BASE + 8191, sizeof(buffer)));
+        CHECK(buffer[0] == 'x' && buffer[1] == 'y' && !buffer[2]);
+        CHECK(!space.CopyString(buffer, USER_BASE + 8191, 2));
+        next[4095] = 'a';
+        CHECK(!space.CopyString(buffer, USER_BASE + 12287, sizeof(buffer)));
+    }
+    CHECK(live_frames == 0 && user_pages_live == 0);
+    return 0;
+}

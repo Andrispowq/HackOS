@@ -12,6 +12,7 @@
 #define STACK_SIZE 16384
 
 class UserAddressSpace;
+class ActiveFile;
 
 class Process
 {
@@ -24,6 +25,10 @@ public:
     PageTableManager* pageTable;
     UserAddressSpace* userSpace = nullptr;
     uint64_t userPreemptions = 0;
+    bool systemShell = false;
+    ActiveFile* files[8] = {};
+    uint64_t fileHandles[8] = {};
+
     uint64_t pid, rsp, rip, state;
     uint64_t* stack;
     void* parameter;
@@ -31,6 +36,7 @@ public:
     char* name;
     Process* next;
 };
+extern uint64_t user_files_live;
 uint64_t AddProcess(Process* process);
 bool IsRunning(uint64_t pid);
 bool IsTaskingOnline();

@@ -12,7 +12,7 @@
 #include "drivers/ata/ata_device.h"
 
 #include "proc/tasking/process.h"
-#include "shell/shell.h"
+#include "proc/user/user.h"
 
 #include "arch/x86_64/syscall/syscall.h"
 
@@ -145,22 +145,6 @@ void InitialiseDisplay(KernelInfo* info)
     kprintf("Initialised display (%dx%d)\n\n", info->framebuffer.width, info->framebuffer.height);
 }
 
-void InitialiseFilesystem()
-{
-    uint64_t addr;
-    Elf64_Ehdr* hdr = LoadProgram("~/USR/BIN/USERTEST.ELF", &addr);
-    if(hdr == nullptr)
-    {
-        return;
-    }
-
-    PrepareProgram(hdr, addr);
-
-    int(*entry_point)() = (int(*)())hdr->e_entry;
-    int res = entry_point();
-    kprintf("Usertest returned with 0x%x!\n\n", res);
-}
-
 void InitialiseKernel(struct KernelInfo* info)
 {
     kprintf("Initialising the kernel heap!\n");
@@ -175,13 +159,12 @@ void InitialiseKernel(struct KernelInfo* info)
     RegisterDevice(new ATADevice());
     LocateFilesystemsFAT32(devices[0]);
 
-    InitialiseFilesystem();
-    InitialiseShell();
-
     KernelWindowManager = new WindowManager();
 
     InitialiseSyscalls();
 
     InitialiseTasking();
+    if (!LoadUserProgramTask("~/USR/BIN/SHELL", true))
+        kprintf("BOOT ERROR: cannot start ring-3 shell.\n");
     InitialiseIRQ();
 }

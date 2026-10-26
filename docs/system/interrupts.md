@@ -57,8 +57,8 @@ drivers before unmasking their IRQs and executing `sti`.
 
 An IRQ handler runs in interrupt context. Long operations, allocations, shell
 commands, or waiting for other interrupts complicate reentrancy and scheduling.
-The keyboard path only decodes scancodes and queues characters; the shell thread
-handles commands and display updates.
+The keyboard path only decodes scancodes and queues characters; the ring-3 shell
+handles commands, while idle refreshes the framebuffer console.
 
 ## PIT and RTC
 

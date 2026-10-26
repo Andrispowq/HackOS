@@ -1,6 +1,8 @@
-#include "stdio.h"
-int main(int, char**)
+#include "hackos/user.h"
+int main()
 {
-    printf("WAIT_PROBE_READY\n");
+    // Exercise automatic handle cleanup when killed by another process.
+    if (syscall_open("~/USR/HELLO.TXT") == HACKOS_ERROR) return 1;
+    User::Print("WAIT_PROBE_READY\n");
     for (;;) asm volatile("pause");
 }

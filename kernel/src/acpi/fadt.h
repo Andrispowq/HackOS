@@ -94,7 +94,7 @@ namespace ACPI
         DSDT* GetDSDT();
 
         void ACPIEnable();
-        void Shutdown();
+        bool Shutdown(); // Returns whether the power-off request was issued.
 
     private:
         FADTHeader _fadt;
