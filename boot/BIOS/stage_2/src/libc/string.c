@@ -105,36 +105,19 @@ char* strcpy(char* dst, const char* src)
     return start;
 }
 
+#include "hackos/runtime/split.h"
+
+static void* split_allocate(size_t size)
+{
+    // The boot bump allocator does not align ordinary allocations. The shared
+    // splitter needs pointer alignment for its array; boot kfree is a no-op.
+    uint64_t padding = sizeof(char*) - 1;
+    if (size > (uint64_t)-1 - padding) return 0;
+    uint64_t address = kmalloc(size + padding);
+    return (void*)((address + padding) & ~padding);
+}
+
 char** split(const char* str, char delim, int* count)
 {
-    int size = strlen(str);
-
-    int cnt = 0;
-    for(int i = 0; i < size; i++)
-    {
-        if(str[i] == delim)
-        {
-            cnt++;
-        }
-    }
-
-    //Allocate the pointers, set the count
-    char** ptr = (char**) kmalloc(cnt * sizeof(char*));
-    *count = cnt;
-
-    int idx = 0;
-    int last_idx = 0;
-    for(int i = 0; i < size; i++)
-    {
-        if(str[i] == delim)
-        {
-            int sz = i - last_idx;
-            ptr[idx] = (char*) kmalloc(sz);
-            memcpy(&ptr[idx], &str[last_idx], sz);
-            last_idx = idx;
-            idx++;
-        }
-    }
-
-    return ptr;
+    return hackos_split(str, delim, count, split_allocate, kfree);
 }

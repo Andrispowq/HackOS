@@ -1,4 +1,4 @@
-#include "bitmap.h"
+#include "hackos/runtime/bitmap.h"
 
 #define INDEX_FROM_BIT(a) (a / (8 * 8))
 #define OFFSET_FROM_BIT(a) (a % (8 * 8))

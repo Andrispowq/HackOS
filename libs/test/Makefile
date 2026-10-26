@@ -22,7 +22,7 @@ AR = $(CROSS_COMPILE)ar
 OBJCOPY = $(CROSS_COMPILE)objcopy
 
 LDS = userspace.ld
-CFLAGS = -std=gnu++17 -fno-pie -fno-stack-protector -fno-omit-frame-pointer -MMD -MP -m64 -ffreestanding -mno-red-zone -fno-rtti -fno-exceptions -c -g -I ../libc/src
+CFLAGS = -std=gnu++17 -fno-pie -fno-stack-protector -fno-omit-frame-pointer -MMD -MP -m64 -ffreestanding -mno-red-zone -fno-rtti -fno-exceptions -c -g -I ../libc/src -I ../../common/include -I ../../include
 ASM_FLAGS = -f elf64
 LDFLAGS = -T $(LDS) -static -Bsymbolic -nostdlib
 

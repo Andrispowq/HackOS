@@ -54,7 +54,7 @@ sanitizers; there is no automatic downgrade.
 
 | Area | Checks |
 | --- | --- |
-| Memory and strings | Byte-fill semantics, unsigned comparisons, zero length, alignment, destination guards, termination, copy return values, integer formatting |
+| Memory and strings | Byte-fill semantics, unsigned comparisons, zero length, alignment, destination guards, termination, copy return values, integer formatting, split empty fields/ownership and allocation-failure cleanup |
 | Bitmap and vector | Bit boundaries, full bitmap, first free bit, growth, erase, independent copies, self-assignment |
 | Memory setup | Page indices and structure sizes, BIOS/EFI map interpretation, sparse/high addresses, map instance isolation, early bump allocation and alignment |
 | Framebuffer | Pixels, rectangle clipping, pitch, colour fills, cursor background restoration |
@@ -75,9 +75,12 @@ process with a 15-second timeout. A crash, failed assertion, or sanitizer report
 fails that case while later cases continue. Use `--case` for debugging, not as
 a substitute for a full CI run.
 
-Kernel implementations are linked directly from `kernel/src`. The same memory
-and string cases also compile the independent BIOS stage-2 C and userspace
-libc C++ implementations, with their own symbols and NASM objects. Test-only symbol
+Kernel implementations are linked directly from `kernel/src`. Shared sources
+are linked from `common/src`; memory/string C++ and NASM primitives are compiled
+separately for kernel and libc symbols. The same cases exercise both variants
+and the independent BIOS stage-2 C primitives. Split cases cover all three
+allocation adapters, plus injected failures at every shared-splitter allocation.
+Test-only symbol
 renaming prevents kernel memory/string/file functions from replacing the host
 runtime's functions. NASM string/memory helpers are assembled and linked as
 well. The ELF test includes the implementation to reach its internal validator.
@@ -158,7 +161,8 @@ captured through port `0xe9`; a framebuffer screenshot is saved as `screen.ppm`.
 
 The runner builds small guest programs against the image's real libc and copies
 them into a disposable image. The ABI probe calls the kernel-created `ActiveFile`
-virtual methods, reads a file, allocates/frees memory, checks unknown-syscall
+virtual methods, reads a file, allocates/frees memory, splits a string through
+the shared runtime and releases its allocations, checks unknown-syscall
 failure, and prints a floating-point argument through `int 0x80`. Its assembly
 routine checks general registers, XMM0–15, x87 data/control state, MXCSR, CF and
 DF across timer preemption. A test-only linker alias to the kernel's scheduler

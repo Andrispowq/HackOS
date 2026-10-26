@@ -1,0 +1,16 @@
+// Intentionally unguarded: number, wrapper name, kernel target, arity, argument types.
+// Preserve existing numbers; this remains the experimental ring-0 ABI.
+HACKOS_SYSCALL(0, exit, exit, 1, int)
+HACKOS_SYSCALL(1, kprintf, kprintf_vargs, 2, const char*, va_list)
+HACKOS_SYSCALL(2, kprintf_backspace, kprintf_backspace, 0)
+HACKOS_SYSCALL(3, fopen, fopen, 2, const char*, int)
+HACKOS_SYSCALL(4, fread, fread, 4, void*, int, int, void*)
+HACKOS_SYSCALL(5, fwrite, fwrite, 4, void*, int, int, void*)
+HACKOS_SYSCALL(6, fclose, fclose, 1, void*)
+HACKOS_SYSCALL(7, kmalloc_int, kmalloc_int, 3, uint64_t, int, uint64_t*)
+HACKOS_SYSCALL(8, kfree, kfree, 1, void*)
+HACKOS_SYSCALL(9, kread, kread, 0)
+HACKOS_SYSCALL(10, create_window, create_window, 3, uint32_t, uint32_t, uint32_t)
+HACKOS_SYSCALL(11, destroy_window, destroy_window, 1, uint64_t)
+HACKOS_SYSCALL(12, get_window_buffer, get_window_buffer, 1, uint64_t)
+HACKOS_SYSCALL(13, set_window_title, set_window_title, 2, uint64_t, const char*)

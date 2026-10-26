@@ -20,7 +20,7 @@ def build(firmware, output):
         ignored = set(names) & {'bin', 'bin-int', '__pycache__', '.DS_Store'}
         if Path(folder) == ROOT / 'boot/UEFI/gnu-efi': ignored.add('x86_64')
         return ignored
-    for name in ('boot', 'kernel', 'libs', 'tools'):
+    for name in ('boot', 'kernel', 'libs', 'common', 'include', 'tools'):
         shutil.copytree(ROOT / name, work / name, ignore=ignore)
     for name in ('Makefile', 'hello.txt', 'util/fonts/zap-light16.psf', 'util/usertest/usertest.elf'):
         target = work / name

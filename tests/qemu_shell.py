@@ -63,7 +63,7 @@ def build_probe(directory, source, waiting=False):
     commands = [
         [cross+"g++", "-std=gnu++17", "-O0", "-g", "-ffreestanding", "-mno-red-zone",
          "-fno-pie", "-fno-stack-protector", "-fno-exceptions", "-fno-rtti",
-         "-I", ROOT/"libs/libc/src", "-c", ROOT/("tests/guest/wait_probe.cpp" if waiting else "tests/guest/abi_probe.cpp"), "-o", obj],
+         "-I", ROOT/"libs/libc/src", "-I", ROOT/"common/include", "-I", ROOT/"include", "-c", ROOT/("tests/guest/wait_probe.cpp" if waiting else "tests/guest/abi_probe.cpp"), "-o", obj],
         ["nasm", "-f", "elf64", ROOT/"tests/guest/context_probe.asm", "-o", asm],
         [cross+"ld", "-T", ROOT/"libs/test/userspace.ld", "-static", "-nostdlib",
          "--defsym=guest_switches=0x"+address[1],

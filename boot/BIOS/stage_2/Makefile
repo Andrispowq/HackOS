@@ -24,11 +24,16 @@ CFLAGS = -std=gnu11 -fno-pie -fno-stack-protector -fno-omit-frame-pointer -MMD -
 ASM_FLAGS = -f elf64 -g
 LDFLAGS = -T $(LDS)
 
+.DEFAULT_GOAL := second_stage
+COMMON_DIR := ../../../common
+COMMON_BOOT_ONLY := true
+include $(COMMON_DIR)/runtime.mk
+
 .PHONY: second_stage link clean
 second_stage: $(BUILD_DIR)/second_stage.bin
 link: $(BIN_DIR)/second_stage.elf
 
-$(OBJ_DIR)/%.o: $(SRC_DIR)/%.c Makefile
+$(OBJ_DIR)/%.o: $(SRC_DIR)/%.c Makefile $(COMMON_DIR)/runtime.mk
 	@ echo !==== COMPILING $^
 	@ mkdir -p $(@D)
 	$(CC) $(CFLAGS) -c $< -o $@

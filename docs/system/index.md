@@ -34,7 +34,9 @@ flowchart TD
 | [kernel/src/drivers](../../kernel/src/drivers/) | Storage, input, graphics, and experimental USB |
 | [kernel/src/fs](../../kernel/src/fs/) | Filesystem interfaces, VFS dispatch, and FAT32 |
 | [kernel/src/proc](../../kernel/src/proc/) | ELF loading and task management |
-| [kernel/src/lib](../../kernel/src/lib/) | Freestanding support routines and containers |
+| [common](../../common/) | Shared freestanding memory/string routines, containers and syscall wrappers |
+| [include/hackos](../../include/hackos/) | Shared types and experimental syscall ABI catalogue |
+| [kernel/src/lib](../../kernel/src/lib/) | Kernel allocation/output adapters and compatibility includes |
 | [libs](../../libs/) | Userspace runtime, shell, and example program |
 | [util](../../util/) | Fonts, retained program fixture, copied program outputs, and host utilities |
 

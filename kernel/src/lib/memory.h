@@ -8,9 +8,8 @@
    C STANDARD LIBRARY CODE FOR THE KERNEL STARTS HERE
 */
 
-void* memcpy(void* dest, const void* src, size_t n);
-void* memset(void* dest, int c, size_t n);
-int memcmp(void* a, void* b, size_t n);
+#include "hackos/runtime/memory.h"
+
 
 /*
    KERNEL HEAP CODE STARTS HERE

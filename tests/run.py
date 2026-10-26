@@ -14,13 +14,14 @@ from common import ROOT, OUT, Report, command, require_success
 
 SOURCES = [
     "kernel/src/lib/memory.cpp", "kernel/src/lib/string.cpp",
-    "kernel/src/lib/data_structures/bitmap.cpp", "kernel/src/memory/memory_map.cpp",
+    "common/src/bitmap.cpp", "kernel/src/memory/memory_map.cpp",
     "kernel/src/drivers/screen/framebuffer.cpp", "kernel/src/fs/filesystem.cpp",
     "kernel/src/fs/vfs.cpp", "kernel/src/fs/fat32/fat32.cpp",
     "kernel/src/fs/fat32/fat32driver.cpp",
     "boot/BIOS/stage_2/src/libc/memory.c", "boot/BIOS/stage_2/src/libc/string.c",
     "libs/libc/src/memory.cpp", "libs/libc/src/string.cpp",
-    *[f"tests/host/{s}.cpp" for s in ("adapters", "main", "library_tests", "graphics_tests", "fs_tests", "elf_tests", "bios_tests", "user_tests", "input_tests", "file_abi_provider", "file_abi_consumer", "syscall_tests")],
+    "common/src/split.c",
+    *[f"tests/host/{s}.cpp" for s in ("adapters", "main", "library_tests", "graphics_tests", "fs_tests", "elf_tests", "bios_tests", "user_tests", "input_tests", "file_abi_provider", "file_abi_consumer", "syscall_tests", "split_tests")],
 ]
 
 
@@ -56,15 +57,19 @@ def compile_host(directory, sanitizers):
     result = command([directory/"runtime-probe"],env=probe_env)
     (directory/"runtime-probe.log").write_text(result.stdout)
     require_success(result,"sanitizer runtime preflight (even an empty program must run)")
-    for source in [*SOURCES, "tests/host/runtime.cpp"]:
-        obj = directory / (source.replace("/", "_") + ".o")
+    # Compile the shared runtime independently with each consumer's symbol ABI.
+    variants = [(source, None) for source in [*SOURCES, "tests/host/runtime.cpp"]]
+    variants += [("common/src/"+name+".cpp", variant)
+                 for variant in ("kernel", "user") for name in ("memory_ops", "string_ops")]
+    for source, variant in variants:
+        obj = directory / ((variant + "_" if variant else "") + source.replace("/", "_") + ".o")
         args = [compiler, *flags]
         if source.endswith(".c"):
             args = [arg for arg in args if arg!="-std=c++17"] + ["-x","c","-std=c11"]
         if not source.endswith("/runtime.cpp"):
             rename = "bios_rename.h" if source.startswith("boot/BIOS/") or source.endswith("/bios_tests.cpp") else (
-                "user_rename.h" if source.startswith("libs/libc/") or source.endswith("/user_tests.cpp") else "rename.h")
-            args += ["-include", ROOT/"tests/host"/rename, "-I", ROOT/"kernel/src", "-I", ROOT/"tests/host"]
+                "user_rename.h" if variant == "user" or source.startswith("libs/libc/") or source.endswith("/user_tests.cpp") else "rename.h")
+            args += ["-include", ROOT/"tests/host"/rename, "-I", ROOT/"kernel/src", "-I", ROOT/"tests/host", "-I", ROOT/"common/include", "-I", ROOT/"include"]
             if source.startswith("libs/libc/"):
                 args += ["-I",ROOT/"libs/libc/src"]
         args += ["-c", ROOT/source, "-o", obj]
@@ -73,7 +78,7 @@ def compile_host(directory, sanitizers):
         (directory/"compile.log").write_text("\n".join(log))
         require_success(r, f"compile {source}")
         objects.append(obj)
-    assembly_sources = [(prefix,folder,s) for prefix,folder in [("","kernel/src/lib"),("hackos_user_","libs/libc/src")]
+    assembly_sources = [(prefix,folder,s) for prefix,folder in [("","common/src/x86_64"),("hackos_user_","common/src/x86_64")]
                         for s in ("_memory","_string")]
     assembly_sources += [("", "kernel/src/arch/x86_64/syscall", "syscall_impl"),
                          ("", "tests/fixtures", "syscall_target")]

@@ -7,8 +7,11 @@
 #include "arch/x86_64/paging/page_tables.h"
 #include "memory/memory_map.h"
 
+static void prepare_split_allocator() { heap_init = 1; }
+static void release_split_allocation(void* p) { kfree(p); }
 #define LIBRARY_CASE(name) TEST(name)
 #include "memory_string_cases.hpp"
+#include "split_cases.hpp"
 #undef LIBRARY_CASE
 
 TEST(bitmap_low_bits) {

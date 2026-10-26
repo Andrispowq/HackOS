@@ -85,6 +85,13 @@ The kernel's [syscall implementation](../../kernel/src/arch/x86_64/syscall/)
 and the userspace [kernel interface](../../libs/libc/src/kernel_interface/)
 share numbered calls through `int 0x80`.
 
+[include/hackos/syscalls.def](../../include/hackos/syscalls.def) is the single
+catalogue of syscall numbers, argument types and kernel targets. It generates
+the public declarations/numbers, common wrappers and kernel dispatch entries.
+The wrappers and `MakeSyscall` assembly are compiled separately into the kernel
+and libc. Existing numbers and register conventions are preserved; centralizing
+the declarations does not make this a safe ring-3 ABI.
+
 | Number | Operation |
 | ---: | --- |
 | 0 | Exit current task |
@@ -126,6 +133,17 @@ handles, per-process resources, a kernel entry stack, and an explicit error ABI.
 routines, syscall wrappers, and drawing helpers. `_start` aligns the stack and
 calls `_entry`, which calls `main` and then requests exit. The linker scripts
 place programs at `0x01000000`.
+
+Kernel and libc share memory/string primitives, bitmap, vector/list helpers and
+PSF font declarations through [common](../../common/). Allocation and output
+remain component-specific. `split()` uses the same C implementation in BIOS
+stage 2, the kernel and libc, with a local allocator adapter. It preserves empty
+fields, including leading/trailing delimiters; empty input yields one empty
+string. The result contains `count` separately allocated, terminated strings
+and a null pointer sentinel. Callers free the strings and then the array using
+their own allocator. Invalid input or allocation failure returns null and sets
+`count` to zero when supplied. The BIOS bump allocator still cannot reclaim
+memory (`kfree` is a no-op).
 
 [libs/shell](../../libs/shell/) is a window/font experiment with much of its
 interactive loop commented out. It is distinct from the

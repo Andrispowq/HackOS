@@ -121,6 +121,20 @@ concurrently in the same checkout. Object/link dependencies and generated C/C++
 and NASM dependency files support parallel builds within one selected path.
 Clean when switching toolchains or overriding compiler flags.
 
+### Shared runtime sources
+
+`common/runtime.mk` compiles shared sources into each consumer's own
+`bin-int/common/` directory with that component's freestanding flags. Kernel and
+libc link independent copies; there is no shared runtime binary. BIOS stage 2
+uses only the C splitter from this library and retains its other C primitives.
+The old kernel/libc header paths forward to shared headers so existing source
+includes remain usable. Consumers also need `common/include` and `include` on
+their include path; the program Makefiles and guest-test builder supply both.
+Generated dependencies track the common headers and syscall catalogue.
+
+Libc is recreated when relinking so archive members removed by an extraction
+cannot remain as stale definitions.
+
 For separate, always-clean output directories:
 
 ```sh

@@ -3,9 +3,8 @@
 
 #include "stdint.h"
 
-void* memcpy(void* dest, const void* src, size_t n);
-void* memset(void* dest, int c, size_t n);
-int memcmp(void* a, void* b, size_t n);
+#include "hackos/runtime/memory.h"
+
 
 uint64_t malloc_int(uint64_t size, int align, uint64_t* phys_addr);
 void free(void* ptr);

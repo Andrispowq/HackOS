@@ -24,11 +24,15 @@ CFLAGS = -std=gnu++17 -fno-pie -fno-stack-protector -fno-omit-frame-pointer -MMD
 ASM_FLAGS = -f elf64
 LDFLAGS = -T $(LDS) -static -Bsymbolic -nostdlib
 
+.DEFAULT_GOAL := all
+COMMON_DIR := ../../common
+include $(COMMON_DIR)/runtime.mk
+
 .PHONY: all link clean
 all: $(BIN_DIR)/libc.a
 link: $(BIN_DIR)/libc.a
 
-$(OBJ_DIR)/%.o: $(SRC_DIR)/%.cpp Makefile
+$(OBJ_DIR)/%.o: $(SRC_DIR)/%.cpp Makefile $(COMMON_DIR)/runtime.mk
 	@ echo !==== COMPILING $^
 	@ mkdir -p $(@D)
 	$(CXX) $(CFLAGS) -c $< -o $@
@@ -38,10 +42,11 @@ $(OBJ_DIR)/%.o: $(SRC_DIR)/%.asm $(call rwildcard,$(SRC_DIR),*.inc)
 	@ mkdir -p $(@D)
 	$(ASM) $(ASM_FLAGS) -MD $(@:.o=.d) $< -o $@
 
-$(BIN_DIR)/libc.a: $(OBJS)
+$(BIN_DIR)/libc.a: $(OBJS) Makefile $(COMMON_DIR)/runtime.mk
 	@ mkdir -p $(@D)
 	@ echo !==== LINKING
-	$(AR) rcs $(BIN_DIR)/libc.a $(OBJS)
+	rm -f $@
+	$(AR) rcs $@ $(OBJS)
 
 # cleaning
 clean:

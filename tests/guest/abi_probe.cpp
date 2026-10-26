@@ -1,5 +1,6 @@
 #include "stdint.h"
 #include "memory.h"
+#include "string.h"
 #include "stdio.h"
 #include "file/file.h"
 #include "kernel_interface/syscall.h"
@@ -25,6 +26,17 @@ int main(int argc, char** argv)
         free(buffer);
     }
     syscall_fclose(file);
+    int count = 0;
+    char** parts = split("a,,b,", ',', &count);
+    ok = ok && parts && count == 4;
+    if (parts)
+    {
+        ok = ok && count == 4 && !parts[count] &&
+             strcmp(parts[0], (char*)"a") == 0 && parts[1][0] == 0 &&
+             strcmp(parts[2], (char*)"b") == 0 && parts[3][0] == 0;
+        for (int i = 0; i < count; ++i) free(parts[i]);
+        free(parts);
+    }
     // The formatter consumes a floating argument through a real int 0x80 call.
     printf("PROBE_FLOAT=%f\n", 1.25);
     printf("PROBE_CONTEXT_BEGIN\n");

@@ -32,11 +32,15 @@ CFLAGS = -std=gnu++17 -fno-pie -fno-stack-protector -fno-omit-frame-pointer -MMD
 ASM_FLAGS = -f elf64
 LDFLAGS = -T $(LDS) -static -Bsymbolic -nostdlib
 
+.DEFAULT_GOAL := kernel
+COMMON_DIR := ../common
+include $(COMMON_DIR)/runtime.mk
+
 .PHONY: kernel link clean
 kernel: $(BUILD_DIR)/kernel.elf
 link: $(BIN_DIR)/kernel.elf
 
-$(OBJ_DIR)/%.o: $(SRC_DIR)/%.cpp Makefile
+$(OBJ_DIR)/%.o: $(SRC_DIR)/%.cpp Makefile $(COMMON_DIR)/runtime.mk
 	@ echo !==== COMPILING $^
 	@ mkdir -p $(@D)
 	$(CXX) $(CFLAGS) -c $< -o $@
