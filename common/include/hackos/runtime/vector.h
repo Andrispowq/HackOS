@@ -5,10 +5,9 @@
 
 #define VECTOR_DEFAULT_SIZE 2
 
-template<typename T>
-class vector
+template <typename T> class vector
 {
-public:
+  public:
     vector()
     {
         ptr = new T[VECTOR_DEFAULT_SIZE];
@@ -21,11 +20,14 @@ public:
         delete[] ptr;
     }
 
-    size_t size() const { return _size; }
+    size_t size() const
+    {
+        return _size;
+    }
 
     T& operator[](size_t index)
     {
-        if(index < _size)
+        if (index < _size)
         {
             return ptr[index];
         }
@@ -33,7 +35,7 @@ public:
 
     T operator[](size_t index) const
     {
-        if(index < _size)
+        if (index < _size)
         {
             return ptr[index];
         }
@@ -43,7 +45,7 @@ public:
 
     void push_back(const T& element)
     {
-        if(_size == capacity)
+        if (_size == capacity)
         {
             resize(capacity * VECTOR_DEFAULT_SIZE);
         }
@@ -53,13 +55,13 @@ public:
 
     void erase(size_t index)
     {
-        if(index >= _size)
+        if (index >= _size)
         {
             return;
         }
 
         //Shift elements back by one
-        for(uint32_t i = index; i < _size - 1; i++)
+        for (uint32_t i = index; i < _size - 1; i++)
         {
             ptr[i] = ptr[i + 1];
         }
@@ -91,7 +93,11 @@ public:
 
     void operator=(const vector<T>& other)
     {
-        if (this == &other) return;
+        if (this == &other)
+        {
+            return;
+        }
+
         this->capacity = other.capacity;
         this->_size = other._size;
         delete[] ptr;
@@ -99,7 +105,7 @@ public:
         memcpy(ptr, other.ptr, _size * sizeof(T));
     }
 
-private:
+  private:
     size_t capacity;
     size_t _size;
     T* ptr;

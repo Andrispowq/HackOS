@@ -7,17 +7,18 @@ uint64_t free_mem_addr = (uint64_t)&end;
 uint8_t heap_init = 0;
 
 extern PageTableManager KernelDirectory;
+
 uint64_t kmalloc_int(uint64_t size, int align, uint64_t* phys_addr)
 {
-    if(heap_init == 0)
+    if (heap_init == 0)
     {
-        if (align == 1 && (free_mem_addr & 0x00000FFF)) 
+        if (align == 1 && (free_mem_addr & 0x00000FFF))
         {
             free_mem_addr &= ~0xFFFULL;
             free_mem_addr += 0x1000;
         }
 
-        if (phys_addr) 
+        if (phys_addr)
         {
             *phys_addr = free_mem_addr;
         }
@@ -43,7 +44,7 @@ uint64_t kmalloc_int(uint64_t size, int align, uint64_t* phys_addr)
 
 void kfree(void* ptr)
 {
-    if(ptr && heap_init == 1)
+    if (ptr && heap_init == 1)
     {
         free(ptr);
     }

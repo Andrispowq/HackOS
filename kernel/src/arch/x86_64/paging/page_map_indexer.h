@@ -5,7 +5,7 @@
 
 class PageMapIndexer
 {
-public:
+  public:
     PageMapIndexer(uint64_t virtualAddress)
     {
         virtualAddress >>= 12;
@@ -18,7 +18,7 @@ public:
         index_PDP = virtualAddress & 0x1ff;
     }
 
-public:
+  public:
     uint64_t index_PDP;
     uint64_t index_PD;
     uint64_t index_PT;

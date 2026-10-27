@@ -11,9 +11,9 @@ void InitialiseDevices()
 
 void RegisterDevice(Device* device)
 {
-    for(uint32_t i = 0; i < MAX_DEVICE_COUNT; i++)
+    for (uint32_t i = 0; i < MAX_DEVICE_COUNT; i++)
     {
-        if(devices[i] == nullptr)
+        if (devices[i] == nullptr)
         {
             devices[i] = device;
             return;
@@ -26,9 +26,9 @@ void RegisterDevice(Device* device)
 
 void UnregisterDevice(Device* device)
 {
-    for(uint32_t i = 0; i < MAX_DEVICE_COUNT; i++)
+    for (uint32_t i = 0; i < MAX_DEVICE_COUNT; i++)
     {
-        if(devices[i] == device)
+        if (devices[i] == device)
         {
             devices[i] = nullptr;
             return;

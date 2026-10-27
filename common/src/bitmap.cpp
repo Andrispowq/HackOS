@@ -2,10 +2,14 @@
 
 #define INDEX_FROM_BIT(a) (a / (8 * 8))
 #define OFFSET_FROM_BIT(a) (a % (8 * 8))
-    
+
 bool Bitmap::Get(uint64_t index)
 {
-    if (index / 8 >= size) return true;
+    if (index / 8 >= size)
+    {
+        return true;
+    }
+
     uint64_t idx = INDEX_FROM_BIT(index);
     uint64_t off = OFFSET_FROM_BIT(index);
     return (buffer[idx] & (1ULL << off));
@@ -13,11 +17,15 @@ bool Bitmap::Get(uint64_t index)
 
 void Bitmap::Set(uint64_t index, bool value)
 {
-    if (index / 8 >= size) return;
+    if (index / 8 >= size)
+    {
+        return;
+    }
+
     uint64_t idx = INDEX_FROM_BIT(index);
     uint64_t off = OFFSET_FROM_BIT(index);
 
-    if(value)
+    if (value)
     {
         buffer[idx] |= (1ULL << off);
     }

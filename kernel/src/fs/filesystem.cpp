@@ -11,9 +11,9 @@ void InitialiseFilesystems()
 
 void RegisterFilesystem(Filesystem* filesystem)
 {
-    for(uint32_t i = 0; i < MAX_FILESYSTEMS; i++)
+    for (uint32_t i = 0; i < MAX_FILESYSTEMS; i++)
     {
-        if(filesystems[i] == nullptr)
+        if (filesystems[i] == nullptr)
         {
             filesystems[i] = filesystem;
             return;
@@ -26,9 +26,9 @@ void RegisterFilesystem(Filesystem* filesystem)
 
 void UnregisterFilesystem(Filesystem* filesystem)
 {
-    for(uint32_t i = 0; i < MAX_FILESYSTEMS; i++)
+    for (uint32_t i = 0; i < MAX_FILESYSTEMS; i++)
     {
-        if(filesystems[i] == filesystem)
+        if (filesystems[i] == filesystem)
         {
             filesystems[i] = nullptr;
             return;

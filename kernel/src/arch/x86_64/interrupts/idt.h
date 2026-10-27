@@ -6,9 +6,9 @@
 #define KERNEL_CS 0x08
 #define IDT_ENTRIES 256
 
-#define IDT_TA_InterruptGate    0b10001110
-#define IDT_TA_CallGate         0b10001100
-#define IDT_TA_TrapGate         0b10001111
+#define IDT_TA_InterruptGate 0b10001110
+#define IDT_TA_CallGate 0b10001100
+#define IDT_TA_TrapGate 0b10001111
 
 #define IRQ0 32
 #define IRQ1 33
@@ -47,6 +47,7 @@ struct alignas(16) Registers
     uint64_t int_no, err_code;
     uint64_t rip, cs, rflags, rsp, ss;
 };
+
 static_assert(sizeof(Registers) == 704);
 static_assert(__builtin_offsetof(Registers, ds) == 512);
 static_assert(__builtin_offsetof(Registers, int_no) == 648);
@@ -65,7 +66,7 @@ struct IDTGate
 
 class IDTR
 {
-public:
+  public:
     void SetGate(uint8_t entry, uint8_t flags, uint64_t handler);
     void Flush();
 

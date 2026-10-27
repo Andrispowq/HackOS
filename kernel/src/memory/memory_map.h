@@ -13,7 +13,7 @@ struct MemoryMapEntry
 
 class MemoryMap
 {
-public:
+  public:
     MemoryMap(MemoryMapEntry* firstEntry, uint64_t entryCount);
     ~MemoryMap();
     MemoryMap(const MemoryMap&) = delete;
@@ -27,14 +27,21 @@ public:
     uint64_t GetTotalSystemMemory();
     uint64_t GetUsuableSystemMemory();
 
-    uint64_t GetEntryCount() const { return entryCount; }
-    MemoryMapEntry* GetEntry(size_t index) const { return firstEntry + index; }
+    uint64_t GetEntryCount() const
+    {
+        return entryCount;
+    }
 
-public:
+    MemoryMapEntry* GetEntry(size_t index) const
+    {
+        return firstEntry + index;
+    }
+
+  public:
     MemoryMapEntry* firstEntry;
     uint64_t entryCount;
 
-private:
+  private:
     uint32_t usableType;
     MemoryMapEntry** usableMemory = nullptr;
 };

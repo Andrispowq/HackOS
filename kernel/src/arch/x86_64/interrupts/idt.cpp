@@ -11,49 +11,46 @@
 #include "drivers/screen/screen.h"
 
 /* To print the message which defines every exception */
-const char* exception_messages[] = 
-{
-    "Division By Zero",
-    "Debug",
-    "Non Maskable Interrupt",
-    "Breakpoint",
-    "Into Detected Overflow",
-    "Out of Bounds",
-    "Invalid Opcode",
-    "No Coprocessor",
+const char* exception_messages[] = {"Division By Zero",
+                                    "Debug",
+                                    "Non Maskable Interrupt",
+                                    "Breakpoint",
+                                    "Into Detected Overflow",
+                                    "Out of Bounds",
+                                    "Invalid Opcode",
+                                    "No Coprocessor",
 
-    "Double Fault",
-    "Coprocessor Segment Overrun",
-    "Bad TSS",
-    "Segment Not Present",
-    "Stack Fault",
-    "General Protection Fault",
-    "Page Fault",
-    "Unknown Interrupt",
+                                    "Double Fault",
+                                    "Coprocessor Segment Overrun",
+                                    "Bad TSS",
+                                    "Segment Not Present",
+                                    "Stack Fault",
+                                    "General Protection Fault",
+                                    "Page Fault",
+                                    "Unknown Interrupt",
 
-    "Coprocessor Fault",
-    "Alignment Check",
-    "Machine Check",
-    "Reserved",
-    "Reserved",
-    "Reserved",
-    "Reserved",
-    "Reserved",
+                                    "Coprocessor Fault",
+                                    "Alignment Check",
+                                    "Machine Check",
+                                    "Reserved",
+                                    "Reserved",
+                                    "Reserved",
+                                    "Reserved",
+                                    "Reserved",
 
-    "Reserved",
-    "Reserved",
-    "Reserved",
-    "Reserved",
-    "Reserved",
-    "Reserved",
-    "Reserved",
-    "Reserved"
-};
+                                    "Reserved",
+                                    "Reserved",
+                                    "Reserved",
+                                    "Reserved",
+                                    "Reserved",
+                                    "Reserved",
+                                    "Reserved",
+                                    "Reserved"};
 
 static void DefaultExceptionHandler(Registers* registers)
 {
-    kprintf("Recieved interrupt #%x with error code %x on the default handler!\n", 
-        registers->int_no, registers->err_code);
+    kprintf("Recieved interrupt #%x with error code %x on the default handler!\n", registers->int_no,
+            registers->err_code);
     kprintf("Exception: %s\n", exception_messages[registers->int_no]);
     kprintf("RIP: %x, RSP: %x, RBP: %x\n", registers->rip, registers->rsp, registers->rbp);
     kprintf("RAX: %x, RBX: %x, RCX: %x, RDX: %x\n", registers->rax, registers->rbx, registers->rcx, registers->rdx);
@@ -66,7 +63,7 @@ static void DefaultExceptionHandler(Registers* registers)
     asm("cli; hlt");
 }
 
-void IDTR::SetGate(uint8_t entry, uint8_t flags, uint64_t handler) 
+void IDTR::SetGate(uint8_t entry, uint8_t flags, uint64_t handler)
 {
     offset[entry].offset0 = (uint16_t)(handler & 0x000000000000FFFF);
     offset[entry].offset1 = (uint16_t)((handler & 0x00000000FFFF0000) >> 16);
@@ -76,13 +73,14 @@ void IDTR::SetGate(uint8_t entry, uint8_t flags, uint64_t handler)
     offset[entry].flags = flags;
 }
 
-void IDTR::Flush() 
+void IDTR::Flush()
 {
     __set_idt(this);
 }
 
 static IDTGate gates[IDT_ENTRIES];
 IDTR idtr;
+
 void InitialiseIDT()
 {
     idtr.limit = sizeof(IDTGate) * IDT_ENTRIES - 1;
@@ -143,7 +141,7 @@ void InitialiseIDT()
     idtr.SetGate(0x80, IDT_TA_InterruptGate | 0x60, (uint64_t)isr128);
     idtr.SetGate(0x81, IDT_TA_InterruptGate, (uint64_t)isr129);
 
-    for(uint8_t i = 0; i < 32; i++)
+    for (uint8_t i = 0; i < 32; i++)
     {
         RegisterInterruptHandler(i, DefaultExceptionHandler);
     }
@@ -180,15 +178,14 @@ void InitialiseIDT()
 
     __outb(PIC1_DATA, a1);
     io_wait();
-    __outb(PIC2_DATA, a2); 
+    __outb(PIC2_DATA, a2);
 }
 
 void InitialiseIRQ()
 {
     InitTimer(1000);
     InitKeyboard();
-    InitialiseMouse(Display::SharedDisplay()->framebuffer.width, 
-        Display::SharedDisplay()->framebuffer.height);
+    InitialiseMouse(Display::SharedDisplay()->framebuffer.width, Display::SharedDisplay()->framebuffer.height);
 
     __outb(PIC1_DATA, 0b11111000);
     __outb(PIC2_DATA, 0b11101111);
@@ -203,10 +200,16 @@ extern "C"
 {
     Registers* ISRHandler(Registers* r)
     {
-        if ((r->cs & 3) == 3 && r->int_no < 32 &&
-            r->int_no != 2 && r->int_no != 8 && r->int_no != 18)
+        if ((r->cs & 3) == 3 && r->int_no < 32 && r->int_no != 2 && r->int_no != 8 && r->int_no != 18)
+        {
             FaultUserProcess(r);
-        if (r->int_no == 0x81) return Schedule(r);
+        }
+
+        if (r->int_no == 0x81)
+        {
+            return Schedule(r);
+        }
+
         if (interrupt_handlers[r->int_no] != 0)
         {
             isr_t handler = interrupt_handlers[r->int_no];
@@ -217,14 +220,18 @@ extern "C"
             kprintf("Recieved interrupt without a handler: %d\n", r->int_no);
             kprintf("Description: %s\n", exception_messages[r->int_no]);
             Display::SharedDisplay()->DrawBackbuffer();
-            while(1) asm("hlt");
+            while (1)
+            {
+                asm("hlt");
+            }
         }
+
         return r;
     }
-    
+
     Registers* IRQHandler(Registers* regs)
     {
-        if (interrupt_handlers[regs->int_no] != 0) 
+        if (interrupt_handlers[regs->int_no] != 0)
         {
             isr_t handler = interrupt_handlers[regs->int_no];
             handler(regs);
@@ -234,13 +241,13 @@ extern "C"
         {
             __outb(PIC2_COMMAND, PIC_EOI);
         }
-        
+
         __outb(PIC1_COMMAND, PIC_EOI);
         return regs->int_no == IRQ0 ? Schedule(regs) : regs;
     }
 }
 
-void RegisterInterruptHandler(uint8_t index, isr_t handler) 
+void RegisterInterruptHandler(uint8_t index, isr_t handler)
 {
     interrupt_handlers[index] = handler;
 }

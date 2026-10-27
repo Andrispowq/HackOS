@@ -8,13 +8,20 @@
 
 class UHCIController : public Controller
 {
-public:
-    UHCIController() {}
-    ~UHCIController() {}
+  public:
+    UHCIController()
+    {
+    }
 
-    virtual void Poll() override {}
+    ~UHCIController()
+    {
+    }
 
-public:
+    virtual void Poll() override
+    {
+    }
+
+  public:
     uint32_t IOAddress;
     uint32_t* frameList;
 };

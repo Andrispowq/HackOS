@@ -2,11 +2,60 @@
 #include "hackos/types.h"
 
 // Fixed-width, pointer-free syscall records. All reserved bytes are zeroed.
-struct HackosFileInfo { uint64_t size; uint32_t attributes; uint32_t reserved; char name[256]; };
-struct HackosProcessInfo { uint64_t pid; uint64_t state; char name[256]; };
-struct HackosClock { uint64_t ticks; uint8_t second, minute, hour, day, month, year; uint8_t reserved[2]; };
+struct HackosFileInfo
+{
+    uint64_t size;
+    uint32_t attributes;
+    uint32_t reserved;
+    char name[256];
+};
+
+struct HackosProcessInfo
+{
+    uint64_t pid;
+    uint64_t state;
+    char name[256];
+    uint32_t uid, gid;
+    uint64_t parentPid;
+};
+
+constexpr uint32_t HACKOS_ROOT_UID = 0;
+constexpr uint32_t HACKOS_MAX_GROUPS = 8;
+constexpr uint32_t HACKOS_ACCOUNT_NAME = 32;
+constexpr uint64_t HACKOS_SPAWN_FOREGROUND = 1;
+
+struct HackosCredentials
+{
+    uint32_t uid, gid;
+    uint32_t groupCount, reserved;
+    uint32_t groups[HACKOS_MAX_GROUPS]; // supplementary groups; excludes primary gid
+};
+
+struct HackosUserInfo
+{
+    HackosCredentials credentials;
+    char name[HACKOS_ACCOUNT_NAME];
+};
+
+struct HackosGroupInfo
+{
+    uint32_t gid, reserved;
+    char name[HACKOS_ACCOUNT_NAME];
+};
+
+static_assert(sizeof(HackosCredentials) == 48, "credentials ABI");
+static_assert(sizeof(HackosUserInfo) == 80, "user ABI");
+static_assert(sizeof(HackosGroupInfo) == 40, "group ABI");
+
+struct HackosClock
+{
+    uint64_t ticks;
+    uint8_t second, minute, hour, day, month, year;
+    uint8_t reserved[2];
+};
+
 static_assert(sizeof(HackosFileInfo) == 272, "file ABI");
-static_assert(sizeof(HackosProcessInfo) == 272, "process ABI");
+static_assert(sizeof(HackosProcessInfo) == 288, "process ABI");
 static_assert(sizeof(HackosClock) == 16, "clock ABI");
 constexpr uint64_t HACKOS_ERROR = ~0ULL;
 constexpr uint64_t HACKOS_DENIED = ~1ULL;

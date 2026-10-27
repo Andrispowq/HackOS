@@ -61,12 +61,15 @@ static uint64_t first_frame()
         }
     }
 
-    for (;;) asm("cli; hlt");
+    for (;;)
+    {
+        asm("cli; hlt");
+    }
 }
 
 void LockPages(vaddr_t address, uint64_t pageCount)
 {
-    for(uint32_t i = 0; i < pageCount; i++)
+    for (uint32_t i = 0; i < pageCount; i++)
     {
         uint64_t addr = (uint64_t)address + i * 0x1000;
 
@@ -78,7 +81,7 @@ void LockPages(vaddr_t address, uint64_t pageCount)
 
 void UnlockPages(vaddr_t address, uint64_t pageCount)
 {
-    for(uint32_t i = 0; i < pageCount; i++)
+    for (uint32_t i = 0; i < pageCount; i++)
     {
         uint64_t addr = (uint64_t)address + i * 0x1000;
 
@@ -90,7 +93,7 @@ void UnlockPages(vaddr_t address, uint64_t pageCount)
 
 void ReservePages(vaddr_t address, uint64_t pageCount)
 {
-    for(uint32_t i = 0; i < pageCount; i++)
+    for (uint32_t i = 0; i < pageCount; i++)
     {
         uint64_t addr = (uint64_t)address + i * 0x1000;
 
@@ -102,7 +105,7 @@ void ReservePages(vaddr_t address, uint64_t pageCount)
 
 void UnreservePages(vaddr_t address, uint64_t pageCount)
 {
-    for(uint32_t i = 0; i < pageCount; i++)
+    for (uint32_t i = 0; i < pageCount; i++)
     {
         uint64_t addr = (uint64_t)address + i * 0x1000;
 
@@ -116,9 +119,12 @@ void* RequestPage()
 {
     uint64_t index = first_frame();
 
-    if(index == frameCount * 64)
+    if (index == frameCount * 64)
     {
-        while(1) asm("hlt");
+        while (1)
+        {
+            asm("hlt");
+        }
     }
 
     LockPages(index * 0x1000, 1);
@@ -133,22 +139,41 @@ void InitPaging(MemoryMapEntry* entries)
     memset(bitmap, 0xff, frameCount * sizeof(uint64_t));
     freeMemory = usedMemory = 0;
     reservedMemory = 0x1000000;
-    for (uint32_t i = 0; i < MemoryRegionCount; ++i) {
-        if (entries[i].type != 1) continue;
+    for (uint32_t i = 0; i < MemoryRegionCount; ++i)
+    {
+        if (entries[i].type != 1)
+        {
+            continue;
+        }
+
         uint64_t start = (entries[i].address + 4095) & ~4095ULL;
         uint64_t end = entries[i].address + entries[i].length;
-        if (end > 0x1000000) end = 0x1000000;
-        for (uint64_t address = start; address + 4096 <= end; address += 4096) {
+        if (end > 0x1000000)
+        {
+            end = 0x1000000;
+        }
+
+        for (uint64_t address = start; address + 4096 <= end; address += 4096)
+        {
             // Low loader/ELF buffers, VGA/ROM and the kernel load area stay reserved.
-            if (address < 0x50000 || (address >= 0x90000 && address < 0x200000)) continue;
+            if (address < 0x50000 || (address >= 0x90000 && address < 0x200000))
+            {
+                continue;
+            }
+
             clear_frame(address);
             freeMemory += 4096;
             reservedMemory -= 4096;
         }
     }
+
     kernel_directory = RequestPage();
     memset(kernel_directory, 0, 4096);
-    for (uint64_t i = 0; i < 0x1000000; i += 4096) MapMemory(i, i);
+    for (uint64_t i = 0; i < 0x1000000; i += 4096)
+    {
+        MapMemory(i, i);
+    }
+
     asm volatile("mov %0, %%cr3" : : "r"(kernel_directory));
 }
 
@@ -158,7 +183,7 @@ void MapMemory(vaddr_t virtualAddress, paddr_t physicalAddress)
 
     page_map_level_4_entry_t pml4_entry = kernel_directory->entries[indices.index_PDP];
     page_directory_pointer_t* pdp;
-    if(!pml4_entry.present)
+    if (!pml4_entry.present)
     {
         pdp = (page_directory_pointer_t*)RequestPage();
         memset(pdp, 0, 0x1000);
@@ -174,7 +199,7 @@ void MapMemory(vaddr_t virtualAddress, paddr_t physicalAddress)
 
     page_directory_pointer_entry_t pdp_entry = pdp->entries[indices.index_PD];
     page_directory_t* pd;
-    if(!pdp_entry.present)
+    if (!pdp_entry.present)
     {
         pd = (page_directory_t*)RequestPage();
         memset(pd, 0, 0x1000);
@@ -190,7 +215,7 @@ void MapMemory(vaddr_t virtualAddress, paddr_t physicalAddress)
 
     page_directory_entry_t pd_entry = pd->entries[indices.index_PT];
     page_table_t* pt;
-    if(!pd_entry.present)
+    if (!pd_entry.present)
     {
         pt = (page_table_t*)RequestPage();
         memset(pt, 0, 0x1000);
@@ -245,7 +270,7 @@ page_map_index_t IndexOf(vaddr_t address)
 void PageFaultHandler(registers_t* regs)
 {
     uint64_t cr2;
-    asm volatile("mov %%cr2, %0" : "=r" (cr2));
+    asm volatile("mov %%cr2, %0" : "=r"(cr2));
 
     uint32_t flags = regs->err_code;
 
@@ -268,5 +293,8 @@ void PageFaultHandler(registers_t* regs)
 
     kprintf("\n\n\n---------------------------------------------\n\n\n");
 
-    while(1) asm("hlt");
+    while (1)
+    {
+        asm("hlt");
+    }
 }

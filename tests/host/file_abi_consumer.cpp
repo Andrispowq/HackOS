@@ -1,6 +1,7 @@
 #include "support.hpp"
 // A separate translation unit is essential: it uses the actual libc declaration.
 #include "../../libs/libc/src/file/file.h"
+
 extern "C" int consume_libc_file(void* opaque)
 {
     auto file = (ActiveFile*)opaque;

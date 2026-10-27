@@ -21,7 +21,7 @@ void PageTableManager::MapMemory(vaddr_t virtualAddress, paddr_t physicalAddress
 
     PageTableEntry pml4_entry = pml4->entries[indices.index_PDP];
     PageTable* pdp;
-    if(!pml4_entry.present)
+    if (!pml4_entry.present)
     {
         pdp = (PageTable*)PageFrameAllocator::SharedAllocator()->RequestPage();
         memset(pdp, 0, 0x1000);
@@ -36,7 +36,7 @@ void PageTableManager::MapMemory(vaddr_t virtualAddress, paddr_t physicalAddress
 
     PageTableEntry pdp_entry = pdp->entries[indices.index_PD];
     PageTable* pd;
-    if(!pdp_entry.present)
+    if (!pdp_entry.present)
     {
         pd = (PageTable*)PageFrameAllocator::SharedAllocator()->RequestPage();
         memset(pd, 0, 0x1000);
@@ -51,7 +51,7 @@ void PageTableManager::MapMemory(vaddr_t virtualAddress, paddr_t physicalAddress
 
     PageTableEntry pd_entry = pd->entries[indices.index_PT];
     PageTable* pt;
-    if(!pd_entry.present)
+    if (!pd_entry.present)
     {
         pt = (PageTable*)PageFrameAllocator::SharedAllocator()->RequestPage();
         memset(pt, 0, 0x1000);
@@ -72,9 +72,11 @@ void PageTableManager::MapMemory(vaddr_t virtualAddress, paddr_t physicalAddress
     // virtual window with different frames; stale translations would otherwise
     // read/write a frame that has since become owned by a user process.
     if (CurrentDirectory && (this == CurrentDirectory || this == &KernelDirectory))
+    {
         asm volatile("invlpg (%0)" : : "r"(virtualAddress) : "memory");
+    }
 }
-    
+
 paddr_t PageTableManager::PhysicalAddress(vaddr_t virtualAddress)
 {
     PageMapIndexer indices(virtualAddress);
@@ -117,10 +119,10 @@ void* PageTableManager::ClonePage(void* src)
 
 PageTable* PageTableManager::ClonePT(PageTable* src, PageTable* kernel)
 {
-    PageTable* page_dir = (PageTable*) PageFrameAllocator::SharedAllocator()->RequestPage();
+    PageTable* page_dir = (PageTable*)PageFrameAllocator::SharedAllocator()->RequestPage();
     memset(page_dir, 0, sizeof(PageTable));
 
-    for(uint32_t i = 0; i < 512; i++)
+    for (uint32_t i = 0; i < 512; i++)
     {
         if (src->entries[i].address == 0)
         {
@@ -129,7 +131,7 @@ PageTable* PageTableManager::ClonePT(PageTable* src, PageTable* kernel)
 
         uint64_t entry = *(uint64_t*)(&src->entries[i]);
         uint64_t kernel_entry = *(uint64_t*)(&kernel->entries[i]);
-        if(entry == kernel_entry)
+        if (entry == kernel_entry)
         {
             page_dir->entries[i] = src->entries[i];
         }
@@ -139,15 +141,50 @@ PageTable* PageTableManager::ClonePT(PageTable* src, PageTable* kernel)
             void* copy = ClonePage(addr);
             page_dir->entries[i].address = (uint64_t)copy >> 12;
 
-            if (src->entries[i].present) page_dir->entries[i].present = 1;
-            if (src->entries[i].writeable) page_dir->entries[i].writeable = 1;
-            if (src->entries[i].user_access) page_dir->entries[i].user_access = 1;
-            if (src->entries[i].write_through) page_dir->entries[i].write_through = 1;
-            if (src->entries[i].accessed) page_dir->entries[i].accessed = 1;
-            if (src->entries[i].dirty) page_dir->entries[i].dirty = 1;
-            if (src->entries[i].size) page_dir->entries[i].size = 1;
-            if (src->entries[i].global) page_dir->entries[i].global = 1;
-            if (src->entries[i].execution_disabled) page_dir->entries[i].execution_disabled = 1;
+            if (src->entries[i].present)
+            {
+                page_dir->entries[i].present = 1;
+            }
+
+            if (src->entries[i].writeable)
+            {
+                page_dir->entries[i].writeable = 1;
+            }
+
+            if (src->entries[i].user_access)
+            {
+                page_dir->entries[i].user_access = 1;
+            }
+
+            if (src->entries[i].write_through)
+            {
+                page_dir->entries[i].write_through = 1;
+            }
+
+            if (src->entries[i].accessed)
+            {
+                page_dir->entries[i].accessed = 1;
+            }
+
+            if (src->entries[i].dirty)
+            {
+                page_dir->entries[i].dirty = 1;
+            }
+
+            if (src->entries[i].size)
+            {
+                page_dir->entries[i].size = 1;
+            }
+
+            if (src->entries[i].global)
+            {
+                page_dir->entries[i].global = 1;
+            }
+
+            if (src->entries[i].execution_disabled)
+            {
+                page_dir->entries[i].execution_disabled = 1;
+            }
         }
     }
 
@@ -156,10 +193,10 @@ PageTable* PageTableManager::ClonePT(PageTable* src, PageTable* kernel)
 
 PageTable* PageTableManager::ClonePD(PageTable* src, PageTable* kernel)
 {
-    PageTable* page_dir = (PageTable*) PageFrameAllocator::SharedAllocator()->RequestPage();
+    PageTable* page_dir = (PageTable*)PageFrameAllocator::SharedAllocator()->RequestPage();
     memset(page_dir, 0, sizeof(PageTable));
 
-    for(uint32_t i = 0; i < 512; i++)
+    for (uint32_t i = 0; i < 512; i++)
     {
         if (src->entries[i].address == 0)
         {
@@ -168,7 +205,7 @@ PageTable* PageTableManager::ClonePD(PageTable* src, PageTable* kernel)
 
         uint64_t entry = *(uint64_t*)(&src->entries[i]);
         uint64_t kernel_entry = *(uint64_t*)(&kernel->entries[i]);
-        if(entry == kernel_entry)
+        if (entry == kernel_entry)
         {
             page_dir->entries[i] = src->entries[i];
         }
@@ -179,15 +216,50 @@ PageTable* PageTableManager::ClonePD(PageTable* src, PageTable* kernel)
             PageTable* pt = ClonePT(orig, kern);
             page_dir->entries[i].address = (uint64_t)pt >> 12;
 
-            if (src->entries[i].present) page_dir->entries[i].present = 1;
-            if (src->entries[i].writeable) page_dir->entries[i].writeable = 1;
-            if (src->entries[i].user_access) page_dir->entries[i].user_access = 1;
-            if (src->entries[i].write_through) page_dir->entries[i].write_through = 1;
-            if (src->entries[i].accessed) page_dir->entries[i].accessed = 1;
-            if (src->entries[i].dirty) page_dir->entries[i].dirty = 1;
-            if (src->entries[i].size) page_dir->entries[i].size = 1;
-            if (src->entries[i].global) page_dir->entries[i].global = 1;
-            if (src->entries[i].execution_disabled) page_dir->entries[i].execution_disabled = 1;
+            if (src->entries[i].present)
+            {
+                page_dir->entries[i].present = 1;
+            }
+
+            if (src->entries[i].writeable)
+            {
+                page_dir->entries[i].writeable = 1;
+            }
+
+            if (src->entries[i].user_access)
+            {
+                page_dir->entries[i].user_access = 1;
+            }
+
+            if (src->entries[i].write_through)
+            {
+                page_dir->entries[i].write_through = 1;
+            }
+
+            if (src->entries[i].accessed)
+            {
+                page_dir->entries[i].accessed = 1;
+            }
+
+            if (src->entries[i].dirty)
+            {
+                page_dir->entries[i].dirty = 1;
+            }
+
+            if (src->entries[i].size)
+            {
+                page_dir->entries[i].size = 1;
+            }
+
+            if (src->entries[i].global)
+            {
+                page_dir->entries[i].global = 1;
+            }
+
+            if (src->entries[i].execution_disabled)
+            {
+                page_dir->entries[i].execution_disabled = 1;
+            }
         }
     }
 
@@ -196,10 +268,10 @@ PageTable* PageTableManager::ClonePD(PageTable* src, PageTable* kernel)
 
 PageTable* PageTableManager::ClonePDP(PageTable* src, PageTable* kernel)
 {
-    PageTable* page_dir = (PageTable*) PageFrameAllocator::SharedAllocator()->RequestPage();
+    PageTable* page_dir = (PageTable*)PageFrameAllocator::SharedAllocator()->RequestPage();
     memset(page_dir, 0, sizeof(PageTable));
 
-    for(uint32_t i = 0; i < 512; i++)
+    for (uint32_t i = 0; i < 512; i++)
     {
         if (src->entries[i].address == 0)
         {
@@ -208,7 +280,7 @@ PageTable* PageTableManager::ClonePDP(PageTable* src, PageTable* kernel)
 
         uint64_t entry = *(uint64_t*)(&src->entries[i]);
         uint64_t kernel_entry = *(uint64_t*)(&kernel->entries[i]);
-        if(entry == kernel_entry)
+        if (entry == kernel_entry)
         {
             page_dir->entries[i] = src->entries[i];
         }
@@ -219,15 +291,50 @@ PageTable* PageTableManager::ClonePDP(PageTable* src, PageTable* kernel)
             PageTable* pt = ClonePD(orig, kern);
             page_dir->entries[i].address = (uint64_t)pt >> 12;
 
-            if (src->entries[i].present) page_dir->entries[i].present = 1;
-            if (src->entries[i].writeable) page_dir->entries[i].writeable = 1;
-            if (src->entries[i].user_access) page_dir->entries[i].user_access = 1;
-            if (src->entries[i].write_through) page_dir->entries[i].write_through = 1;
-            if (src->entries[i].accessed) page_dir->entries[i].accessed = 1;
-            if (src->entries[i].dirty) page_dir->entries[i].dirty = 1;
-            if (src->entries[i].size) page_dir->entries[i].size = 1;
-            if (src->entries[i].global) page_dir->entries[i].global = 1;
-            if (src->entries[i].execution_disabled) page_dir->entries[i].execution_disabled = 1;
+            if (src->entries[i].present)
+            {
+                page_dir->entries[i].present = 1;
+            }
+
+            if (src->entries[i].writeable)
+            {
+                page_dir->entries[i].writeable = 1;
+            }
+
+            if (src->entries[i].user_access)
+            {
+                page_dir->entries[i].user_access = 1;
+            }
+
+            if (src->entries[i].write_through)
+            {
+                page_dir->entries[i].write_through = 1;
+            }
+
+            if (src->entries[i].accessed)
+            {
+                page_dir->entries[i].accessed = 1;
+            }
+
+            if (src->entries[i].dirty)
+            {
+                page_dir->entries[i].dirty = 1;
+            }
+
+            if (src->entries[i].size)
+            {
+                page_dir->entries[i].size = 1;
+            }
+
+            if (src->entries[i].global)
+            {
+                page_dir->entries[i].global = 1;
+            }
+
+            if (src->entries[i].execution_disabled)
+            {
+                page_dir->entries[i].execution_disabled = 1;
+            }
         }
     }
 
@@ -236,10 +343,10 @@ PageTable* PageTableManager::ClonePDP(PageTable* src, PageTable* kernel)
 
 PageTable* PageTableManager::ClonePML4(PageTable* src, PageTable* kernel)
 {
-    PageTable* page_dir = (PageTable*) PageFrameAllocator::SharedAllocator()->RequestPage();
+    PageTable* page_dir = (PageTable*)PageFrameAllocator::SharedAllocator()->RequestPage();
     memset(page_dir, 0, sizeof(PageTable));
 
-    for(uint32_t i = 0; i < 512; i++)
+    for (uint32_t i = 0; i < 512; i++)
     {
         if (src->entries[i].address == 0)
         {
@@ -248,7 +355,7 @@ PageTable* PageTableManager::ClonePML4(PageTable* src, PageTable* kernel)
 
         uint64_t entry = *(uint64_t*)(&src->entries[i]);
         uint64_t kernel_entry = *(uint64_t*)(&kernel->entries[i]);
-        if(entry == kernel_entry)
+        if (entry == kernel_entry)
         {
             page_dir->entries[i] = src->entries[i];
         }
@@ -259,15 +366,50 @@ PageTable* PageTableManager::ClonePML4(PageTable* src, PageTable* kernel)
             PageTable* pt = ClonePDP(orig, kern);
             page_dir->entries[i].address = (uint64_t)pt >> 12;
 
-            if (src->entries[i].present) page_dir->entries[i].present = 1;
-            if (src->entries[i].writeable) page_dir->entries[i].writeable = 1;
-            if (src->entries[i].user_access) page_dir->entries[i].user_access = 1;
-            if (src->entries[i].write_through) page_dir->entries[i].write_through = 1;
-            if (src->entries[i].accessed) page_dir->entries[i].accessed = 1;
-            if (src->entries[i].dirty) page_dir->entries[i].dirty = 1;
-            if (src->entries[i].size) page_dir->entries[i].size = 1;
-            if (src->entries[i].global) page_dir->entries[i].global = 1;
-            if (src->entries[i].execution_disabled) page_dir->entries[i].execution_disabled = 1;
+            if (src->entries[i].present)
+            {
+                page_dir->entries[i].present = 1;
+            }
+
+            if (src->entries[i].writeable)
+            {
+                page_dir->entries[i].writeable = 1;
+            }
+
+            if (src->entries[i].user_access)
+            {
+                page_dir->entries[i].user_access = 1;
+            }
+
+            if (src->entries[i].write_through)
+            {
+                page_dir->entries[i].write_through = 1;
+            }
+
+            if (src->entries[i].accessed)
+            {
+                page_dir->entries[i].accessed = 1;
+            }
+
+            if (src->entries[i].dirty)
+            {
+                page_dir->entries[i].dirty = 1;
+            }
+
+            if (src->entries[i].size)
+            {
+                page_dir->entries[i].size = 1;
+            }
+
+            if (src->entries[i].global)
+            {
+                page_dir->entries[i].global = 1;
+            }
+
+            if (src->entries[i].execution_disabled)
+            {
+                page_dir->entries[i].execution_disabled = 1;
+            }
         }
     }
 

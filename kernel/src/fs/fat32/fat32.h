@@ -14,13 +14,13 @@ struct FAT32_ActiveFile : public ActiveFile
 
     virtual uint32_t GetAttributes() const override;
 
-	DirEntry entry;
-	const char* path = nullptr;
+    DirEntry entry;
+    const char* path = nullptr;
 };
 
 class FAT32 : public Filesystem
 {
-public:
+  public:
     FAT32(Device* device, uint32_t part_start);
     ~FAT32();
 
@@ -37,8 +37,8 @@ public:
     virtual int Read(ActiveFile* file, void* buffer, uint64_t size) override;
     virtual int Write(ActiveFile* file, void* buffer, uint64_t size) override;
 
-private:
-	FAT32Driver* driver;
+  private:
+    FAT32Driver* driver;
 };
 
 #endif

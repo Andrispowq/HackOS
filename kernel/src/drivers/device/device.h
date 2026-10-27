@@ -14,8 +14,11 @@ enum class DeviceType
 
 class Device
 {
-public:
-    Device() {}
+  public:
+    Device()
+    {
+    }
+
     virtual ~Device() {};
 
     virtual DeviceType GetType() const = 0;

@@ -4,7 +4,11 @@
 
 volatile uint64_t tick;
 static uint32_t frequency;
-static void timer_callback(Registers*) { ++tick; }
+
+static void timer_callback(Registers*)
+{
+    ++tick;
+}
 
 void InitTimer(uint32_t freq)
 {
@@ -25,9 +29,16 @@ void SleepFor(uint32_t milliseconds)
 {
     uint64_t start = tick;
     uint64_t duration = TimerTicksForMilliseconds(milliseconds);
-    while (tick - start < duration) asm volatile("hlt" ::: "memory");
+    while (tick - start < duration)
+    {
+        asm volatile("hlt" ::: "memory");
+    }
 }
+
 void SleepForSeconds(double seconds)
 {
-    if (seconds > 0) SleepFor((uint32_t)(seconds * 1000));
+    if (seconds > 0)
+    {
+        SleepFor((uint32_t)(seconds * 1000));
+    }
 }

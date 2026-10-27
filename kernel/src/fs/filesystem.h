@@ -30,9 +30,14 @@ struct Partition
 
 class ActiveFile
 {
-public:
-    ActiveFile() : seek_position(0) {}
-    virtual ~ActiveFile() {}
+  public:
+    ActiveFile() : seek_position(0)
+    {
+    }
+
+    virtual ~ActiveFile()
+    {
+    }
 
     virtual uint64_t GetSize() const = 0;
     virtual const char* GetName() const = 0;
@@ -40,16 +45,21 @@ public:
 
     virtual uint32_t GetAttributes() const = 0;
 
-public:
+  public:
     size_t seek_position = 0;
     size_t fs_index = -1;
 };
 
 class Filesystem
 {
-public:
-    Filesystem(Device* device, uint32_t part_start) : device(device), PartitionStart(part_start) {}
-    virtual ~Filesystem() {}
+  public:
+    Filesystem(Device* device, uint32_t part_start) : device(device), PartitionStart(part_start)
+    {
+    }
+
+    virtual ~Filesystem()
+    {
+    }
 
     virtual ActiveFile* OpenFile(const char* path) = 0;
     virtual void CloseFile(ActiveFile* file) = 0;
@@ -64,7 +74,7 @@ public:
     virtual int Read(ActiveFile* file, void* buffer, uint64_t size) = 0;
     virtual int Write(ActiveFile* file, void* buffer, uint64_t size) = 0;
 
-private:
+  private:
     Device* device;
     uint32_t PartitionStart;
 };

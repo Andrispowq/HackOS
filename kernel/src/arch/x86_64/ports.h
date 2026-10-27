@@ -15,46 +15,67 @@ void io_wait();
 
 class Port8
 {
-public:
+  public:
     Port8(uint16_t port)
     {
         this->port = port;
     }
 
-    uint8_t Read() const { return __inb(port); }
-    void Write(uint8_t value) { __outb(port, value); }
+    uint8_t Read() const
+    {
+        return __inb(port);
+    }
 
-private:
+    void Write(uint8_t value)
+    {
+        __outb(port, value);
+    }
+
+  private:
     uint16_t port;
 };
 
 class Port16
 {
-public:
+  public:
     Port16(uint16_t port)
     {
         this->port = port;
     }
 
-    uint16_t Read() const { return __inw(port); }
-    void Write(uint16_t value) { __outw(port, value); }
+    uint16_t Read() const
+    {
+        return __inw(port);
+    }
 
-private:
+    void Write(uint16_t value)
+    {
+        __outw(port, value);
+    }
+
+  private:
     uint16_t port;
 };
 
 class Port32
 {
-public:
+  public:
     Port32(uint32_t port)
     {
         this->port = port;
     }
 
-    uint32_t Read() const { return __inl(port); }
-    void Write(uint32_t value) { __outl(port, value); }
+    uint32_t Read() const
+    {
+        return __inl(port);
+    }
 
-private:
+    void Write(uint32_t value)
+    {
+        __outl(port, value);
+    }
+
+  private:
     uint32_t port;
 };
 

@@ -2,7 +2,10 @@
 
 int main(int argc, char** argv)
 {
-    if (!Arguments(argc, 2, "kill <pid>")) return 2;
+    if (!Arguments(argc, 2, "kill <pid>"))
+    {
+        return 2;
+    }
 
     uint64_t pid = 0;
     if (!*argv[1])
@@ -23,7 +26,8 @@ int main(int argc, char** argv)
     }
 
     uint64_t result = syscall_kill(pid);
-    Print(result == HACKOS_DENIED ? "Cannot stop the idle or shell task, or permission denied.\n" :
-          result == HACKOS_ERROR ? "No running task with that PID.\n" : "Task stopped.\n");
+    Print(result == HACKOS_DENIED  ? "Cannot stop the idle or shell task, or permission denied.\n"
+          : result == HACKOS_ERROR ? "No running task with that PID.\n"
+                                   : "Task stopped.\n");
     return result == 0 ? 0 : 1;
 }

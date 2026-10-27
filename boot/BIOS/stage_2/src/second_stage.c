@@ -43,14 +43,23 @@ void loader_main(struct FramebufferInfo* info)
     InitPaging(entries);
 
     // High reserved PCI windows are mapped by device drivers when needed.
-    for (uint8_t i = 0; i < MemoryRegionCount; ++i) {
+    for (uint8_t i = 0; i < MemoryRegionCount; ++i)
+    {
         MemoryMapEntry* entry = entries + i;
         if (!entry->length || entry->length > ~0ULL - entry->address ||
-            (entry->type == 2 && entry->address >= 0x100000000ULL)) continue;
+            (entry->type == 2 && entry->address >= 0x100000000ULL))
+        {
+            continue;
+        }
+
         uint64_t last = (entry->address + entry->length - 1) & ~4095ULL;
-        for (uint64_t address = entry->address & ~4095ULL;; address += 4096) {
+        for (uint64_t address = entry->address & ~4095ULL;; address += 4096)
+        {
             MapMemory(address, address);
-            if (address == last) break;
+            if (address == last)
+            {
+                break;
+            }
         }
     }
 
@@ -60,23 +69,22 @@ void loader_main(struct FramebufferInfo* info)
 
     //Load in the font file, loaded at 0x6000
     PSF1_FONT* font = LoadFont((void*)0x6000);
-    
+
     //Initialise the display
     init_display(info, font);
     clrscr();
 
     rtc_init(&start_time);
     kprintf("Welcome to the HackOS!\n");
-    kprintf("[%x:%x:%x]: Starting the initialisation!\n", 
-        start_time.hour, start_time.minute, start_time.second);
+    kprintf("[%x:%x:%x]: Starting the initialisation!\n", start_time.hour, start_time.minute, start_time.second);
 
     //Read the kernel, which is 128 sectors long (now), and starts at the 130th sector
     uint64_t kernelMemory;
     Elf64_Ehdr* header = LoadProgram((void*)0x20000, &kernelMemory);
-    if(!header)
+    if (!header)
     {
         kprintf("ELF header not supported!\n");
-        while(1)
+        while (1)
         {
             asm("hlt");
         }
@@ -94,13 +102,13 @@ void loader_main(struct FramebufferInfo* info)
     kernelInfo.rsdp_version = version;
     kernelInfo.booted_from_BIOS = 1;
 
-    int(*kernel_main)(struct KernelInfo*) = (int(*)(struct KernelInfo*)) header->e_entry;
+    int (*kernel_main)(struct KernelInfo*) = (int (*)(struct KernelInfo*))header->e_entry;
     int ret = kernel_main(&kernelInfo);
 
     kprintf("Kernel returned with code %d!\n", ret);
 
     //We don't want to exit the second stage bootloader, so we put an infinite loop (for now)
-    while(1)
+    while (1)
     {
         asm("hlt");
     }

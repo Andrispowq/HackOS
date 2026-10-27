@@ -89,7 +89,7 @@ def test(firmware, timeout):
     def run():
         programs = [build_probe(directory, built/"source", waiting) for waiting in (False, True)]
         programs += [build_probe(directory,built/"source",extra=extra)
-                     for extra in (("args_probe.cpp","ARGPROBE"),("wait_test.cpp","WAITTEST"),("terminal_probe.cpp","TERMPROBE"))]
+                     for extra in (("args_probe.cpp","ARGPROBE"),("wait_test.cpp","WAITTEST"),("terminal_probe.cpp","TERMPROBE"),("credential_probe.cpp","CREDPROBE"))]
         symbols = require_success(command([os.environ.get("CROSS_COMPILE","x86_64-elf-")+"nm",directory/"ARGPROBE"]), "argument probe symbols")
         gate = int(re.search(r"^([0-9a-f]+) [A-Za-z] release_gate$", symbols, re.M)[1],16)
         image = directory/"HackOS.img"
@@ -97,6 +97,13 @@ def test(firmware, timeout):
         fs_image = str(image) + ("@@"+str(334*512) if firmware == "bios" else "")
         for program in programs:
             require_success(command(["mcopy", "-o", "-i", fs_image, program, "::/USR/BIN/"+program.name]), "install test program in disposable image")
+        fixture = directory/"listing.txt"
+        fixture.write_bytes(b"abc")
+        require_success(command(["mmd", "-i", fs_image, "::/LSCHECK", "::/LSCHECK/SUBDIR"]), "listing directory")
+        for name in ("VISIBLE.TXT", "SECRET.TXT", ".DOTFILE"):
+            require_success(command(["mcopy", "-i", fs_image, fixture, "::/LSCHECK/" + name]), "listing fixture")
+        require_success(command(["mattrib", "-i", fs_image, "+h", "::/LSCHECK/SECRET.TXT"]), "hidden fixture")
+        require_success(command(["mattrib", "-i", fs_image, "+r", "::/LSCHECK/VISIBLE.TXT"]), "readonly fixture")
         with tempfile.TemporaryDirectory(prefix="hackos-shell-") as temporary:
             temporary = Path(temporary)
             qmp_path, gdb_path = temporary/"qmp", temporary/"gdb"
@@ -170,6 +177,20 @@ bp.delete()
                     assert re.search(r"Started user process \d+: ~/USR/BIN/PS", output())
                     assert re.search(r"Process: ~/USR/BIN/PS \(\d+\) ALIVE", output())
                     enter("clear", "root@root:~$ ")
+                    enter("print QUIET_OK", "\nQUIET_OK\n")
+                    qmp.call("stop")
+                    quiet = directory/"quiet-console.gdb"
+                    quiet.write_text("set pagination off\nset confirm off\ntarget remote " + str(gdb_path) + "\npython\nimport gdb\n"
+                                     "assert int(gdb.parse_and_eval('display.console.current_y')) == 2, 'Lifecycle boilerplate reached the console'\n"
+                                     "assert int(gdb.parse_and_eval('display.console.current_x')) == 13\n"
+                                     "print('QUIET_CONSOLE_OK')\nend\ndetach\nquit\n")
+                    result = command([os.environ.get("GDB", "gdb"), "--batch", "--nx", "-q", built/"kernel.elf", "-x", quiet], timeout=20)
+                    (directory/"quiet-console.log").write_text(result.stdout)
+                    require_success(result, "quiet graphical console")
+                    assert "QUIET_CONSOLE_OK" in result.stdout
+                    qmp.call("stop")
+                    qmp.call("screendump", {"filename": str(directory/"quiet-console.ppm")})
+                    qmp.call("cont")
                     enter('  "ps"   "aux"  ', "~/USR/BIN/SHELL (2)")
                     enter("ps invalid", "Usage: ps [aux]")
                     enter("ps aux extra", "Usage: ps [aux]")
@@ -194,6 +215,29 @@ bp.delete()
                     enter('cd ""', "Path must not be empty.")
                     enter("ls extra", "Cannot list directory.")
                     enter("ls", "USR/")
+                    listing_offset = len(output())
+                    enter("ls /LSCHECK", "VISIBLE.TXT")
+                    listing = output()[listing_offset:]
+                    assert "SECRET.TXT" not in listing and ".DOTFILE" not in listing
+                    assert "\nVISIBLE.TXT\n" in listing and "\nSUBDIR/\n" in listing
+                    for flags in ("-a", "-la", "-al", "-l -a", "-a -l"):
+                        listing_offset = len(output())
+                        enter("ls " + flags + " /LSCHECK", "SECRET.TXT")
+                        listing = output()[listing_offset:]
+                        assert ".DOTFILE" in listing and "SUBDIR/" in listing
+                        if "l" in flags:
+                            assert "TYPE ATTR       BYTES NAME" in listing
+                            assert re.search(r"^-[ ]+r--a[ ]+3 VISIBLE.TXT$", listing, re.M)
+                            assert re.search(r"^-[ ]+-h-a[ ]+3 SECRET.TXT$", listing, re.M)
+                    listing_offset = len(output())
+                    enter("ls -l /LSCHECK", "VISIBLE.TXT")
+                    assert "SECRET.TXT" not in output()[listing_offset:]
+                    enter("ls -- /LSCHECK", "VISIBLE.TXT")
+                    enter("ls /LSCHECK -la", "SECRET.TXT")
+                    enter("ls -z", "Usage: ls")
+                    enter("ls --bad", "Usage: ls")
+                    enter("ls /LSCHECK /USR", "Usage: ls")
+                    enter('ls ""', "Usage: ls")
                     enter('cd "USR"', "root@root:~/USR$ ")
                     enter("wd", "\n~/USR\n")
                     enter('cat "HELLO.TXT"', "This is an example file")
@@ -277,6 +321,43 @@ print("FOREGROUND_WAIT_OK")
                         wait_text("root@root:~$ ", offset)
                         assert "PROBE_FAIL" not in output()[offset:], "Guest ABI/context check failed"
                         enter("ps", "~/USR/BIN/SHELL (2)")
+                    enter("id", "uid=0(root) gid=0 groups=0")
+                    enter("whoami", "\nroot\n")
+                    enter("users", "guest uid=1000 gid=1000")
+                    enter("groups", "users gid=1000")
+                    enter("groupadd staff", "Group created (this boot only).")
+                    enter("useradd alice staff", "User created (this boot only).")
+                    enter("usermod alice users", "Group added")
+                    enter("runas alice id", "uid=1001(alice) gid=1001 groups=1001,1000")
+                    enter("runas alice whoami", "\nalice\n")
+                    offset = len(output()); qmp.type("runas guest id &\n")
+                    wait_text("$ ", offset)
+                    # Background output may interleave with the prompt. Wait
+                    # for both the launcher and its child to succeed by PID.
+                    for name in ("RUNAS", "ID"):
+                        pattern = r"Started user process (\d+): ~/USR/BIN/" + name + r"\n"
+                        wait_for(lambda: re.search(pattern, output()[offset:]), "background " + name)
+                        task = re.search(pattern, output()[offset:])[1]
+                        wait_text("User process " + task + " exited 0;", offset)
+                    enter("runas guest useradd intruder", "Permission denied: root required.")
+                    enter("runas guest groupadd intruder", "Permission denied: root required.")
+                    enter("runas guest usermod guest root", "Permission denied: root required.")
+                    enter("runas guest runas root id", "Permission denied: root required.")
+                    enter("runas guest shutdown", "Permission denied: root required.")
+                    enter("runas guest restart", "Permission denied: root required.")
+                    enter("runas guest ps", "uid=1000 gid=1000 ppid=")
+                    enter("useradd alice", "Account operation failed.")
+                    enter("groupadd staff", "Account operation failed.")
+                    enter('useradd ""', "Account operation failed.")
+                    enter("runas missing id", "Unknown user.")
+                    enter("runas guest", "Usage: runas")
+                    enter("./USR/BIN/CREDPROBE", "CREDENTIALS_OK")
+                    offset = len(output()); qmp.type("runas guest input\n")
+                    wait_text("input> ", offset)
+                    qmp.type("hello\n")
+                    wait_text("You typed: hello\ninput> ", offset)
+                    qmp.key("c", control=True)
+                    wait_text("^C\nroot@root:~$ ", offset)
                     enter("./USR/BIN/WAITPROBE &", "WAIT_PROBE_READY")
                     enter("user USR/BIN/ABIPROBE " + "a " * 15, "PROBE_OK")
                     enter("ps", "WAITPROBE")

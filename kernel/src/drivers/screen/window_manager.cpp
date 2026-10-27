@@ -13,8 +13,15 @@ extern void putchar_at_xy(Framebuffer fb, char character, uint32_t x, uint32_t y
 
 static int32_t Clamp(int32_t value, int32_t minimum, int32_t maximum)
 {
-    if (value < minimum) return minimum;
-    if (value > maximum) return maximum;
+    if (value < minimum)
+    {
+        return minimum;
+    }
+
+    if (value > maximum)
+    {
+        return maximum;
+    }
 
     return value;
 }
@@ -35,9 +42,15 @@ WindowManager::~WindowManager()
 void WindowManager::Focus(Window* window)
 {
     InterruptGuard guard;
-    if (focused == window) return;
+    if (focused == window)
+    {
+        return;
+    }
 
-    if (focused) focused->SetFocused(false);
+    if (focused)
+    {
+        focused->SetFocused(false);
+    }
 
     focused = window;
     ClearKeyboard(false);
@@ -64,7 +77,10 @@ void WindowManager::Keyboard(uint32_t key)
 {
     // Idle dispatches keyboard and mouse ingress in order. In particular, a
     // queued click changes focus before a following key is delivered.
-    if (!focused) return;
+    if (!focused)
+    {
+        return;
+    }
 
     if (key == HACKOS_KEY_INTERRUPT)
     {
@@ -81,7 +97,10 @@ Window* WindowManager::Hit(int32_t x, int32_t y)
     for (size_t i = windows.size(); i > 0; i--)
     {
         auto window = windows[i - 1];
-        if (window->GetMinimised()) continue;
+        if (window->GetMinimised())
+        {
+            continue;
+        }
 
         if (x >= (int32_t)window->GetStartX() && y >= (int32_t)window->GetStartY() &&
             x < (int32_t)(window->GetStartX() + window->GetSizeX()) &&
@@ -104,13 +123,19 @@ void WindowManager::Mouse(int32_t x, int32_t y, uint32_t buttons)
         if (pressed)
         {
             unsigned width = drawBuffer.width / minimized;
-            if (width > 120) width = 120;
+            if (width > 120)
+            {
+                width = 120;
+            }
 
             unsigned index = 0;
             for (size_t i = 0; i < windows.size(); i++)
             {
                 auto window = windows[i];
-                if (!window->GetMinimised()) continue;
+                if (!window->GetMinimised())
+                {
+                    continue;
+                }
 
                 if ((unsigned)x >= index * width && (unsigned)x < (index + 1) * width)
                 {
@@ -130,7 +155,10 @@ void WindowManager::Mouse(int32_t x, int32_t y, uint32_t buttons)
     if (pressed && !capture)
     {
         Focus(target);
-        if (!target) return;
+        if (!target)
+        {
+            return;
+        }
 
         int32_t localX = x - target->GetStartX();
         int32_t localY = y - target->GetStartY();
@@ -156,10 +184,14 @@ void WindowManager::Mouse(int32_t x, int32_t y, uint32_t buttons)
             }
         }
 
-        if (target->GetMaximised() && localY < 30) return;
+        if (target->GetMaximised() && localY < 30)
+        {
+            return;
+        }
 
         capture = target;
-        if (!target->GetMaximised() && localX >= (int32_t)target->GetSizeX() - 8 && localY >= (int32_t)target->GetSizeY() - 8)
+        if (!target->GetMaximised() && localX >= (int32_t)target->GetSizeX() - 8 &&
+            localY >= (int32_t)target->GetSizeY() - 8)
         {
             captureMode = 3;
             anchorX = x;
@@ -179,7 +211,10 @@ void WindowManager::Mouse(int32_t x, int32_t y, uint32_t buttons)
         }
     }
 
-    if (!target) return;
+    if (!target)
+    {
+        return;
+    }
 
     target->SetMouse(x - target->GetStartX(), y - target->GetStartY() - 30, buttons);
 
@@ -233,7 +268,10 @@ void WindowManager::Update()
             else
             {
                 DeliverKeyboard(state.key);
-                if (state.key == HACKOS_KEY_INTERRUPT) RequestTerminalInterrupt();
+                if (state.key == HACKOS_KEY_INTERRUPT)
+                {
+                    RequestTerminalInterrupt();
+                }
             }
 
             continue;
@@ -241,7 +279,11 @@ void WindowManager::Update()
 
         if (result == 2)
         {
-            if (!focused) KeyboardOverflow();
+            if (!focused)
+            {
+                KeyboardOverflow();
+            }
+
             if (capture)
             {
                 capture->SetMouse(state.x - capture->GetStartX(), state.y - capture->GetStartY() - 30, state.buttons);
@@ -260,7 +302,11 @@ void WindowManager::Update()
         }
 
         Mouse(state.x, state.y, state.buttons);
-        if (state.wheel) Wheel(state.x, state.y, state.wheel);
+        if (state.wheel)
+        {
+            Wheel(state.x, state.y, state.wheel);
+        }
+
         Display::SharedDisplay()->dirty = true;
     }
 }
@@ -269,7 +315,10 @@ void WindowManager::Draw()
 {
     for (size_t i = 0; i < windows.size(); i++)
     {
-        if (!windows[i]->GetMinimised()) windows[i]->Draw(&drawBuffer);
+        if (!windows[i]->GetMinimised())
+        {
+            windows[i]->Draw(&drawBuffer);
+        }
     }
 
     DrawRestoreBar();
@@ -291,7 +340,10 @@ Window* WindowManager::GetWindow(uint64_t ID)
 {
     for (size_t i = 0; i < windows.size(); i++)
     {
-        if (windows[i]->GetWindowID() == ID) return windows[i];
+        if (windows[i]->GetWindowID() == ID)
+        {
+            return windows[i];
+        }
     }
 
     return nullptr;
@@ -311,12 +363,18 @@ void WindowManager::DestroyWindow(Window* window)
             }
 
             bool wasFocused = focused == window;
-            if (wasFocused) Focus(nullptr);
+            if (wasFocused)
+            {
+                Focus(nullptr);
+            }
 
             windows.erase(i);
             delete window;
 
-            if (wasFocused) FocusTop();
+            if (wasFocused)
+            {
+                FocusTop();
+            }
 
             Display::SharedDisplay()->dirty = true;
             return;
@@ -327,7 +385,10 @@ void WindowManager::DestroyWindow(Window* window)
 void WindowManager::DestroyWindowByID(uint64_t ID)
 {
     auto window = GetWindow(ID);
-    if (window) DestroyWindow(window);
+    if (window)
+    {
+        DestroyWindow(window);
+    }
 }
 
 void WindowManager::FocusTop()
@@ -349,7 +410,10 @@ unsigned WindowManager::MinimizedCount() const
     unsigned count = 0;
     for (size_t i = 0; i < windows.size(); i++)
     {
-        if (windows[i]->GetMinimised()) count++;
+        if (windows[i]->GetMinimised())
+        {
+            count++;
+        }
     }
 
     return count;
@@ -358,10 +422,16 @@ unsigned WindowManager::MinimizedCount() const
 void WindowManager::DrawRestoreBar()
 {
     unsigned count = MinimizedCount();
-    if (!count) return;
+    if (!count)
+    {
+        return;
+    }
 
     unsigned width = drawBuffer.width / count;
-    if (width > 120) width = 120;
+    if (width > 120)
+    {
+        width = 120;
+    }
 
     uint32_t y = drawBuffer.height - restoreBarHeight;
     drawBuffer.DrawRect(0, y, drawBuffer.width, restoreBarHeight, 0xff202020);
@@ -373,7 +443,10 @@ void WindowManager::DrawRestoreBar()
     for (size_t i = 0; i < windows.size(); i++)
     {
         auto window = windows[i];
-        if (!window->GetMinimised()) continue;
+        if (!window->GetMinimised())
+        {
+            continue;
+        }
 
         uint32_t x = index * width;
         drawBuffer.DrawRect(x + 1, y + 2, width - 2, restoreBarHeight - 4, 0xff366b96);
@@ -391,15 +464,25 @@ void WindowManager::DrawRestoreBar()
 
 uint64_t WindowManager::ChangeMode(Window* window, uint64_t operation)
 {
-    if (operation == HACKOS_WINDOW_QUERY) return window->Mode();
-    if (operation > HACKOS_WINDOW_RESTORE) return HACKOS_ERROR;
+    if (operation == HACKOS_WINDOW_QUERY)
+    {
+        return window->Mode();
+    }
+
+    if (operation > HACKOS_WINDOW_RESTORE)
+    {
+        return HACKOS_ERROR;
+    }
 
     uint32_t oldMode = window->Mode();
     bool geometry = false;
 
     if (operation == HACKOS_WINDOW_MAXIMIZE && !window->GetMaximised())
     {
-        if (drawBuffer.width < 98 || drawBuffer.width > 4096 || drawBuffer.height > 2160 || drawBuffer.height < 90) return HACKOS_ERROR;
+        if (drawBuffer.width < 98 || drawBuffer.width > 4096 || drawBuffer.height > 2160 || drawBuffer.height < 90)
+        {
+            return HACKOS_ERROR;
+        }
 
         // Reserve every normal window's maximum size as well as maximized
         // buffers. Later normal resizes cannot overrun this 64 MiB budget.
@@ -415,7 +498,10 @@ uint64_t WindowManager::ChangeMode(Window* window, uint64_t operation)
             }
         }
 
-        if (pixels > 16 * 1024 * 1024) return HACKOS_ERROR;
+        if (pixels > 16 * 1024 * 1024)
+        {
+            return HACKOS_ERROR;
+        }
 
         window->SaveNormalGeometry();
         window->MoveWindow(1, 1);
@@ -441,7 +527,10 @@ uint64_t WindowManager::ChangeMode(Window* window, uint64_t operation)
 
     if (minimize)
     {
-        if (focused == window) FocusTop();
+        if (focused == window)
+        {
+            FocusTop();
+        }
     }
     else
     {
@@ -454,7 +543,10 @@ uint64_t WindowManager::ChangeMode(Window* window, uint64_t operation)
         window->SendEvent(HACKOS_WINDOW_RESIZE);
     }
 
-    if (oldMode != window->Mode()) window->SendEvent(HACKOS_WINDOW_MODE, window->Mode());
+    if (oldMode != window->Mode())
+    {
+        window->SendEvent(HACKOS_WINDOW_MODE, window->Mode());
+    }
 
     Display::SharedDisplay()->dirty = true;
     return window->Mode();
@@ -462,12 +554,26 @@ uint64_t WindowManager::ChangeMode(Window* window, uint64_t operation)
 
 void WindowManager::Wheel(int32_t x, int32_t y, int32_t delta)
 {
-    if (MinimizedCount() && y >= (int32_t)(drawBuffer.height - restoreBarHeight)) return;
-    if (capture && captureMode != 1) return;
+    if (MinimizedCount() && y >= (int32_t)(drawBuffer.height - restoreBarHeight))
+    {
+        return;
+    }
+
+    if (capture && captureMode != 1)
+    {
+        return;
+    }
 
     auto target = capture ? capture : Hit(x, y);
-    if (!target || target->GetMinimised()) return;
-    if (!capture && y < (int32_t)target->GetStartY() + 30) return;
+    if (!target || target->GetMinimised())
+    {
+        return;
+    }
+
+    if (!capture && y < (int32_t)target->GetStartY() + 30)
+    {
+        return;
+    }
 
     target->SetMouse(x - target->GetStartX(), y - target->GetStartY() - 30, previousButtons);
     target->SendEvent(HACKOS_WINDOW_WHEEL, (uint32_t)delta);

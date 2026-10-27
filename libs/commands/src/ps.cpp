@@ -15,7 +15,14 @@ int main(int argc, char** argv)
         Print(info.name);
         Print(" (");
         Number(info.pid);
-        Print(info.state == 0 ? ") ALIVE\n" : info.state == 3 ? ") WAITING\n" : ") ZOMBIE\n");
+        Print(info.state == 0 ? ") ALIVE" : info.state == 3 ? ") WAITING" : ") ZOMBIE");
+        Print(" uid=");
+        Number(info.uid);
+        Print(" gid=");
+        Number(info.gid);
+        Print(" ppid=");
+        Number(info.parentPid);
+        Print("\n");
     }
 
     return 0;

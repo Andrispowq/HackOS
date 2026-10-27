@@ -35,7 +35,7 @@ def package(firmware):
                              ('libs/ring3/bin/ring3', 'USR/BIN/ring3'),
                              ('libs/shell/bin/shell', 'USR/BIN/shell'), ('hello.txt', 'USR/hello.txt')]:
             mtool('mcopy', ROOT / source, '::/' + dest)
-        for name in ('help', 'clear', 'print', 'ps', 'kill', 'ls', 'wd', 'cat', 'read', 'shutdown', 'restart'):
+        for name in ('help', 'clear', 'print', 'ps', 'kill', 'ls', 'wd', 'cat', 'read', 'shutdown', 'restart', 'id', 'whoami', 'users', 'groups', 'useradd', 'groupadd', 'usermod', 'runas'):
             mtool('mcopy', ROOT / 'libs/commands/bin' / name, '::/USR/BIN/' + name)
         image = Path(temporary) / 'HackOS.img'
         if firmware == 'uefi':

@@ -8,13 +8,11 @@
 extern void putchar_at_xy(Framebuffer fb, char character, uint32_t x, uint32_t y);
 
 static const char* window_title = "Untitled Window";
-static const uint32_t navbar_height = 30; 
+static const uint32_t navbar_height = 30;
 
 static uint64_t next_window_ID = 1;
 
-Window::Window()
-    : startX(0), startY(0), sizeX(200), sizeY(200), fullscreen(false),
-    resizable(false)
+Window::Window() : startX(0), startY(0), sizeX(200), sizeY(200), fullscreen(false), resizable(false)
 {
     ID = next_window_ID++;
 
@@ -47,7 +45,10 @@ HackosWindowState Window::State() const
 void Window::SetFocused(bool value)
 {
     focused = value;
-    if (!value) mouseButtons = 0;
+    if (!value)
+    {
+        mouseButtons = 0;
+    }
 
     SendEvent(HACKOS_WINDOW_FOCUS);
 }
@@ -119,7 +120,7 @@ void Window::Draw(Framebuffer* framebuffer)
 
     int index = 0;
     char c = 0;
-    while((c = title[index]) != 0 && 10 + (index + 1) * mainConsole.char_width < sizeX - 78)
+    while ((c = title[index]) != 0 && 10 + (index + 1) * mainConsole.char_width < sizeX - 78)
     {
         putchar_at_xy(*framebuffer, c, (x + index * mainConsole.char_width), y);
         index++;
@@ -143,7 +144,7 @@ void Window::MoveWindow(uint32_t x, uint32_t y)
 
 void Window::ResizeWindow(uint32_t x, uint32_t y)
 {
-    if(y < (navbar_height + 30))
+    if (y < (navbar_height + 30))
     {
         y = navbar_height + 30;
     }
@@ -172,7 +173,7 @@ void Window::SetCursorPosiiton(uint32_t x, uint32_t y)
 
 void Window::SetTitle(const char* title)
 {
-    if(strlen((char*)title) < 30)
+    if (strlen((char*)title) < 30)
     {
         strcpy(this->title, title);
     }

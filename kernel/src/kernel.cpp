@@ -36,6 +36,7 @@ extern "C" int kernel_main(KernelInfo* info)
             auto display = Display::SharedDisplay();
             display->Refresh();
         }
+
         asm volatile("hlt" ::: "memory");
     }
 }

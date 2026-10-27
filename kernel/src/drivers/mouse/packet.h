@@ -4,7 +4,7 @@
 
 class MousePacketDecoder
 {
-public:
+  public:
     void Configure(uint8_t device)
     {
         wheel = device == 3;
@@ -13,10 +13,16 @@ public:
 
     bool Push(uint8_t value)
     {
-        if (!index && (!(value & 8) || value == 0xfa || value == 0xfe)) return false;
+        if (!index && (!(value & 8) || value == 0xfa || value == 0xfe))
+        {
+            return false;
+        }
 
         bytes[index++] = value;
-        if (index != (wheel ? 4 : 3)) return false;
+        if (index != (wheel ? 4 : 3))
+        {
+            return false;
+        }
 
         index = 0;
         return true;
@@ -30,7 +36,7 @@ public:
 
     uint8_t bytes[4] = {};
 
-private:
+  private:
     unsigned index = 0;
     bool wheel = false;
 };

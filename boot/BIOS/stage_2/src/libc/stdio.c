@@ -5,7 +5,7 @@
 
 #include <stdarg.h>
 
-void kprintf(const char* format, ...) 
+void kprintf(const char* format, ...)
 {
     DISPLAY* curr_display = get_current_display();
 
@@ -17,12 +17,15 @@ void kprintf(const char* format, ...)
     va_list arg;
     va_start(arg, format);
 
-    for(traverse = format; *traverse != 0; traverse++)
+    for (traverse = format; *traverse != 0; traverse++)
     {
-        while(*traverse != '%')
+        while (*traverse != '%')
         {
-            if(*traverse == 0)
+            if (*traverse == 0)
+            {
                 goto end;
+            }
+
             curr_display->putc(*traverse);
             traverse++;
         }
@@ -43,9 +46,9 @@ void kprintf(const char* format, ...)
 
         case 'd':
             index = va_arg(arg, int64_t);
-            if(index < 0)
+            if (index < 0)
             {
-                index =  -index;
+                index = -index;
                 curr_display->putc('-');
             }
 
@@ -63,7 +66,7 @@ void kprintf(const char* format, ...)
 
             curr_display->puts(buffer);
             break;
-        
+
         default:
             break;
         }

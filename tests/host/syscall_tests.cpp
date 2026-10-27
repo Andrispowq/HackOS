@@ -1,9 +1,16 @@
 #include "support.hpp"
 #include "hackos/abi.h"
 #include "hackos/syscall_numbers.h"
-static_assert(HACKOS_SYS_exit == 0 && HACKOS_SYS_user_write == 14 &&
-              HACKOS_SYS_input == 15 && HACKOS_SYS_power == 26 &&
-              HACKOS_SYS_yield == 27 && HACKOS_SYS_spawn_args == 28 && HACKOS_SYS_wait == 29 && HACKOS_SYS_spawn_foreground == 30 && HACKOS_SYS_window_create == 31 && HACKOS_SYS_window_close == 34 && HACKOS_SYS_window_state == 35 && HACKOS_SYS_window_event == 36 && HACKOS_SYS_window_mode == 37 && HACKOS_SYS_getcwd == 38 && HACKOS_SYS_chdir == 39 && HACKOS_SYSCALL_COUNT == 40, "User syscall ABI changed");
+static_assert(HACKOS_SYS_exit == 0 && HACKOS_SYS_user_write == 14 && HACKOS_SYS_input == 15 && HACKOS_SYS_power == 26 &&
+                  HACKOS_SYS_yield == 27 && HACKOS_SYS_spawn_args == 28 && HACKOS_SYS_wait == 29 &&
+                  HACKOS_SYS_spawn_foreground == 30 && HACKOS_SYS_window_create == 31 &&
+                  HACKOS_SYS_window_close == 34 && HACKOS_SYS_window_state == 35 && HACKOS_SYS_window_event == 36 &&
+                  HACKOS_SYS_window_mode == 37 && HACKOS_SYS_getcwd == 38 && HACKOS_SYS_chdir == 39 &&
+                  HACKOS_SYS_identity == 40 && HACKOS_SYS_user_info == 41 && HACKOS_SYS_group_info == 42 &&
+                  HACKOS_SYS_user_create == 43 && HACKOS_SYS_group_create == 44 && HACKOS_SYS_user_add_group == 45 &&
+                  HACKOS_SYS_spawn_as == 46 && HACKOS_SYSCALL_COUNT == 47,
+              "User syscall ABI changed");
+
 TEST(syscall_record_layout)
 {
     CHECK(sizeof(HackosClock) == 16);
@@ -12,8 +19,11 @@ TEST(syscall_record_layout)
     CHECK(sizeof(HackosWindowState) == 32);
     CHECK(sizeof(HackosWindowEvent) == 32);
     CHECK(__builtin_offsetof(HackosWindowSpec, title) == 16);
-    CHECK(sizeof(HackosFileInfo) == 272 && sizeof(HackosProcessInfo) == 272);
+    CHECK(sizeof(HackosFileInfo) == 272 && sizeof(HackosProcessInfo) == 288);
     CHECK(__builtin_offsetof(HackosFileInfo, name) == 16);
     CHECK(__builtin_offsetof(HackosProcessInfo, name) == 16);
+    CHECK(__builtin_offsetof(HackosProcessInfo, uid) == 272);
+    CHECK(__builtin_offsetof(HackosProcessInfo, parentPid) == 280);
+    CHECK(sizeof(HackosCredentials) == 48 && sizeof(HackosUserInfo) == 80 && sizeof(HackosGroupInfo) == 40);
     return 0;
 }

@@ -26,22 +26,31 @@ void InitialiseRSDP(struct KernelInfo* info)
 {
     ACPI::RSDP* rsdp = (ACPI::RSDP*)info->rsdp;
 
-    if(!rsdp->is_valid())
+    if (!rsdp->is_valid())
     {
         kprintf("ERROR: RSDP not valid!\n");
-        while(true) asm("hlt");
+        while (true)
+        {
+            asm("hlt");
+        }
     }
 
     kprintf("RSDP information: \n");
     kprintf("\tLocation: 0x%x\n", rsdp);
     kprintf("\tSigniture: ");
-    for(uint64_t i = 0; i < 8; i++)
+    for (uint64_t i = 0; i < 8; i++)
+    {
         kprintf("%c", rsdp->Signature[i]);
+    }
+
     kprintf("\n");
     kprintf("\tChecksum: %d\n", rsdp->Checksum);
     kprintf("\tOEMID: ");
-    for(uint64_t i = 0; i < 6; i++)
+    for (uint64_t i = 0; i < 6; i++)
+    {
         kprintf("%c", rsdp->OEMID[i]);
+    }
+
     kprintf("\n");
     kprintf("\tRevision: %d\n", rsdp->Revision);
     kprintf("\tRSDT Address: 0x%x\n", rsdp->RSDTAddress);
@@ -62,6 +71,7 @@ void InitialiseRSDP(struct KernelInfo* info)
         {
             kprintf("%c", newSDTHeader->Signature[i]);
         }
+
         kprintf(" ");
     }
 
@@ -76,13 +86,13 @@ void InitialiseRSDP(struct KernelInfo* info)
     ACPI::FADT* fadt = (ACPI::FADT*)rsdp->GetSystemTable("FACP");
     kprintf("\tFADT Table: 0x%x\n\n", fadt);
 
-    if(fadt)
+    if (fadt)
     {
         fadt->ACPIEnable();
     }
 
     kprintf("FADT contents: \n");
-    if(fadt)
+    if (fadt)
     {
         kprintf("\tCentury register: %x\n", fadt->GetFADT().Century);
         kprintf("\tFirmware control: 0x%x\n", fadt->GetFADT().FirmwareCtrl);
@@ -103,23 +113,23 @@ void InitialiseRSDP(struct KernelInfo* info)
     double totalSystemMemory = usedMemoryMegabytes + freeMemoryMegabytes + reservedMemoryMegabytes;
 
     kprintf("Memory info: \n");
-    kprintf("\tUsed memory: 0x%x bytes, 0x%x kilobytes, %f megabytes, %f gigabytes.\n", usedMemory,
-        usedMemory / 1024, usedMemoryMegabytes, usedMemoryGigabytes);
-    kprintf("\tFree memory: 0x%x bytes, 0x%x kilobytes, %f megabytes, %f gigabytes.\n", freeMemory,
-        freeMemory / 1024, freeMemoryMegabytes, freeMemoryGigabytes);
+    kprintf("\tUsed memory: 0x%x bytes, 0x%x kilobytes, %f megabytes, %f gigabytes.\n", usedMemory, usedMemory / 1024,
+            usedMemoryMegabytes, usedMemoryGigabytes);
+    kprintf("\tFree memory: 0x%x bytes, 0x%x kilobytes, %f megabytes, %f gigabytes.\n", freeMemory, freeMemory / 1024,
+            freeMemoryMegabytes, freeMemoryGigabytes);
     kprintf("\tReserved memory: 0x%x bytes, 0x%x kilobytes, %f megabytes, %f gigabytes.\n", reservedMemory,
-        reservedMemory / 1024, reservedMemoryMegabytes, reservedMemoryGigabytes);
+            reservedMemory / 1024, reservedMemoryMegabytes, reservedMemoryGigabytes);
 
     kprintf("\tTotal system memory: %f megabytes.\n\n", totalSystemMemory);
 
-    if(mcfg != nullptr)
+    if (mcfg != nullptr)
     {
         kprintf("Enumerating the PCI:\n");
         PCI::EnumeratePCI((ACPI::MCFGHeader*)mcfg);
         kprintf("\n");
     }
 
-    if(apic != nullptr)
+    if (apic != nullptr)
     {
         ACPI::MADT* madt = (ACPI::MADT*)apic;
         madt->DetectCores();
@@ -127,6 +137,7 @@ void InitialiseRSDP(struct KernelInfo* info)
 }
 
 MemoryMap* map = nullptr;
+
 void InitialiseDisplay(KernelInfo* info)
 {
     fromUEFI = 1 - info->booted_from_BIOS;
@@ -137,7 +148,7 @@ void InitialiseDisplay(KernelInfo* info)
 
     InitialiseIDT();
     InitPaging(map);
-    
+
     InitialiseDisplay(info->framebuffer, info->font);
     clrscr();
 
@@ -165,6 +176,9 @@ void InitialiseKernel(struct KernelInfo* info)
 
     InitialiseTasking();
     if (!LoadUserProgramTask("~/USR/BIN/SHELL", true))
+    {
         kprintf("BOOT ERROR: cannot start ring-3 shell.\n");
+    }
+
     InitialiseIRQ();
 }

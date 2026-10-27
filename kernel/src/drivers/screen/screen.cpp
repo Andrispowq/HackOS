@@ -13,9 +13,10 @@
 Display* Display::s_Display = nullptr;
 
 Display display;
+
 Display* Display::SharedDisplay()
 {
-    if(s_Display == nullptr)
+    if (s_Display == nullptr)
     {
         s_Display = &display;
     }
@@ -24,20 +25,24 @@ Display* Display::SharedDisplay()
 }
 
 extern PageTableManager KernelDirectory;
+
 void InitialiseDisplay(Framebuffer framebuffer, PSF1_FONT* font)
 {
     uint64_t fb_addr = (uint64_t)framebuffer.address;
     uint64_t fb_size = (uint64_t)framebuffer.pitch * framebuffer.height * 4;
-    for(uint64_t i = fb_addr; i < fb_addr + fb_size + 0x1000; i += 0x1000)
+    for (uint64_t i = fb_addr; i < fb_addr + fb_size + 0x1000; i += 0x1000)
     {
-        KernelDirectory.MapMemory(i, i, (uint64_t)PageTableFlags::Present | (uint64_t)PageTableFlags::Writable | (uint64_t)PageTableFlags::CacheDisabled | (uint64_t)PageTableFlags::WriteThrough);
+        KernelDirectory.MapMemory(i, i,
+                                  (uint64_t)PageTableFlags::Present | (uint64_t)PageTableFlags::Writable |
+                                      (uint64_t)PageTableFlags::CacheDisabled | (uint64_t)PageTableFlags::WriteThrough);
     }
 
     uint64_t backbufferMemory = 0xD0000000;
-    for(uint64_t i = backbufferMemory; i < backbufferMemory + fb_size + 0x1000; i += 0x1000)
+    for (uint64_t i = backbufferMemory; i < backbufferMemory + fb_size + 0x1000; i += 0x1000)
     {
         KernelDirectory.MapMemory(i, (uint64_t)PageFrameAllocator::SharedAllocator()->RequestPage());
     }
+
     memset((void*)backbufferMemory, 0, fb_size);
 
     Framebuffer backbuffer;
@@ -55,10 +60,8 @@ void InitialiseDisplay(Framebuffer framebuffer, PSF1_FONT* font)
     display.console.current_y = 0;
     display.console.char_width = 8;
     display.console.char_height = 16;
-    display.console.con_width = display.framebuffer.width / 
-            display.console.char_width;
-    display.console.con_height = display.framebuffer.height / 
-            display.console.char_height;
+    display.console.con_width = display.framebuffer.width / display.console.char_width;
+    display.console.con_height = display.framebuffer.height / display.console.char_height;
     display.font = font;
 }
 
@@ -69,7 +72,7 @@ void clrscr()
     display.console.current_y = 0;
 }
 
-void printf_backspace() 
+void printf_backspace()
 {
     display.put_backspace();
 }
@@ -115,7 +118,7 @@ int Display::puts(const char* str)
 {
     char c;
     int i = 0;
-    while((c = str[i++]) != 0)
+    while ((c = str[i++]) != 0)
     {
         putc(c);
     }
@@ -127,7 +130,7 @@ void putchar_at_xy(Framebuffer fb, char character, uint32_t x, uint32_t y)
 {
     uint32_t* addr = fb.address;
     uint32_t pitch = fb.pitch;
-    
+
     uint32_t charWidth = display.console.char_width;
     uint32_t charHeight = display.console.char_height;
 
@@ -142,7 +145,6 @@ void putchar_at_xy(Framebuffer fb, char character, uint32_t x, uint32_t y)
             {
                 addr[_y * pitch + _x] = display.console.fontColour;
             }
-
         }
 
         fontPtr++;
@@ -153,7 +155,7 @@ void putchar_at(Framebuffer fb, char character, uint32_t xOff, uint32_t yOff)
 {
     uint32_t* addr = fb.address;
     uint32_t pitch = fb.pitch;
-    
+
     uint32_t charWidth = display.console.char_width;
     uint32_t charHeight = display.console.char_height;
 
@@ -178,7 +180,7 @@ void empty_char_at(Framebuffer fb, uint32_t xOff, uint32_t yOff)
 {
     uint32_t* addr = fb.address;
     uint32_t pitch = fb.pitch;
-    
+
     uint32_t charWidth = display.console.char_width;
     uint32_t charHeight = display.console.char_height;
 
@@ -196,10 +198,18 @@ void empty_char_at(Framebuffer fb, uint32_t xOff, uint32_t yOff)
 void scroll_up(Framebuffer fb)
 {
     const uint32_t rows = display.console.char_height;
-    if (rows >= fb.height) { fb.Clear(display.console.bgColour); return; }
+    if (rows >= fb.height)
+    {
+        fb.Clear(display.console.bgColour);
+        return;
+    }
+
     for (uint32_t y = 0; y < fb.height - rows; ++y)
-        memcpy(fb.address + (uint64_t)y * fb.pitch,
-               fb.address + (uint64_t)(y + rows) * fb.pitch, fb.width * sizeof(uint32_t));
+    {
+        memcpy(fb.address + (uint64_t)y * fb.pitch, fb.address + (uint64_t)(y + rows) * fb.pitch,
+               fb.width * sizeof(uint32_t));
+    }
+
     fb.DrawRect(0, fb.height - rows, fb.width, rows, display.console.bgColour);
 }
 
@@ -208,31 +218,66 @@ int Display::putc(char ch)
     PreemptionGuard guard;
     dirty = true;
     // QEMU's optional debug console mirrors text independently of the framebuffer.
-    asm volatile("outb %0, $0xe9" :: "a"((uint8_t)ch));
+    asm volatile("outb %0, $0xe9" ::"a"((uint8_t)ch));
     uint32_t& x = console.current_x;
     uint32_t& y = console.current_y;
     uint32_t width = console.con_width, height = console.con_height;
-    if (!width || !height) return 0;
-    if (ch == '\n') { x = 0; ++y; }
-    else if (ch == '\r') x = 0;
+    if (!width || !height)
+    {
+        return 0;
+    }
+
+    if (ch == '\n')
+    {
+        x = 0;
+        ++y;
+    }
+    else if (ch == '\r')
+    {
+        x = 0;
+    }
     else if (ch == '\b')
     {
-        if (x) --x;
-        else if (y) { --y; x = width - 1; }
-        else return 0;
+        if (x)
+        {
+            --x;
+        }
+        else if (y)
+        {
+            --y;
+            x = width - 1;
+        }
+        else
+        {
+            return 0;
+        }
+
         empty_char_at(backbuffer, x, y);
     }
     else if (ch == '\t')
     {
-        do { putc(' '); } while (console.current_x % 4);
+        do
+        {
+            putc(' ');
+        } while (console.current_x % 4);
         return 0;
     }
     else
     {
         empty_char_at(backbuffer, x, y);
         putchar_at(backbuffer, ch, x, y);
-        if (++x == width) { x = 0; ++y; }
+        if (++x == width)
+        {
+            x = 0;
+            ++y;
+        }
     }
-    if (y >= height) { scroll_up(backbuffer); y = height - 1; }
+
+    if (y >= height)
+    {
+        scroll_up(backbuffer);
+        y = height - 1;
+    }
+
     return 0;
 }

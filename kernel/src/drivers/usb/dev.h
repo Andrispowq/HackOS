@@ -2,12 +2,12 @@
 #define DEV_H
 
 // USB Limits
-#define USB_STRING_SIZE                 127
+#define USB_STRING_SIZE 127
 
 // USB Speeds
-#define USB_FULL_SPEED                  0x00
-#define USB_LOW_SPEED                   0x01
-#define USB_HIGH_SPEED                  0x02
+#define USB_FULL_SPEED 0x00
+#define USB_LOW_SPEED 0x01
+#define USB_HIGH_SPEED 0x02
 
 #include "req.h"
 #include "desc.h"
@@ -22,8 +22,8 @@ typedef struct USBEndpoint
 // USB Transfer
 typedef struct USBTransfer
 {
-    USBEndpoint *endp;
-    USBDevReq *req;
+    USBEndpoint* endp;
+    USBDevReq* req;
     void* data;
     uint32_t len;
     bool complete;
@@ -32,13 +32,13 @@ typedef struct USBTransfer
 
 class USBDevice
 {
-public:
+  public:
     void hcControl(USBTransfer* t);
     void hcIntr(USBTransfer* t);
 
     void drvPoll();
 
-public:
+  public:
     USBDevice* parent;
     USBDevice* next;
     void* hc;

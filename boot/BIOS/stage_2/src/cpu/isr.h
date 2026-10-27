@@ -72,11 +72,11 @@ extern void irq15();
 #define IRQ14 46
 #define IRQ15 47
 
-#define IDT_TA_InterruptGate    0b10001110
-#define IDT_TA_CallGate         0b10001100
-#define IDT_TA_TrapGate         0b10001111
+#define IDT_TA_InterruptGate 0b10001110
+#define IDT_TA_CallGate 0b10001100
+#define IDT_TA_TrapGate 0b10001111
 
-typedef struct 
+typedef struct
 {
     uint64_t rax, rcx, rdx, rbx, useless, rbp, rsi, rdi;
     uint64_t r8, r9, r10, r11, r12, r13, r14, r15;

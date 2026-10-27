@@ -19,7 +19,7 @@ DISPLAY* get_current_display()
 
 void init_display(struct FramebufferInfo* fb, PSF1_FONT* font)
 {
-    curr_display = (DISPLAY*) kmalloc(sizeof(DISPLAY));
+    curr_display = (DISPLAY*)kmalloc(sizeof(DISPLAY));
 
     curr_display->framebuffer = PrepareFramebuffer(fb);
     curr_display->console.fontColour = 0xFFFFFFFF;
@@ -28,10 +28,8 @@ void init_display(struct FramebufferInfo* fb, PSF1_FONT* font)
     curr_display->console.current_y = 0;
     curr_display->console.char_width = 8;
     curr_display->console.char_height = 16;
-    curr_display->console.con_width = curr_display->framebuffer.width / 
-            curr_display->console.char_width;
-    curr_display->console.con_height = curr_display->framebuffer.height / 
-            curr_display->console.char_height;
+    curr_display->console.con_width = curr_display->framebuffer.width / curr_display->console.char_width;
+    curr_display->console.con_height = curr_display->framebuffer.height / curr_display->console.char_height;
     curr_display->font = font;
     curr_display->puts = put_string;
     curr_display->putc = put_char;
@@ -44,7 +42,7 @@ void clrscr()
     curr_display->clear();
 }
 
-void printf_backspace() 
+void printf_backspace()
 {
     curr_display->put_backspace();
 }
@@ -57,8 +55,12 @@ void clear_screen()
 {
     FRAMEBUFFER* fb = &curr_display->framebuffer;
     for (uint32_t y = 0; y < fb->height; ++y)
+    {
         for (uint32_t x = 0; x < fb->width; ++x)
+        {
             fb->address[(uint64_t)y * fb->pitch + x] = curr_display->console.bgColour;
+        }
+    }
 }
 
 void put_backspace()
@@ -70,7 +72,7 @@ int put_string(const char* str)
 {
     char c;
     int i = 0;
-    while((c = str[i++]) != 0)
+    while ((c = str[i++]) != 0)
     {
         put_char(c);
     }
@@ -82,7 +84,7 @@ void putchar_at(char character, uint32_t xOff, uint32_t yOff)
 {
     uint32_t* addr = curr_display->framebuffer.address;
     uint32_t pitch = curr_display->framebuffer.pitch;
-    
+
     uint32_t charWidth = curr_display->console.char_width;
     uint32_t charHeight = curr_display->console.char_height;
 
@@ -97,7 +99,6 @@ void putchar_at(char character, uint32_t xOff, uint32_t yOff)
             {
                 addr[y * pitch + x] = curr_display->console.fontColour;
             }
-
         }
 
         fontPtr++;
@@ -108,7 +109,7 @@ void empty_char_at(uint32_t xOff, uint32_t yOff)
 {
     uint32_t* addr = curr_display->framebuffer.address;
     uint32_t pitch = curr_display->framebuffer.pitch;
-    
+
     uint32_t charWidth = curr_display->console.char_width;
     uint32_t charHeight = curr_display->console.char_height;
 
@@ -119,12 +120,11 @@ void empty_char_at(uint32_t xOff, uint32_t yOff)
         for (uint32_t x = xOff * charWidth; x < (xOff * charWidth + charWidth); x++)
         {
             addr[y * pitch + x] = curr_display->console.bgColour;
-
         }
     }
 }
 
-int put_char(char ch) 
+int put_char(char ch)
 {
     int xOff = 0;
     int yOff = 0;
@@ -137,16 +137,16 @@ int put_char(char ch)
     uint32_t width = curr_display->console.con_width;
     uint32_t height = curr_display->console.con_height;
 
-    if(ch == '\n')
+    if (ch == '\n')
     {
         new_x = 0;
         yOff = 1;
     }
-    else if(ch == '\r')
+    else if (ch == '\r')
     {
         new_x = 0;
     }
-    else if(ch == '\t')
+    else if (ch == '\t')
     {
         xOff = 4;
     }
@@ -161,32 +161,34 @@ int put_char(char ch)
         to_put = 1;
     }
 
-    if(to_put == 1)
+    if (to_put == 1)
     {
         putchar_at(ch, x, y);
     }
 
-    if(new_x != -1)
+    if (new_x != -1)
     {
         x = new_x;
     }
-    if(new_y != -1)
+
+    if (new_y != -1)
     {
         y = new_y;
     }
-    
-    if(xOff != 0)
+
+    if (xOff != 0)
     {
         x += xOff;
-        if(x >= width)
+        if (x >= width)
         {
             x = (width - x);
         }
     }
-    if(yOff != 0)
+
+    if (yOff != 0)
     {
         y += yOff;
-        if(y >= height)
+        if (y >= height)
         {
             y = (height - y);
         }
@@ -195,7 +197,7 @@ int put_char(char ch)
     curr_display->console.current_x = x;
     curr_display->console.current_y = y;
 
-    if(to_put == 2)
+    if (to_put == 2)
     {
         empty_char_at(x, y);
     }
@@ -209,12 +211,23 @@ void scroll_up()
     FRAMEBUFFER fb = curr_display->framebuffer;
 
     uint32_t rows = con.char_height;
-    if (rows >= fb.height) { clear_screen(); return; }
+    if (rows >= fb.height)
+    {
+        clear_screen();
+        return;
+    }
+
     for (uint32_t y = 0; y < fb.height - rows; ++y)
-        memcpy(fb.address + (uint64_t)y * fb.pitch,
-               fb.address + (uint64_t)(y + rows) * fb.pitch,
+    {
+        memcpy(fb.address + (uint64_t)y * fb.pitch, fb.address + (uint64_t)(y + rows) * fb.pitch,
                fb.width * sizeof(uint32_t));
+    }
+
     for (uint32_t y = fb.height - rows; y < fb.height; ++y)
+    {
         for (uint32_t x = 0; x < fb.width; ++x)
+        {
             fb.address[(uint64_t)y * fb.pitch + x] = con.bgColour;
+        }
+    }
 }

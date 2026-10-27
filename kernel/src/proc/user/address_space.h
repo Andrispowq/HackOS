@@ -13,8 +13,11 @@ extern bool user_nx_enabled;
 
 class UserAddressSpace
 {
-public:
-    UserAddressSpace() : directory(nullptr), leaf(nullptr), ownedCount(0) {}
+  public:
+    UserAddressSpace() : directory(nullptr), leaf(nullptr), ownedCount(0)
+    {
+    }
+
     ~UserAddressSpace();
     bool Initialise();
     void* AddPage(uint64_t address, bool writable, bool executable);
@@ -23,7 +26,8 @@ public:
     bool CopyToUser(uint64_t destination, const void* source, uint64_t length) const;
     bool CopyString(char* destination, uint64_t source, uint64_t capacity) const;
     PageTableManager directory;
-private:
+
+  private:
     void* AllocatePage();
     PageTable* leaf;
     void* owned[USER_MAX_PAGES + 4];

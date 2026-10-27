@@ -14,24 +14,11 @@
 #include "lib/function.h"
 #include "lib/stdio.h"
 
-uint8_t MousePointer[] = 
-{
-    0b11111111, 0b11100000, 
-    0b11111111, 0b10000000, 
-    0b11111110, 0b00000000, 
-    0b11111100, 0b00000000, 
-    0b11111000, 0b00000000, 
-    0b11110000, 0b00000000, 
-    0b11100000, 0b00000000, 
-    0b11000000, 0b00000000, 
-    0b11000000, 0b00000000, 
-    0b10000000, 0b00000000, 
-    0b10000000, 0b00000000, 
-    0b00000000, 0b00000000, 
-    0b00000000, 0b00000000, 
-    0b00000000, 0b00000000, 
-    0b00000000, 0b00000000, 
-    0b00000000, 0b00000000, 
+uint8_t MousePointer[] = {
+    0b11111111, 0b11100000, 0b11111111, 0b10000000, 0b11111110, 0b00000000, 0b11111100, 0b00000000,
+    0b11111000, 0b00000000, 0b11110000, 0b00000000, 0b11100000, 0b00000000, 0b11000000, 0b00000000,
+    0b11000000, 0b00000000, 0b10000000, 0b00000000, 0b10000000, 0b00000000, 0b00000000, 0b00000000,
+    0b00000000, 0b00000000, 0b00000000, 0b00000000, 0b00000000, 0b00000000, 0b00000000, 0b00000000,
 };
 
 void MouseWait()
@@ -98,7 +85,7 @@ static void ProcessMousePacket()
         {
             MousePositionX += 255;
         }
-    } 
+    }
     else
     {
         MousePacket[1] = 256 - MousePacket[1];
@@ -118,7 +105,8 @@ static void ProcessMousePacket()
         {
             MousePositionY -= 255;
         }
-    } else
+    }
+    else
     {
         MousePacket[2] = 256 - MousePacket[2];
         MousePositionY += MousePacket[2];
@@ -129,12 +117,26 @@ static void ProcessMousePacket()
         }
     }
 
-    if (MousePositionX < 0) MousePositionX = 0;
-    if (MousePositionX > Width - 1) MousePositionX = Width - 1;
-    
-    if (MousePositionY < 0) MousePositionY = 0;
-    if (MousePositionY > Height - 1) MousePositionY = Height - 1;
-    
+    if (MousePositionX < 0)
+    {
+        MousePositionX = 0;
+    }
+
+    if (MousePositionX > Width - 1)
+    {
+        MousePositionX = Width - 1;
+    }
+
+    if (MousePositionY < 0)
+    {
+        MousePositionY = 0;
+    }
+
+    if (MousePositionY > Height - 1)
+    {
+        MousePositionY = Height - 1;
+    }
+
     if (MousePacket[0] & PS2LeftButton)
     {
         buttons |= 0x1 << 0;
@@ -167,7 +169,10 @@ static void ProcessMousePacket()
 
 static void mouse_callback(Registers*)
 {
-    if (decoder.Push(__inb(0x60))) ProcessMousePacket();
+    if (decoder.Push(__inb(0x60)))
+    {
+        ProcessMousePacket();
+    }
 }
 
 static bool MouseReply(uint8_t& value)
@@ -191,15 +196,26 @@ static bool MouseCommand(uint8_t value)
     {
         MouseWrite(value);
         uint8_t reply;
-        if (!MouseReply(reply)) return false;
-        if (reply == 0xfa) return true;
-        if (reply != 0xfe) return false;
+        if (!MouseReply(reply))
+        {
+            return false;
+        }
+
+        if (reply == 0xfa)
+        {
+            return true;
+        }
+
+        if (reply != 0xfe)
+        {
+            return false;
+        }
     }
 
     return false;
 }
 
-void InitialiseMouse(uint32_t width, uint32_t height) 
+void InitialiseMouse(uint32_t width, uint32_t height)
 {
     Width = width;
     Height = height;
@@ -266,7 +282,7 @@ double GetMouseY()
 
 uint8_t GetMouseButton(uint8_t index)
 {
-    if(index >= 3)
+    if (index >= 3)
     {
         return 0;
     }
@@ -285,7 +301,11 @@ unsigned ReadMouse(MouseState& state)
 
     if (mouseEvents.Pop(state))
     {
-        if (state.key == HACKOS_KEY_INTERRUPT) interruptPending = false;
+        if (state.key == HACKOS_KEY_INTERRUPT)
+        {
+            interruptPending = false;
+        }
+
         return 1;
     }
 
@@ -310,7 +330,10 @@ void DrawMouse()
 void QueueKey(uint32_t key)
 {
     InterruptGuard guard;
-    if (key == HACKOS_KEY_INTERRUPT) interruptPending = true;
+    if (key == HACKOS_KEY_INTERRUPT)
+    {
+        interruptPending = true;
+    }
 
     mouseEvents.Push({0, 0, 0, key, 0});
 }
@@ -323,7 +346,10 @@ void DiscardQueuedKeys()
     for (unsigned i = 0; i < count; i++)
     {
         mouseEvents.Pop(state);
-        if (!state.key) mouseEvents.Push(state);
+        if (!state.key)
+        {
+            mouseEvents.Push(state);
+        }
     }
 
     interruptPending = false;

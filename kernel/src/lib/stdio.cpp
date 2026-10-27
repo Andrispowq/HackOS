@@ -8,14 +8,18 @@
 
 char doubleTo_StringOutput[128];
 char intBuffer[120];
+
 const char* string_from_double(double value, uint8_t decimalPlaces)
 {
-    if (decimalPlaces > 20) decimalPlaces = 20;
+    if (decimalPlaces > 20)
+    {
+        decimalPlaces = 20;
+    }
 
     char* intBuff = intBuffer;
 
     int64_t intVal = value;
-    if(intVal < 0)
+    if (intVal < 0)
     {
         intBuff[0] = '-';
         itoa((uint8_t*)(intBuff + 1), 'd', (uint64_t)(-(int64_t)value));
@@ -32,7 +36,7 @@ const char* string_from_double(double value, uint8_t decimalPlaces)
         value *= -1;
     }
 
-    while(*intBuff != 0)
+    while (*intBuff != 0)
     {
         *doublePtr = *intBuff;
         intBuff++;
@@ -44,7 +48,8 @@ const char* string_from_double(double value, uint8_t decimalPlaces)
 
     double newValue = value - (int)value;
 
-    for (uint8_t i = 0; i < decimalPlaces; i++){
+    for (uint8_t i = 0; i < decimalPlaces; i++)
+    {
         newValue *= 10;
         *doublePtr = (int)newValue + '0';
         newValue -= (int)newValue;
@@ -66,12 +71,15 @@ void kprintf_vargs(const char* format, va_list args)
     uint64_t index;
     double d_index;
 
-    for(traverse = format; *traverse != 0; traverse++)
+    for (traverse = format; *traverse != 0; traverse++)
     {
-        while(*traverse != '%')
+        while (*traverse != '%')
         {
-            if(*traverse == 0)
+            if (*traverse == 0)
+            {
                 goto end;
+            }
+
             curr_display->putc(*traverse);
             traverse++;
         }
@@ -92,9 +100,9 @@ void kprintf_vargs(const char* format, va_list args)
 
         case 'd':
             index = va_arg(args, int64_t);
-            if(index < 0)
+            if (index < 0)
             {
-                index =  -index;
+                index = -index;
                 curr_display->putc('-');
             }
 
@@ -118,7 +126,7 @@ void kprintf_vargs(const char* format, va_list args)
 
             curr_display->puts(string_from_double(d_index, 8));
             break;
-        
+
         default:
             break;
         }
@@ -128,7 +136,7 @@ end:
     return;
 }
 
-void kprintf(const char* format, ...) 
+void kprintf(const char* format, ...)
 {
     Display* curr_display = Display::SharedDisplay();
 
@@ -141,12 +149,15 @@ void kprintf(const char* format, ...)
     va_list arg;
     va_start(arg, format);
 
-    for(traverse = format; *traverse != 0; traverse++)
+    for (traverse = format; *traverse != 0; traverse++)
     {
-        while(*traverse != '%')
+        while (*traverse != '%')
         {
-            if(*traverse == 0)
+            if (*traverse == 0)
+            {
                 goto end;
+            }
+
             curr_display->putc(*traverse);
             traverse++;
         }
@@ -167,9 +178,9 @@ void kprintf(const char* format, ...)
 
         case 'd':
             index = va_arg(arg, int64_t);
-            if(index < 0)
+            if (index < 0)
             {
-                index =  -index;
+                index = -index;
                 curr_display->putc('-');
             }
 
@@ -193,7 +204,7 @@ void kprintf(const char* format, ...)
 
             curr_display->puts(string_from_double(d_index, 8));
             break;
-        
+
         default:
             break;
         }

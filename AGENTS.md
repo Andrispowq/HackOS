@@ -21,8 +21,10 @@ supervisor-only kernel mappings. Both `./` and `user` launch ring-3 programs wit
 foreground waits by default; a separate trailing `&` requests background mode.
 Exit results belong to the parent independently of idle resource reclamation.
 All active syscalls are user interfaces; kernel code calls internal functions
-directly. The boot shell grants input/backspace to its foreground child; only the
-shell retains foreground-spawn, kill and power rights. Ctrl-C is deferred from
+directly. Terminal owners can delegate foreground input and receive it back on child exit.
+Processes inherit UID/GID/group credentials; UID 0 alone grants power and account
+administration, and kill requires the same owner UID or root. The boot shell
+still starts as root; accounts are boot-session only, with login/setup deferred. Ctrl-C is deferred from
 IRQ context to a safe scheduler point. Shell history is a static 256-command ring.
 Userspace windows use process-owned handles and bounded pixel uploads; idle
 reclaims them on exit and composites them over the console. `USR/BIN/WINDOW`

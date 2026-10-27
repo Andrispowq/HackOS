@@ -12,6 +12,7 @@ extern bool fromUEFI;
 
 extern IDTR idtr;
 bool user_nx_enabled;
+
 static void ConfigurePageProtection()
 {
     uint32_t a, b, c, d;
@@ -21,9 +22,14 @@ static void ConfigurePageProtection()
         asm volatile("cpuid" : "=a"(a), "=b"(b), "=c"(c), "=d"(d) : "a"(0x80000001U), "c"(0));
         user_nx_enabled = d & (1U << 20);
     }
+
     asm volatile("rdmsr" : "=a"(a), "=d"(d) : "c"(0xc0000080U));
     a &= ~1U; // EFER.SCE=0: user SYSCALL must #UD, never jump to an unset LSTAR.
-    if (user_nx_enabled) a |= 1U << 11;
+    if (user_nx_enabled)
+    {
+        a |= 1U << 11;
+    }
+
     asm volatile("wrmsr" : : "a"(a), "d"(d), "c"(0xc0000080U) : "memory");
     uint64_t cr0;
     asm volatile("mov %%cr0, %0" : "=r"(cr0));
@@ -43,19 +49,36 @@ void InitPaging(MemoryMap* memMap)
 
     // Keep the low boot handoff/BIOS area, then map actual regions instead of a sum of lengths.
     for (uint64_t address = 0; address < 0x100000; address += 4096)
+    {
         KernelDirectory.MapMemory(address, address);
-    for (uint64_t i = 0; i < memMap->GetEntryCount(); ++i) {
+    }
+
+    for (uint64_t i = 0; i < memMap->GetEntryCount(); ++i)
+    {
         auto entry = memMap->GetEntry(i);
-        if (!entry->size || entry->size > ~0ULL - entry->address) continue;
-        if (fromUEFI ? (entry->type == 0 || entry->type == 8 || entry->type >= 11) :
-            (entry->type == 2 && entry->address >= 0x100000000ULL)) continue;
+        if (!entry->size || entry->size > ~0ULL - entry->address)
+        {
+            continue;
+        }
+
+        if (fromUEFI ? (entry->type == 0 || entry->type == 8 || entry->type >= 11)
+                     : (entry->type == 2 && entry->address >= 0x100000000ULL))
+        {
+            continue;
+        }
+
         uint64_t first = entry->address & ~4095ULL;
         uint64_t last = (entry->address + entry->size - 1) & ~4095ULL;
-        for (uint64_t address = first;; address += 4096) {
+        for (uint64_t address = first;; address += 4096)
+        {
             KernelDirectory.MapMemory(address, address);
-            if (address == last) break;
+            if (address == last)
+            {
+                break;
+            }
         }
     }
+
     RegisterInterruptHandler(14, PageFaultHandler);
 
     KernelDirectory.SetAsCurrent();
@@ -64,7 +87,7 @@ void InitPaging(MemoryMap* memMap)
 void PageFaultHandler(Registers* regs)
 {
     uint64_t cr2;
-    asm volatile("mov %%cr2, %0" : "=r" (cr2));
+    asm volatile("mov %%cr2, %0" : "=r"(cr2));
 
     uint32_t flags = regs->err_code;
 
@@ -76,8 +99,8 @@ void PageFaultHandler(Registers* regs)
 
     kprintf("\n\n\n---------------------------------------------");
 
-    kprintf("\n\n\nPAGE FAULT: at virtual address %x, physical address %x, RIP: %x\n", 
-        cr2, CurrentDirectory->PhysicalAddress(cr2) + cr2 & 0xFFF, flags, regs->rip);
+    kprintf("\n\n\nPAGE FAULT: at virtual address %x, physical address %x, RIP: %x\n", cr2,
+            CurrentDirectory->PhysicalAddress(cr2) + cr2 & 0xFFF, flags, regs->rip);
 
     kprintf("Flags:\n");
     kprintf("Present: %s\n", (present > 0) ? "true" : "false");
@@ -88,5 +111,8 @@ void PageFaultHandler(Registers* regs)
 
     kprintf("\n\n\n---------------------------------------------\n\n\n");
 
-    while(1) asm("hlt");
+    while (1)
+    {
+        asm("hlt");
+    }
 }

@@ -28,13 +28,19 @@ void ClearKeyboard(bool queued)
     decoder.Clear();
     terminalInput.Clear();
 
-    if (queued) DiscardQueuedKeys();
+    if (queued)
+    {
+        DiscardQueuedKeys();
+    }
 }
 
 void DeliverKeyboard(uint32_t key)
 {
     InterruptGuard guard;
-    if (key == 3) terminalInput.Clear();
+    if (key == 3)
+    {
+        terminalInput.Clear();
+    }
 
     terminalInput.Push((char)key);
 }
@@ -53,7 +59,10 @@ void InitKeyboard()
 KeyboardRead ReadKeyboard(char& ch)
 {
     InterruptGuard guard;
-    if (terminalInput.TakeOverflow()) return KeyboardRead::Overflow;
+    if (terminalInput.TakeOverflow())
+    {
+        return KeyboardRead::Overflow;
+    }
 
     return terminalInput.Pop(ch) ? KeyboardRead::Character : KeyboardRead::Empty;
 }

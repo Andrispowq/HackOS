@@ -10,17 +10,17 @@
 
 #define COLOUR(r, g, b, a) ((a << 24) | (r << 16) | (g << 8) | b)
 
-struct Console 
+struct Console
 {
-	uint32_t bgColour, fontColour;
-	uint32_t current_x, current_y;
+    uint32_t bgColour, fontColour;
+    uint32_t current_x, current_y;
     uint32_t con_width, con_height;
     uint32_t char_width, char_height;
 };
 
-class Display 
+class Display
 {
-public:
+  public:
     int puts(const char* string);
     int putc(char ch);
     void put_backspace();
@@ -28,10 +28,10 @@ public:
 
     static Display* SharedDisplay();
 
-public:
+  public:
     static Display* s_Display;
-	Console console;
-    
+    Console console;
+
     Framebuffer* framebuffer;
     PSF1_FONT* font;
 };

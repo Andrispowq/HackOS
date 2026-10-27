@@ -12,14 +12,14 @@ HeapSegmentHeader* LastHdr;
 extern uint8_t heap_init;
 
 extern PageTableManager KernelDirectory;
+
 void InitialiseHeap(void* start_address, uint64_t size)
 {
     void* pos = start_address;
 
     for (uint64_t i = 0; i < size; i++)
     {
-        KernelDirectory.MapMemory((uint64_t)pos, 
-            (paddr_t)PageFrameAllocator::SharedAllocator()->RequestPage());
+        KernelDirectory.MapMemory((uint64_t)pos, (paddr_t)PageFrameAllocator::SharedAllocator()->RequestPage());
         memset(pos, 0, 0x1000);
         pos = (void*)((uint64_t)pos + 0x1000);
     }
@@ -43,20 +43,20 @@ void* alloc(uint64_t size, uint64_t alignment)
     PreemptionGuard guard;
     // it is not a multiple of 0x10
     if ((size % 0x10) > 0)
-    { 
+    {
         size -= (size % 0x10);
         size += 0x10;
     }
 
-    if (size == 0) 
+    if (size == 0)
     {
         return nullptr;
     }
 
-    HeapSegmentHeader* currentSeg = (HeapSegmentHeader*) heapStart;
-    while(true)
+    HeapSegmentHeader* currentSeg = (HeapSegmentHeader*)heapStart;
+    while (true)
     {
-        if(currentSeg->free)
+        if (currentSeg->free)
         {
             if (currentSeg->length > size)
             {
@@ -70,7 +70,7 @@ void* alloc(uint64_t size, uint64_t alignment)
             }
         }
 
-        if (currentSeg->next == nullptr) 
+        if (currentSeg->next == nullptr)
         {
             break;
         }
@@ -93,7 +93,7 @@ void free(void* address)
 
 void ExpandHeap(size_t length)
 {
-    if (length % 0x1000) 
+    if (length % 0x1000)
     {
         length -= (length % 0x1000);
         length += 0x1000;
@@ -104,8 +104,7 @@ void ExpandHeap(size_t length)
 
     for (size_t i = 0; i < pageCount; i++)
     {
-        KernelDirectory.MapMemory((vaddr_t)heapEnd, 
-            (paddr_t)PageFrameAllocator::SharedAllocator()->RequestPage());
+        KernelDirectory.MapMemory((vaddr_t)heapEnd, (paddr_t)PageFrameAllocator::SharedAllocator()->RequestPage());
         memset(heapEnd, 0, 0x1000);
         heapEnd = (void*)((size_t)heapEnd + 0x1000);
     }
@@ -121,17 +120,17 @@ void ExpandHeap(size_t length)
 
 void HeapSegmentHeader::CombineForward()
 {
-    if (next == nullptr) 
+    if (next == nullptr)
     {
         return;
     }
 
-    if (!next->free) 
+    if (!next->free)
     {
         return;
     }
 
-    if (next == LastHdr) 
+    if (next == LastHdr)
     {
         LastHdr = this;
     }
@@ -147,7 +146,7 @@ void HeapSegmentHeader::CombineForward()
 
 void HeapSegmentHeader::CombineBackward()
 {
-    if ((last != nullptr) && last->free) 
+    if ((last != nullptr) && last->free)
     {
         last->CombineForward();
     }
@@ -155,43 +154,64 @@ void HeapSegmentHeader::CombineBackward()
 
 HeapSegmentHeader* HeapSegmentHeader::Split(size_t size)
 {
-    if (size < 0x10) 
+    if (size < 0x10)
     {
         return nullptr;
     }
 
     int64_t splitSegLength = ((int64_t)length) - size - (sizeof(HeapSegmentHeader));
-    if (splitSegLength < 0x10) 
+    if (splitSegLength < 0x10)
     {
         return nullptr;
     }
 
-    HeapSegmentHeader* newSplitHdr = (HeapSegmentHeader*) ((size_t)this + size + sizeof(HeapSegmentHeader));
-    if(next != nullptr)
+    HeapSegmentHeader* newSplitHdr = (HeapSegmentHeader*)((size_t)this + size + sizeof(HeapSegmentHeader));
+    if (next != nullptr)
     {
         next->last = newSplitHdr; // Set the next segment's last segment to our new segment
     }
-    
-    newSplitHdr->next = next; // Set the new segment's next segment to out original next segment
-    next = newSplitHdr; // Set our new segment to the new segment
-    newSplitHdr->last = this; // Set our new segment's last segment to the current segment
-    newSplitHdr->length = splitSegLength; // Set the new header's length to the calculated value
-    newSplitHdr->free = free; // make sure the new segment's free is the same as the original
-    length = size; // set the length of the original segment to its new length
 
-    if (LastHdr == this) 
-    { 
+    newSplitHdr->next = next;             // Set the new segment's next segment to out original next segment
+    next = newSplitHdr;                   // Set our new segment to the new segment
+    newSplitHdr->last = this;             // Set our new segment's last segment to the current segment
+    newSplitHdr->length = splitSegLength; // Set the new header's length to the calculated value
+    newSplitHdr->free = free;             // make sure the new segment's free is the same as the original
+    length = size;                        // set the length of the original segment to its new length
+
+    if (LastHdr == this)
+    {
         LastHdr = newSplitHdr;
     }
 
     return newSplitHdr;
 }
 
-void* operator new(unsigned long int size) { return (void*)kmalloc((uint64_t)size); }
-void* operator new[](unsigned long int size) { return (void*)kmalloc((uint64_t)size); }
+void* operator new(unsigned long int size)
+{
+    return (void*)kmalloc((uint64_t)size);
+}
 
-void operator delete(void* ptr) { return kfree(ptr); }
-void operator delete[](void* ptr) { return kfree(ptr); }
+void* operator new[](unsigned long int size)
+{
+    return (void*)kmalloc((uint64_t)size);
+}
 
-void operator delete(void* ptr, unsigned long int size) { return kfree(ptr); }
-void operator delete[](void* ptr, unsigned long int size) { return kfree(ptr); }
+void operator delete(void* ptr)
+{
+    return kfree(ptr);
+}
+
+void operator delete[](void* ptr)
+{
+    return kfree(ptr);
+}
+
+void operator delete(void* ptr, unsigned long int size)
+{
+    return kfree(ptr);
+}
+
+void operator delete[](void* ptr, unsigned long int size)
+{
+    return kfree(ptr);
+}

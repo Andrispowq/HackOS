@@ -5,7 +5,7 @@
 
 #define KERNEL_CS 0x08
 
-typedef struct 
+typedef struct
 {
     uint16_t offset0;
     uint16_t selector;
@@ -16,7 +16,7 @@ typedef struct
     uint32_t ignore;
 } __attribute__((packed)) idt_gate_t;
 
-typedef struct 
+typedef struct
 {
     uint16_t limit;
     uint64_t offset;

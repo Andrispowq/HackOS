@@ -9,8 +9,8 @@ more devices.
 ## Follow-up plan from step 8
 
 Items 1 and 2 are addressed in step 9; built-in parsing in item 3 is addressed
-in step 10, and command-program migration in step 11. Items 4–5 remain deferred; authentication
-and setup depend on persistent user storage and credential handling.
+in step 10, and command-program migration in step 11. The credential/permission part of item 4 is addressed in step 13. Authentication
+and setup remain deferred and depend on persistent user storage and credential handling.
 
 1. **Slow drawing — addressed in step 9:** replace per-pixel compositor calls
    and byte framebuffer copies with clipped, pitch-aware pixel row copies.
@@ -42,14 +42,96 @@ and setup depend on persistent user storage and credential handling.
    shell. Define recovery for interrupted setup or corrupt account storage, and
    verify first boot, reboot, failed login and successful login on BIOS/UEFI.
 
-## Next iteration: step 12 — code style cleanup
+## Step 12 — code style cleanup
 
-- [ ] Audit remaining code for the requested bracing and spacing style: braces
+- [x] Audit project-owned C/C++ for the requested bracing and spacing style: braces
   on loops and else/else-if branches, one execution per line, and blank lines
   between functions and logical blocks. Only a whole single-line if without
   else/else-if may omit braces. Keep this a behavior-preserving cleanup, avoid
   vendored GNU-EFI sources, and rerun host plus BIOS/UEFI regressions.
-- [ ] Do not combine this cleanup with users, login or the setup wizard.
+- [x] Keep users, login and the setup wizard deferred.
+- [x] Keep lifecycle diagnostics off the graphical console and add row-based
+  `ls`, `-l`, `-a`, combined flags, and explicit FAT metadata.
+
+## Step 13 — users, groups and process permissions
+
+- [x] Add stable boot-session UID/GID allocation, named users/groups, bounded
+  supplementary memberships, process credential copies and inheritance.
+- [x] Replace boot-shell/executable-path privilege grants with kernel UID checks:
+  power and account administration require root; kill requires root or the same
+  UID, with idle/boot shell/self still protected.
+- [x] Add copied identity/account/group ABI records, process ownership reporting,
+  and standalone `id`, `whoami`, `users`, `groups`, `useradd`, `groupadd`, `usermod`
+  and root-only `runas` programs. Delegate and restore nested foreground input.
+- [x] Leave login/setup for the next requested step. Accounts are in memory for
+  this boot only; the initial shell still runs as root. No file permission or
+  persistent credential security claim is made.
+
+## Proposed continuation after step 13
+
+Steps 1–13 are complete. The order below is a proposal for future iterations,
+not authorization to implement them automatically. A fresh chat should read
+`AGENTS.md`, this file, `docs/system/userspace.md`, and the build/testing guides
+before starting. Preserve the root `.clang-format` style, leave vendored code
+alone, and verify both BIOS and UEFI for each implementation step.
+
+14. **Login and first-boot setup (next requested iteration):** replace the
+    temporary boot-session account registry with a recoverable persistent format
+    and checked storage writes/flushes before storing credentials. Establish an
+    entropy source, a suitable salted password KDF and non-echoing password input.
+    Add credential verification and session cleanup, start the shell only after
+    authentication, and define logout. Setup must distinguish empty storage from
+    corrupt/interrupted state, confirm the first account's chosen password and
+    require login on later boots. Test first boot, persistence/reboot, failed
+    login, successful login, interrupted setup and privilege isolation on BIOS
+    and UEFI. This is a proposed next step, not authorization to implement it now.
+
+15. **Basic file utilities and a minimal text editor:**
+    package these as standalone ring-3 programs in `/usr/bin`, keeping the shell
+    lightweight. Do not implement them until this iteration is requested.
+
+    - `xxd <file>`: print file contents in hexadecimal and binary forms. Read the
+      whole file into memory with a checked size/allocation limit; no streaming
+      or complex buffering is required. Zero-run suppression is optional, not a
+      prerequisite. Keep the command's options minimal.
+    - `mkdir <path>`: create one directory; recursive parent creation is outside
+      this iteration's scope.
+    - `rm <file>`: remove one file; directory removal and recursion are outside
+      this iteration's scope.
+    - `mv <source> <destination>`: rename or move one file. Directory moves and
+      cross-filesystem copying are outside this iteration's scope. Define
+      destination-conflict behavior explicitly and avoid silent data loss.
+    - `edit <file>`: open a very simple text editor with basic text entry and
+      editing, Ctrl+S to save, and Ctrl+X to exit. No extra editor features are
+      requested. Define a bounded file-size policy and report failed saves.
+
+    Add only the safe, checked userspace filesystem mutation and keyboard/control
+    input interfaces needed by these programs. Keep handles process-owned,
+    validate user buffers/paths, and report unsupported operations or I/O errors.
+    This necessarily brings basic write/create/delete/rename support forward
+    from the storage backlog; broader persistence hardening remains there.
+    Test the utilities and editor on disposable images under both BIOS and UEFI,
+    including saved contents after reboot, invalid paths, destination conflicts,
+    and Ctrl+S/Ctrl+X returning cleanly to the shell. Preserve the spacing style
+    and keep account/authentication work in its own iteration.
+
+16. **Storage and filesystem permissions:** harden checked write/create APIs,
+    process-owned handles and access-mode enforcement. Propagate device, FAT32
+    and VFS errors and provide a flush contract. Test full disks, failed writes,
+    reboot persistence and interrupted updates on disposable images. Define
+    filesystem ownership/permission storage before claiming Unix-style file
+    permissions; FAT attributes alone are insufficient.
+17. **Userspace usability:** blocking terminal input, job/process-group control,
+    a user heap, remaining runtime helpers and shell completion. Split this into
+    smaller iterations as needed.
+
+The remaining subsystem lists below are the broader hardening backlog. Persistent accounts,
+login and setup remain deferred until the user requests the next iteration.
+Step 13 passed 151 host checks under UBSan, boot-asset and BIOS-chain checks,
+fresh BIOS/UEFI builds, and both firmware boot, shell/credentials, isolated
+ring-3 and window suites. The local translated ASan runtime failed even its
+empty-program preflight, so this does not claim ASan coverage. These are the
+baseline to rerun, not a substitute for testing future changes.
 
 ## Boot and memory
 
@@ -57,6 +139,22 @@ and setup depend on persistent user storage and credential handling.
   loaders and the kernel. Widen the eight-bit memory-map count.
 - [ ] Centralize BIOS slot constants across assembly, image construction and
   tests. Reconcile the unused EFI linker script with the active kernel entry.
+- [ ] Remove the fixed BIOS kernel slot as a growth bottleneck. Increasing the
+  current 128 KiB reservation is explicitly acceptable; do not distort otherwise
+  sensible kernel changes just to retain that limit. When increasing it, update
+  loader read counts/offsets and ELF size bounds, partition extents, image-packaging
+  assertions and the documented layout together; check staging-buffer/memory-map limits.
+  Prefer investigating `kernel.elf` as a normal FAT32 file if a small, bounded
+  loader change can support it. UEFI already loads the kernel as a file; BIOS
+  stage 2 currently reads fixed sectors before entering long mode and has no
+  filesystem API. Evaluate a minimal read-only FAT32 reader over the existing
+  BIOS disk-read path, with file reads before the mode switch, rather than
+  importing the kernel's VFS/device stack or requiring a large refactor. Keep
+  the ELF-loading/handoff contract, validate file size and cluster chains, and
+  handle fragmented, missing, truncated and corrupt kernel files explicitly.
+  Test a kernel larger than the old slot, packaging/partition bounds and fresh
+  BIOS/UEFI boots. This is deferred boot work, not part of step 13 or a reason
+  to change the loader now.
 - [ ] Strengthen BIOS ELF validation and both loaders' malformed-input cleanup.
   Extend firmware tests to missing files, unsupported GOP formats and map overflow.
 - [ ] Add a serial/debug reporting path for failures before graphics is available.

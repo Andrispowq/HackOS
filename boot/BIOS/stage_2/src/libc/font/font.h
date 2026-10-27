@@ -8,17 +8,17 @@
 
 typedef struct psf1_hdr
 {
-	unsigned char magic[2];
-	unsigned char mode;
-	unsigned char charsize;
+    unsigned char magic[2];
+    unsigned char mode;
+    unsigned char charsize;
 } PSF1_HEADER;
 
 typedef struct psf1_font
 {
-	PSF1_HEADER* psf1_Header;
-	void* glyphBuffer;
+    PSF1_HEADER* psf1_Header;
+    void* glyphBuffer;
 } PSF1_FONT;
 
 PSF1_FONT* LoadFont(void* address);
 
-#endif 
+#endif

@@ -3,94 +3,232 @@
 // No copied parser, production edit, or private-to-public macro is involved.
 #include "proc/elf/elf.cpp"
 
-static Elf64_Ehdr valid_header() {
-    Elf64_Ehdr h={}; test_copy(h.e_ident,"\177ELF",4);
-    h.e_ident[EI_CLASS]=ELFCLASS64; h.e_ident[EI_DATA]=ELFDATA2LSB;
-    h.e_ident[EI_VERSION]=EV_CURRENT; h.e_type=ET_EXEC; h.e_machine=EM_X86_64;
-    h.e_version=EV_CURRENT; h.e_ehsize=sizeof h; h.e_phentsize=sizeof(Elf64_Phdr); return h;
-}
-TEST(elf_valid_identity) { auto h=valid_header(); CHECK(elf_check_file(&h)==1); return 0; }
-TEST(elf_rejects_bad_identity) {
-    CHECK(elf_check_file(nullptr)==0);
-    for(unsigned field=0;field<7;++field) {
-        auto h=valid_header();
-        switch(field) {
-            case 0:h.e_ident[0]=0;break; case 1:h.e_ident[EI_CLASS]=1;break;
-            case 2:h.e_ident[EI_DATA]=2;break; case 3:h.e_type=1;break;
-            case 4:h.e_machine=3;break; case 5:h.e_version=0;break;
-            case 6:h.e_ident[EI_VERSION]=0;break;
-        } CHECK(elf_check_file(&h)==0);
-    } return 0;
-}
-TEST(elf_load_via_filesystem) {
-    FakeFS fs; auto h=valid_header(); h.e_phoff=sizeof h; h.e_phnum=1; h.e_entry=0x400000;
-    Elf64_Phdr segment={}; segment.p_type=PT_LOAD; segment.p_flags=1;
-    segment.p_paddr=segment.p_vaddr=h.e_entry; segment.p_memsz=16; segment.p_filesz=4;
-    segment.p_offset=sizeof h+sizeof segment;
-    test_copy(fs.contents,&h,sizeof h); test_copy(fs.contents+sizeof h,&segment,sizeof segment);
-    test_copy(fs.contents+segment.p_offset,"DATA",4);
-    fs.file.length=segment.p_offset+4; InitialiseFilesystems(); filesystems[0]=&fs;
-    uint64_t base=0; auto result=LoadProgram("~/FILE",&base);
-    CHECK(result!=nullptr); CHECK((uint64_t)result==base); CHECK(fs.closed); kfree(result); return 0;
-}
-TEST(elf_rejects_truncated_header) {
-    FakeFS fs; auto h=valid_header(); test_copy(fs.contents,&h,sizeof h);
-    fs.file.length=7; InitialiseFilesystems(); filesystems[0]=&fs;
-    uint64_t base=0; CHECK(LoadProgram("~/FILE",&base)==nullptr); return 0;
-}
-TEST(elf_rejects_outside_program_headers) {
-    FakeFS fs; auto h=valid_header(); h.e_phoff=4096; h.e_phnum=1;
-    test_copy(fs.contents,&h,sizeof h); fs.file.length=sizeof h;
-    InitialiseFilesystems(); filesystems[0]=&fs; uint64_t base=0;
-    CHECK(LoadProgram("~/FILE",&base)==nullptr); return 0;
-}
-TEST(elf_copies_segment_and_zeros_bss) {
-    struct Image { Elf64_Ehdr header; Elf64_Phdr segment; unsigned char payload[4]; } image={};
-    image.header=valid_header(); image.header.e_phoff=sizeof(Elf64_Ehdr); image.header.e_phnum=1;
-    unsigned char destination[16]; test_fill(destination,0xa5,16);
-    image.segment.p_type=PT_LOAD; image.segment.p_paddr=(uint64_t)destination;
-    image.segment.p_offset=sizeof(Elf64_Ehdr)+sizeof(Elf64_Phdr);
-    image.segment.p_filesz=4; image.segment.p_memsz=16;
-    test_copy(image.payload,"DATA",4); test_mapping_count=0;
-    PrepareProgram(&image.header,(uint64_t)&image);
-    CHECK(test_mapping_count==1); CHECK(test_equal(destination,"DATA",4));
-    for(unsigned i=4;i<16;++i)CHECK(destination[i]==0); return 0;
+static Elf64_Ehdr valid_header()
+{
+    Elf64_Ehdr h = {};
+    test_copy(h.e_ident, "\177ELF", 4);
+    h.e_ident[EI_CLASS] = ELFCLASS64;
+    h.e_ident[EI_DATA] = ELFDATA2LSB;
+    h.e_ident[EI_VERSION] = EV_CURRENT;
+    h.e_type = ET_EXEC;
+    h.e_machine = EM_X86_64;
+    h.e_version = EV_CURRENT;
+    h.e_ehsize = sizeof h;
+    h.e_phentsize = sizeof(Elf64_Phdr);
+    return h;
 }
 
-TEST(elf_rejects_invalid_segment_ranges) {
-    struct Image { Elf64_Ehdr header; Elf64_Phdr segment; unsigned char payload[16]; } image={};
-    for(unsigned variant=0;variant<9;++variant) {
-        image.header=valid_header(); image.header.e_phoff=sizeof(Elf64_Ehdr); image.header.e_phnum=1;
-        image.header.e_entry=0x400000;
-        image.segment={}; image.segment.p_type=PT_LOAD; image.segment.p_flags=1;
-        image.segment.p_paddr=image.segment.p_vaddr=0x400000;
-        image.segment.p_offset=sizeof(Elf64_Ehdr)+sizeof(Elf64_Phdr);
-        image.segment.p_filesz=4; image.segment.p_memsz=16;
-        CHECK(elf_check_ranges(&image.header,sizeof image));
-        switch(variant) {
-            case 0:image.segment.p_filesz=17;break;
-            case 1:image.segment.p_offset=~0UL;break;
-            case 2:image.segment.p_memsz=~0UL;break;
-            case 3:image.header.e_phoff=sizeof(Elf64_Ehdr)+1;break;
-            case 4:image.header.e_entry=0x400010;break;
-            case 5:image.segment.p_align=3;break;
-            case 6:image.segment.p_flags=0;break;
-            case 7:image.segment.p_vaddr=0x500000;break;
-            case 8:image.header.e_phentsize=1;break;
-        }
-        CHECK(!elf_check_ranges(&image.header,sizeof image));
-    }
+TEST(elf_valid_identity)
+{
+    auto h = valid_header();
+    CHECK(elf_check_file(&h) == 1);
     return 0;
 }
 
-TEST(elf_virtual_loading_and_empty_segment) {
-    struct Image { Elf64_Ehdr header; Elf64_Phdr segments[2]; } image = {};
-    image.header = valid_header(); image.header.e_phoff = sizeof(Elf64_Ehdr);
-    image.header.e_phnum = 2; image.header.e_entry = USER_BASE;
+TEST(elf_rejects_bad_identity)
+{
+    CHECK(elf_check_file(nullptr) == 0);
+    for (unsigned field = 0; field < 7; ++field)
+    {
+        auto h = valid_header();
+        switch (field)
+        {
+        case 0:
+            h.e_ident[0] = 0;
+            break;
+        case 1:
+            h.e_ident[EI_CLASS] = 1;
+            break;
+        case 2:
+            h.e_ident[EI_DATA] = 2;
+            break;
+        case 3:
+            h.e_type = 1;
+            break;
+        case 4:
+            h.e_machine = 3;
+            break;
+        case 5:
+            h.e_version = 0;
+            break;
+        case 6:
+            h.e_ident[EI_VERSION] = 0;
+            break;
+        }
+
+        CHECK(elf_check_file(&h) == 0);
+    }
+
+    return 0;
+}
+
+TEST(elf_load_via_filesystem)
+{
+    FakeFS fs;
+    auto h = valid_header();
+    h.e_phoff = sizeof h;
+    h.e_phnum = 1;
+    h.e_entry = 0x400000;
+    Elf64_Phdr segment = {};
+    segment.p_type = PT_LOAD;
+    segment.p_flags = 1;
+    segment.p_paddr = segment.p_vaddr = h.e_entry;
+    segment.p_memsz = 16;
+    segment.p_filesz = 4;
+    segment.p_offset = sizeof h + sizeof segment;
+    test_copy(fs.contents, &h, sizeof h);
+    test_copy(fs.contents + sizeof h, &segment, sizeof segment);
+    test_copy(fs.contents + segment.p_offset, "DATA", 4);
+    fs.file.length = segment.p_offset + 4;
+    InitialiseFilesystems();
+    filesystems[0] = &fs;
+    uint64_t base = 0;
+    auto result = LoadProgram("~/FILE", &base);
+    CHECK(result != nullptr);
+    CHECK((uint64_t)result == base);
+    CHECK(fs.closed);
+    kfree(result);
+    return 0;
+}
+
+TEST(elf_rejects_truncated_header)
+{
+    FakeFS fs;
+    auto h = valid_header();
+    test_copy(fs.contents, &h, sizeof h);
+    fs.file.length = 7;
+    InitialiseFilesystems();
+    filesystems[0] = &fs;
+    uint64_t base = 0;
+    CHECK(LoadProgram("~/FILE", &base) == nullptr);
+    return 0;
+}
+
+TEST(elf_rejects_outside_program_headers)
+{
+    FakeFS fs;
+    auto h = valid_header();
+    h.e_phoff = 4096;
+    h.e_phnum = 1;
+    test_copy(fs.contents, &h, sizeof h);
+    fs.file.length = sizeof h;
+    InitialiseFilesystems();
+    filesystems[0] = &fs;
+    uint64_t base = 0;
+    CHECK(LoadProgram("~/FILE", &base) == nullptr);
+    return 0;
+}
+
+TEST(elf_copies_segment_and_zeros_bss)
+{
+    struct Image
+    {
+        Elf64_Ehdr header;
+        Elf64_Phdr segment;
+        unsigned char payload[4];
+    } image = {};
+
+    image.header = valid_header();
+    image.header.e_phoff = sizeof(Elf64_Ehdr);
+    image.header.e_phnum = 1;
+    unsigned char destination[16];
+    test_fill(destination, 0xa5, 16);
+    image.segment.p_type = PT_LOAD;
+    image.segment.p_paddr = (uint64_t)destination;
+    image.segment.p_offset = sizeof(Elf64_Ehdr) + sizeof(Elf64_Phdr);
+    image.segment.p_filesz = 4;
+    image.segment.p_memsz = 16;
+    test_copy(image.payload, "DATA", 4);
+    test_mapping_count = 0;
+    PrepareProgram(&image.header, (uint64_t)&image);
+    CHECK(test_mapping_count == 1);
+    CHECK(test_equal(destination, "DATA", 4));
+    for (unsigned i = 4; i < 16; ++i)
+    {
+        CHECK(destination[i] == 0);
+    }
+
+    return 0;
+}
+
+TEST(elf_rejects_invalid_segment_ranges)
+{
+    struct Image
+    {
+        Elf64_Ehdr header;
+        Elf64_Phdr segment;
+        unsigned char payload[16];
+    } image = {};
+
+    for (unsigned variant = 0; variant < 9; ++variant)
+    {
+        image.header = valid_header();
+        image.header.e_phoff = sizeof(Elf64_Ehdr);
+        image.header.e_phnum = 1;
+        image.header.e_entry = 0x400000;
+        image.segment = {};
+        image.segment.p_type = PT_LOAD;
+        image.segment.p_flags = 1;
+        image.segment.p_paddr = image.segment.p_vaddr = 0x400000;
+        image.segment.p_offset = sizeof(Elf64_Ehdr) + sizeof(Elf64_Phdr);
+        image.segment.p_filesz = 4;
+        image.segment.p_memsz = 16;
+        CHECK(elf_check_ranges(&image.header, sizeof image));
+        switch (variant)
+        {
+        case 0:
+            image.segment.p_filesz = 17;
+            break;
+        case 1:
+            image.segment.p_offset = ~0UL;
+            break;
+        case 2:
+            image.segment.p_memsz = ~0UL;
+            break;
+        case 3:
+            image.header.e_phoff = sizeof(Elf64_Ehdr) + 1;
+            break;
+        case 4:
+            image.header.e_entry = 0x400010;
+            break;
+        case 5:
+            image.segment.p_align = 3;
+            break;
+        case 6:
+            image.segment.p_flags = 0;
+            break;
+        case 7:
+            image.segment.p_vaddr = 0x500000;
+            break;
+        case 8:
+            image.header.e_phentsize = 1;
+            break;
+        }
+
+        CHECK(!elf_check_ranges(&image.header, sizeof image));
+    }
+
+    return 0;
+}
+
+TEST(elf_virtual_loading_and_empty_segment)
+{
+    struct Image
+    {
+        Elf64_Ehdr header;
+        Elf64_Phdr segments[2];
+    } image = {};
+
+    image.header = valid_header();
+    image.header.e_phoff = sizeof(Elf64_Ehdr);
+    image.header.e_phnum = 2;
+    image.header.e_entry = USER_BASE;
     auto& segment = image.segments[0];
-    segment.p_type = PT_LOAD; segment.p_flags = 5;
-    segment.p_vaddr = USER_BASE; segment.p_paddr = ~0ULL;
-    segment.p_memsz = 4096; // User loader allocates frames, ignores p_paddr.
+    segment.p_type = PT_LOAD;
+    segment.p_flags = 5;
+    segment.p_vaddr = USER_BASE;
+    segment.p_paddr = ~0ULL;
+    segment.p_memsz = 4096;             // User loader allocates frames, ignores p_paddr.
     image.segments[1].p_type = PT_LOAD; // Empty linker-generated data segment.
     CHECK(elf_check_ranges(&image.header, sizeof image, false));
     CHECK(!elf_check_ranges(&image.header, sizeof image, true));

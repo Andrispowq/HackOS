@@ -2,6 +2,7 @@
 #define PROCESS_H
 #include "arch/x86_64/paging/paging.h"
 #include "arch/x86_64/interrupts/idt.h"
+#include "hackos/abi.h"
 
 #define PROCESS_STATE_ALIVE 0
 #define PROCESS_STATE_ZOMBIE 1
@@ -15,11 +16,16 @@
 class UserAddressSpace;
 class ActiveFile;
 
-struct ChildResult { uint64_t pid = 0; int64_t status = 0; bool done = false; };
+struct ChildResult
+{
+    uint64_t pid = 0;
+    int64_t status = 0;
+    bool done = false;
+};
 
 class Process
 {
-public:
+  public:
     Process(const char* name, void* entry, void* parameter = nullptr);
     ~Process();
     void Notify(int signal);
@@ -29,9 +35,8 @@ public:
     UserAddressSpace* userSpace = nullptr;
     uint64_t userPreemptions = 0;
     bool systemShell = false;
-    bool commandPower = false;
-    bool commandKill = false;
-    bool commandClear = false;
+    HackosCredentials credentials = {};
+    uint64_t terminalReturnPid = 0;
     uint64_t parentPid = 0, waitingFor = 0;
     int64_t exitStatus = 0;
     ChildResult children[16] = {};
@@ -48,6 +53,7 @@ public:
     char* name;
     Process* next;
 };
+
 extern uint64_t user_files_live;
 uint64_t AddProcess(Process* process);
 bool IsRunning(uint64_t pid);

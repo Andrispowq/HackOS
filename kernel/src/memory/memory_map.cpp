@@ -6,8 +6,9 @@
 extern bool fromUEFI;
 
 MemoryMap::MemoryMap(MemoryMapEntry* entries, uint64_t count)
-    : firstEntry(entries), entryCount(count),
-      usableType(fromUEFI ? EFI_USUABLE_AREA : BIOS_USUABLE_AREA) {}
+    : firstEntry(entries), entryCount(count), usableType(fromUEFI ? EFI_USUABLE_AREA : BIOS_USUABLE_AREA)
+{
+}
 
 MemoryMap::~MemoryMap()
 {
@@ -25,12 +26,12 @@ void MemoryMap::Reset(MemoryMapEntry* entries, uint64_t count)
 
 bool MemoryMap::IsUsuableMemory(size_t index)
 {
-    if(index >= entryCount)
+    if (index >= entryCount)
     {
         return false;
     }
 
-    if((firstEntry + index)->type == usableType)
+    if ((firstEntry + index)->type == usableType)
     {
         return true;
     }
@@ -40,15 +41,17 @@ bool MemoryMap::IsUsuableMemory(size_t index)
 
 MemoryMapEntry** MemoryMap::GetUsuableMemory()
 {
-    if(usableMemory)
+    if (usableMemory)
+    {
         return usableMemory;
+    }
 
     usableMemory = new MemoryMapEntry*[entryCount + 1];
 
     uint64_t counter = 0;
-    for(uint64_t i = 0; i < entryCount; i++)
+    for (uint64_t i = 0; i < entryCount; i++)
     {
-        if(IsUsuableMemory(i))
+        if (IsUsuableMemory(i))
         {
             usableMemory[counter++] = firstEntry + i;
         }
@@ -61,7 +64,7 @@ MemoryMapEntry** MemoryMap::GetUsuableMemory()
 uint64_t MemoryMap::GetTotalSystemMemory()
 {
     uint64_t total = 0;
-    for(uint64_t i = 0; i < entryCount; i++)
+    for (uint64_t i = 0; i < entryCount; i++)
     {
         MemoryMapEntry* entry = firstEntry + i;
         total += entry->size;
@@ -73,9 +76,9 @@ uint64_t MemoryMap::GetTotalSystemMemory()
 uint64_t MemoryMap::GetUsuableSystemMemory()
 {
     uint64_t total = 0;
-    for(uint64_t i = 0; i < entryCount; i++)
+    for (uint64_t i = 0; i < entryCount; i++)
     {
-        if(IsUsuableMemory(i))
+        if (IsUsuableMemory(i))
         {
             MemoryMapEntry* entry = firstEntry + i;
             total += entry->size;

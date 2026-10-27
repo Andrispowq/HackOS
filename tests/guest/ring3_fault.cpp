@@ -1,4 +1,5 @@
 #include "hackos/syscall.h"
+
 extern "C" [[noreturn]] void _start()
 {
 #if FAULT == 0
@@ -9,7 +10,7 @@ extern "C" [[noreturn]] void _start()
     *(volatile char*)_start = 0; // read-only text
 #elif FAULT == 3
     unsigned char code[] = {0xc3};
-    ((void(*)())code)(); // NX stack
+    ((void (*)())code)(); // NX stack
 #elif FAULT == 4
     asm volatile("outb %%al, %%dx" : : "a"(0), "d"(0xe9));
 #elif FAULT == 5
@@ -22,7 +23,10 @@ extern "C" [[noreturn]] void _start()
     asm volatile("mov $0x4000001fc000, %%rax; mov %%rax, %%rsp; push %%rax" ::: "rax", "memory");
 #endif
     const char failed[] = "RING3_PROBE_FAIL: forbidden instruction completed\n";
-    MakeSyscall(HACKOS_SYS_user_write, (uint64_t)failed, sizeof(failed)-1, 0, 0, 0);
-    MakeSyscall(HACKOS_SYS_exit, 1,0,0,0,0);
-    for (;;) asm volatile("ud2");
+    MakeSyscall(HACKOS_SYS_user_write, (uint64_t)failed, sizeof(failed) - 1, 0, 0, 0);
+    MakeSyscall(HACKOS_SYS_exit, 1, 0, 0, 0, 0);
+    for (;;)
+    {
+        asm volatile("ud2");
+    }
 }

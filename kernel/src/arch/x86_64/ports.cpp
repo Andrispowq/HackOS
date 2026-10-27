@@ -1,6 +1,6 @@
 #include "ports.h"
 
-uint8_t __inb(uint16_t port) 
+uint8_t __inb(uint16_t port)
 {
     uint8_t result;
     /* Inline assembler syntax
@@ -11,45 +11,45 @@ uint8_t __inb(uint16_t port)
      *
      * Inputs and outputs are separated by colons
      */
-    asm("in %%dx, %%al" : "=a" (result) : "d" (port));
+    asm("in %%dx, %%al" : "=a"(result) : "d"(port));
     return result;
 }
 
-uint16_t __inw(uint16_t port) 
+uint16_t __inw(uint16_t port)
 {
     uint16_t result;
-    asm("in %%dx, %%ax" : "=a" (result) : "d" (port));
+    asm("in %%dx, %%ax" : "=a"(result) : "d"(port));
     return result;
 }
 
-uint32_t __inl(uint32_t port) 
+uint32_t __inl(uint32_t port)
 {
     uint32_t result;
-    asm volatile("inl %%dx, %%eax" : "=a" (result) : "d"(port));
+    asm volatile("inl %%dx, %%eax" : "=a"(result) : "d"(port));
     return result;
 }
 
-void __outb(uint16_t port, uint8_t data) 
+void __outb(uint16_t port, uint8_t data)
 {
     /* Notice how here both registers are mapped to C variables and
      * nothing is returned, thus, no equals '=' in the asm syntax 
      * However we see a comma since there are two variables in the input area
      * and none in the 'return' area
      */
-    asm("out %%al, %%dx" : : "a" (data), "d" (port));
+    asm("out %%al, %%dx" : : "a"(data), "d"(port));
 }
 
-void __outw(uint16_t port, uint16_t data) 
+void __outw(uint16_t port, uint16_t data)
 {
-    asm("out %%ax, %%dx" : : "a" (data), "d" (port));
+    asm("out %%ax, %%dx" : : "a"(data), "d"(port));
 }
 
-void __outl(uint32_t port, uint32_t value) 
+void __outl(uint32_t port, uint32_t value)
 {
-	asm volatile("outl %%eax, %%dx" :: "d" (port), "a" (value));
+    asm volatile("outl %%eax, %%dx" ::"d"(port), "a"(value));
 }
 
 void io_wait()
 {
-    asm volatile("outb %%al, $0x80" :: "a"(0));
+    asm volatile("outb %%al, $0x80" ::"a"(0));
 }

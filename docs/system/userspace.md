@@ -2,7 +2,7 @@
 
 [System index](index.md) · [Memory](memory.md) · [Interrupts](interrupts.md)
 
-HackOS boots directly into the standalone ring-3 shell at `~/USR/BIN/SHELL`.
+HackOS boots directly as UID 0 (root) into the standalone ring-3 shell at `~/USR/BIN/SHELL`.
 `InitialiseKernel` initializes filesystems and syscalls, creates idle, loads the
 shell, then enables IRQs. The first scheduling pass enters userspace. A missing
 or invalid shell produces an explicit boot error; there is no kernel-shell
@@ -76,10 +76,15 @@ Console rendering and hardware operations remain kernel services.
 | `print <text>` | Print literal text, including percent signs |
 | `print tick`, `print time`, `print date` | Show monotonic ticks or RTC values |
 | `ps [aux]`, `kill <pid>` | List tasks or stop a user program; idle and boot shell are protected |
-| `ls [path]`, `wd`, `cd <path>` | Browse the first filesystem; `~` denotes its root |
+| `ls [-la] [path]`, `wd`, `cd <path>` | Browse the first filesystem; `~` denotes its root |
 | `cat <path>`, `read <path>` | Read a complete file in bounded chunks; close its owned handle on completion |
 | `<name> [args]`, `./<program> [args]`, `user <path> [args]` | Launch an isolated foreground program and wait; append a separate `&` for background execution |
-| `shutdown`, `restart` | Request kernel ACPI power-off or platform restart |
+| `id`, `whoami` | Show the process credentials or username |
+| `users`, `groups` | List this boot's account/group registry |
+| `useradd <name> [group]`, `groupadd <name>` | Root creates an account (default group `users`) or group for this boot |
+| `usermod <user> <group>` | Root adds a supplementary group for future `runas` launches |
+| `runas <user> <command> [args]` | Root launches a program with the selected account's credentials and waits |
+| `shutdown`, `restart` | Root requests kernel ACPI power-off or platform restart |
 
 Input supports the US layout, Shift, Caps Lock, Backspace and Up/Down arrows.
 Lines longer than 255 characters are discarded. Queue overflow discards input
@@ -91,8 +96,8 @@ splits on spaces/tabs (the interactive line editor accepts printable characters)
 words (including empty strings); a backslash escapes the next character, also
 inside quotes. Unmatched quotes, a trailing backslash or excessive arguments
 reject the command before execution. Each command program validates its arguments. Unsupported counts/options print usage;
-`ps aux` lists the same all-task name/PID/state information as `ps`, without
-claiming Unix user/CPU/memory columns. `print` joins decoded arguments with single
+`ps aux` lists the same name/PID/state/UID/GID/parent-PID information as `ps`;
+CPU/memory accounting is not available. `print` joins decoded arguments with single
 spaces; quote text to preserve internal spaces. Clock shortcuts apply only to
 one argument (`tick`, `time`, or `date`). Quoted/escaped paths work for `cd` and
 `cat`/`read`; empty paths are rejected. The `cd` and `history` built-ins reject
@@ -127,7 +132,10 @@ the child can run, avoiding a spawn-to-handoff race. The shell then waits withou
 reading input. A bare trailing `&` uses ordinary spawn and grants no terminal
 access; the shell collects background results with nonblocking waits.
 
-Ownership returns automatically on exit, fault, kill or Ctrl-C. The keyboard
+Any current terminal owner can delegate foreground input to a child. Ownership
+returns to that launcher automatically on exit, fault, kill or Ctrl-C. If a
+launcher exits first, return links are redirected to its own launcher (ultimately
+the boot shell), before the dead task is reclaimed. The keyboard
 queue is cleared at each handoff so child input cannot accidentally execute as
 shell commands. `input()` remains nonblocking: a foreground program reads events
 and yields on zero. Echo and line editing are program responsibilities. Try
@@ -157,21 +165,55 @@ the unfinished draft present before navigation. Backspace/typing edits the recal
 copy; stored entries change only when a new command is submitted. `history` lists
 the retained commands from oldest to newest (including that `history` invocation).
 
-The kernel-designated boot shell controls foreground launches. Its direct
-children loading the packaged canonical `/usr/bin/kill`, `/usr/bin/clear`,
-`/usr/bin/shutdown` or `/usr/bin/restart` receive only their specific command
-permission. This checks the loaded executable path, not `argv[0]`; permissions
-are not inherited by grandchildren and do not make commands system shells.
-These commands must own the foreground terminal to exercise their permission.
-Other foreground programs can request backspace but cannot clear, kill or power
-off. Boot-shell/idle protection remains. The image exposes no userspace file
-write API, so these trusted program paths cannot be replaced by user programs.
+## Users, groups and permissions
 
-This is a temporary boot-session policy, not users/groups or a hardened multi-user
-security system. Account credentials and login remain deferred. Ordinary programs
-can print, inspect processes, read files, change their own directory, spawn, yield
-and exit. Power returns an error if rejected; actual completion is confirmed by
-guest shutdown, not merely a return value or message.
+The kernel owns a bounded boot-session registry: 32 users and 32 groups, with
+names of 1–31 ASCII characters matching `[a-z][a-z0-9_-]*`. It starts with
+`root` (UID/GID 0), `guest` (UID/GID 1000), and groups `root` (0) and `users`
+(1000). New user and group IDs are allocated independently from 1001, never
+reused during a boot. Duplicate names, unknown groups, invalid names and full
+registries fail without consuming IDs. No delete/rename operation is provided.
+**Account changes are in memory only and disappear on reboot.** Persistent
+accounts, passwords, login, logout and first-boot setup are deferred. The machine
+still starts an unauthenticated root shell, so this is a permission foundation,
+not a secured multi-user login environment.
+
+Each process owns a value copy of its UID, primary GID and up to eight distinct
+supplementary GIDs. Ordinary spawn, spawn-with-arguments and foreground spawn
+inherit that exact snapshot, including through grandchildren. Account membership
+changes affect later `spawn_as` launches only; existing processes and their
+ordinary children retain their credentials. There are no effective/saved IDs,
+setuid executables, or user-writable credential pointers. Membership in GID 0
+does **not** grant root privilege: privileged checks compare UID to zero.
+
+The kernel requires UID 0 for power operations, creating users/groups, adding
+group membership, and `spawn_as`. Root may launch any registered identity with
+`runas`; this command is an administrative launcher, not authentication or
+`sudo`. A non-root process cannot select any identity, including its own, through
+`spawn_as`. No executable path or `argv[0]` grants privilege. An arbitrary root
+program may power off, while even the canonical SHUTDOWN/RESTART executables
+are denied when run as a non-root user. Root privilege is inherited by ordinary
+children just like any other credential.
+
+`kill` permits the same UID or UID 0 to stop a user process. Kernel tasks, the
+boot shell and the calling task remain protected by this API. Wait results still
+belong exclusively to the parent PID, and file/window handles remain scoped to
+the owning process; sharing a UID never transfers handles or wait rights.
+Terminal backspace/clear and foreground handoff depend on terminal ownership,
+not root. `systemShell` identifies the protected terminal anchor only; it is no
+longer a power/kill/account privilege. Ctrl-C still targets the physically
+focused terminal/window process and is not a process-group signal.
+
+For example, `groupadd staff`, `useradd alice staff`, `usermod alice users`, then
+`runas alice id` displays the selected UID, primary GID and supplementary group.
+`runas alice shutdown` is denied by the kernel. `runas alice input` supports
+normal foreground editing and Ctrl-C; appending `&` starts without terminal
+input. The shell prompt resolves its actual UID to a username. Nested shell
+sessions/login/logout are not implemented.
+
+Filesystem access remains read-only through the user ABI and has no UID/GID or
+mode metadata. FAT attributes are not Unix file permissions. No filesystem
+ownership, write authorization or persistent account protection is claimed.
 
 ## Syscall ABI
 
@@ -187,21 +229,21 @@ return an error rather than being reinterpreted as new operations.
 | 0 | `exit(status)` | Does not return; libc uses it when `main` returns |
 | 14 | `user_write(buffer, length)` | Literal console bytes, maximum 1024; returns count |
 | 15 | `input()` | Character/event, 0 if empty, 256 for queue overflow; terminal owner only |
-| 16 | `console(operation)` | 0 backspace for terminal owner, 1 clear for boot shell or authorized foreground CLEAR |
+| 16 | `console(operation)` | 0 backspace, 1 clear; terminal owner only |
 | 17 | `clock(out)` | Copies ticks and RTC fields; RTC retains existing BCD representation |
 | 18 | `process_info(index, out)` | Copies one process record; 1 found, 0 end |
-| 19 | `kill(pid)` | Stops another user task; boot shell or its authorized foreground command |
+| 19 | `kill(pid)` | Stops another user task owned by the same UID, or any user task as root; idle/boot shell/self protected |
 | 20 | `spawn(path)` | Copies a bounded path and loads an isolated ELF; returns PID |
 | 21 | `open(path)` | Returns an opaque read-only file handle |
 | 22 | `read(handle, out, length)` | At most 512 bytes; returns bytes read, 0 at EOF |
 | 23 | `close(handle)` | Closes a handle owned by the caller |
 | 24 | `stat(path, out)` | Copies file size, attributes and name |
 | 25 | `readdir(path, index, out)` | Copies one directory entry; 1 found, 0 end |
-| 26 | `power(operation)` | 0 ACPI shutdown, 1 restart; boot shell or its authorized foreground command |
+| 26 | `power(operation)` | 0 ACPI shutdown, 1 restart; UID 0 only |
 | 27 | `yield()` | Gives another runnable task a scheduling opportunity |
 | 28 | `spawn_args(path, argc, argv)` | Copies a bounded user pointer vector and strings; returns child PID |
 | 29 | `wait(pid, status, flags)` | Collects a direct child; flags 0 block, `HACKOS_WAIT_NOHANG` polls |
-| 30 | `spawn_foreground(path, argc, argv)` | Boot-shell-only spawn with atomic terminal ownership handoff |
+| 30 | `spawn_foreground(path, argc, argv)` | Current terminal owner spawns with atomic terminal handoff and parent return |
 | 31 | `window_create(spec)` | Copy a `HackosWindowSpec`; return an owned opaque handle |
 | 32 | `window_blit(handle, rect, pixels)` | Copy a packed rectangle of up to 1024 pixels; return 0 |
 | 33 | `window_poll(handle)` | 0 while open, 1 after the mouse closes it; nonblocking |
@@ -211,6 +253,13 @@ return an error rather than being reinterpreted as new operations.
 | 37 | `window_mode(handle, operation)` | Query/minimize/maximize/restore an owned window; return mode flags |
 | 38 | `getcwd(out, capacity)` | Copy the caller's NUL-terminated canonical directory; 0 or error |
 | 39 | `chdir(path)` | Validate a directory and update only the caller; 0 or error |
+| 40 | `identity(out)` | Copy current `HackosCredentials`; 0 or error |
+| 41 | `user_info(index, out)` | Copy one `HackosUserInfo`; 1 found, 0 end |
+| 42 | `group_info(index, out)` | Copy one `HackosGroupInfo`; 1 found, 0 end |
+| 43 | `user_create(name, gid)` | Root creates a user with a known primary GID; returns new UID |
+| 44 | `group_create(name)` | Root creates a group; returns new GID |
+| 45 | `user_add_group(uid, gid)` | Root adds a known supplementary group; 0, including existing membership |
+| 46 | `spawn_as(path, argc, argv, uid, flags)` | Root selects a registered identity; returns PID; flag 1 requests foreground handoff and requires terminal ownership, 0 background |
 
 Calls use `int 0x80`: RAX is the number, RDI/RSI/RDX/RCX/R8 hold arguments,
 and saved RAX receives the result. Successful operations without another result
@@ -220,8 +269,16 @@ retired calls return `HACKOS_ERROR`. The fast `syscall` instruction remains
 disabled; vector `0x81` remains kernel-only.
 
 [abi.h](../../include/hackos/abi.h) contains fixed-width, pointer-free output
-records with pinned sizes and zeroed padding. Paths are NUL-terminated within
-256 bytes and start with `~`. Copy-in validates mapped user pages; copy-out
+records with pinned sizes and zeroed padding. `HackosCredentials` is 48 bytes
+(UID, primary GID, supplementary count, zero reserved, eight GIDs); unused GIDs
+are zero. User records append a 32-byte name (80 bytes total); group records
+contain GID, zero reserved and a 32-byte name (40 bytes). The process record is
+now 288 bytes: its original PID/state/name prefix is followed by UID/GID and
+parent PID. Old process-info consumers must be rebuilt with the new layout.
+IDs accepted as syscall arguments are validated at full 64-bit width, so high
+bits cannot alias root. Unknown spawn flags are rejected before task creation.
+Paths are NUL-terminated within 256 bytes; normalization accepts `/`, `~` or
+a path relative to the caller's working directory. Copy-in validates mapped user pages; copy-out
 also requires writable pages and validates the whole range before touching it.
 Read validates the destination before advancing a file offset. Input events
 include `HACKOS_KEY_UP` (128), `HACKOS_KEY_DOWN` (129), and
@@ -378,3 +435,18 @@ frame, using the configured PIT frequency. A pending final frame stays dirty
 until displayed, even after uploads/input stop. Boot, fault and power-off paths
 can still force an immediate draw. Composition still redraws the full display;
 damage tracking and a frame-presentation API are not introduced by this change.
+
+### Command display and directory listings
+
+Successful process start/exit diagnostics go only to the optional QEMU debug
+port (0xe9). They no longer enter the graphical console or scrollback. Command
+output, nonzero exit status, Ctrl-C and actual faults/errors remain visible.
+
+`ls` prints one entry per row and suffixes directories with `/`. By default it
+hides dot-prefixed names and FAT hidden entries. `-a` includes those entries
+(including `.` and `..` where supplied by the filesystem). `-l` adds a type
+(`d` or `-`), FAT attribute flags (`r` read-only, `h` hidden, `s` system, `a`
+archive; `-` for absent flags), byte size and name. This is filesystem metadata,
+not Unix ownership/permissions; the API does not expose owners or timestamps.
+Use `-la`, `-al`, separate flags, or `--` to end option parsing. A single optional
+path is supported; unknown flags, empty paths and extra paths report usage.

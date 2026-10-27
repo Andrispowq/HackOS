@@ -6,9 +6,17 @@ uint64_t user_pages_live;
 
 void* UserAddressSpace::AllocatePage()
 {
-    if (ownedCount == USER_MAX_PAGES + 4) return nullptr;
+    if (ownedCount == USER_MAX_PAGES + 4)
+    {
+        return nullptr;
+    }
+
     void* page = PageFrameAllocator::SharedAllocator()->TryRequestPage();
-    if (!page) return nullptr;
+    if (!page)
+    {
+        return nullptr;
+    }
+
     memset(page, 0, 4096);
     owned[ownedCount++] = page;
     ++user_pages_live;
@@ -37,14 +45,26 @@ static void LinkUserTable(PageTableEntry& entry, PageTable* table)
 bool UserAddressSpace::Initialise()
 {
     auto kernel = KernelDirectory.GetPML4();
-    if (!user_nx_enabled || kernel->entries[USER_BASE >> 39].present) return false;
+    if (!user_nx_enabled || kernel->entries[USER_BASE >> 39].present)
+    {
+        return false;
+    }
+
     auto root = (PageTable*)AllocatePage();
     auto pdp = (PageTable*)AllocatePage();
     auto pd = (PageTable*)AllocatePage();
     leaf = (PageTable*)AllocatePage();
-    if (!root || !pdp || !pd || !leaf) return false;
+    if (!root || !pdp || !pd || !leaf)
+    {
+        return false;
+    }
+
     memcpy(root, kernel, 4096);
-    for (auto& entry : root->entries) entry.user_access = 0;
+    for (auto& entry : root->entries)
+    {
+        entry.user_access = 0;
+    }
+
     LinkUserTable(root->entries[USER_BASE >> 39], pdp);
     LinkUserTable(pdp->entries[0], pd);
     LinkUserTable(pd->entries[0], leaf);
@@ -54,12 +74,23 @@ bool UserAddressSpace::Initialise()
 
 void* UserAddressSpace::AddPage(uint64_t address, bool writable, bool executable)
 {
-    if (!leaf || address < USER_BASE || address >= USER_END ||
-        (address & 4095) || (writable && executable)) return nullptr;
+    if (!leaf || address < USER_BASE || address >= USER_END || (address & 4095) || (writable && executable))
+    {
+        return nullptr;
+    }
+
     auto& entry = leaf->entries[(address - USER_BASE) >> 12];
-    if (entry.present) return nullptr;
+    if (entry.present)
+    {
+        return nullptr;
+    }
+
     void* page = AllocatePage();
-    if (!page) return nullptr;
+    if (!page)
+    {
+        return nullptr;
+    }
+
     entry.address = (uint64_t)page >> 12;
     entry.present = entry.user_access = 1;
     entry.writeable = writable;
@@ -69,55 +100,95 @@ void* UserAddressSpace::AddPage(uint64_t address, bool writable, bool executable
 
 bool UserAddressSpace::CopyFromUser(void* destination, uint64_t source, uint64_t length) const
 {
-    if (!length) return true;
+    if (!length)
+    {
+        return true;
+    }
+
     if (!leaf || source < USER_BASE || source >= USER_END || length > USER_END - source)
+    {
         return false;
+    }
+
     // Validate the entire range before copying any bytes. Mapping lifetime is
     // stable: callers run with preemption disabled or in an interrupt gate.
     uint64_t last = (source + length - 1 - USER_BASE) >> 12;
     for (uint64_t i = (source - USER_BASE) >> 12; i <= last; ++i)
-        if (!leaf->entries[i].present || !leaf->entries[i].user_access) return false;
+    {
+        if (!leaf->entries[i].present || !leaf->entries[i].user_access)
+        {
+            return false;
+        }
+    }
+
     auto output = (uint8_t*)destination;
     while (length)
     {
         const auto& entry = leaf->entries[(source - USER_BASE) >> 12];
         uint64_t offset = source & 4095;
         uint64_t size = 4096 - offset;
-        if (size > length) size = length;
+        if (size > length)
+        {
+            size = length;
+        }
+
         // Use the supervisor identity alias, never an unchecked user pointer.
         memcpy(output, (void*)(((uint64_t)entry.address << 12) + offset), size);
         output += size;
         source += size;
         length -= size;
     }
+
     return true;
 }
 
 bool UserAddressSpace::WritableRange(uint64_t destination, uint64_t length) const
 {
-    if (!length) return true;
+    if (!length)
+    {
+        return true;
+    }
+
     if (!leaf || destination < USER_BASE || destination >= USER_END || length > USER_END - destination)
+    {
         return false;
-    for (uint64_t i = (destination - USER_BASE) >> 12;
-         i <= (destination + length - 1 - USER_BASE) >> 12; ++i)
+    }
+
+    for (uint64_t i = (destination - USER_BASE) >> 12; i <= (destination + length - 1 - USER_BASE) >> 12; ++i)
+    {
         if (!leaf->entries[i].present || !leaf->entries[i].user_access || !leaf->entries[i].writeable)
+        {
             return false;
+        }
+    }
+
     return true;
 }
 
 bool UserAddressSpace::CopyToUser(uint64_t destination, const void* source, uint64_t length) const
 {
-    if (!WritableRange(destination, length)) return false;
+    if (!WritableRange(destination, length))
+    {
+        return false;
+    }
+
     auto input = (const uint8_t*)source;
     while (length)
     {
         auto& entry = leaf->entries[(destination - USER_BASE) >> 12];
         uint64_t offset = destination & 4095;
         uint64_t size = 4096 - offset;
-        if (size > length) size = length;
+        if (size > length)
+        {
+            size = length;
+        }
+
         memcpy((void*)(((uint64_t)entry.address << 12) + offset), input, size);
-        input += size; destination += size; length -= size;
+        input += size;
+        destination += size;
+        length -= size;
     }
+
     return true;
 }
 
@@ -125,8 +196,16 @@ bool UserAddressSpace::CopyString(char* destination, uint64_t source, uint64_t c
 {
     for (uint64_t i = 0; i < capacity; ++i)
     {
-        if (!CopyFromUser(destination + i, source + i, 1)) return false;
-        if (!destination[i]) return true;
+        if (!CopyFromUser(destination + i, source + i, 1))
+        {
+            return false;
+        }
+
+        if (!destination[i])
+        {
+            return true;
+        }
     }
+
     return false;
 }

@@ -19,64 +19,69 @@
 #define STATUS_DF 0x20
 #define STATUS_ERR 0x01
 
-//This is really specific to out OS now, assuming ATA bus 0 master 
+//This is really specific to out OS now, assuming ATA bus 0 master
 //Source - OsDev wiki
 static void WaitBSY();
 static void WaitDRQ();
 
 void ReadSectorsATA(uint64_t target_address, uint32_t LBA, uint8_t sector_count)
 {
-	WaitBSY();
+    WaitBSY();
 
-	__outb(0x1F6,0xE0 | ((LBA >> 24) & 0xF));
-	__outb(0x1F2, sector_count);
-	__outb(0x1F3, (uint8_t) LBA);
-	__outb(0x1F4, (uint8_t)(LBA >> 8));
-	__outb(0x1F5, (uint8_t)(LBA >> 16)); 
-	__outb(0x1F7, 0x20); //Send the read command
+    __outb(0x1F6, 0xE0 | ((LBA >> 24) & 0xF));
+    __outb(0x1F2, sector_count);
+    __outb(0x1F3, (uint8_t)LBA);
+    __outb(0x1F4, (uint8_t)(LBA >> 8));
+    __outb(0x1F5, (uint8_t)(LBA >> 16));
+    __outb(0x1F7, 0x20); //Send the read command
 
-	uint16_t *target = (uint16_t*) target_address;
+    uint16_t* target = (uint16_t*)target_address;
 
-	for (int j = 0; j < sector_count;j ++)
-	{
-		WaitBSY();
-		WaitDRQ();
+    for (int j = 0; j < sector_count; j++)
+    {
+        WaitBSY();
+        WaitDRQ();
 
-		for(int i = 0; i < 256; i++)
-			target[i] = __inw(0x1F0);
+        for (int i = 0; i < 256; i++)
+        {
+            target[i] = __inw(0x1F0);
+        }
 
-		target += 256;
-	}
+        target += 256;
+    }
 }
 
 void WriteSectorsATA(uint32_t LBA, uint8_t sector_count, uint32_t* bytes)
 {
-	WaitBSY();
+    WaitBSY();
 
-	__outb(0x1F6,0xE0 | ((LBA >> 24) & 0xF));
-	__outb(0x1F2,sector_count);
-	__outb(0x1F3, (uint8_t) LBA);
-	__outb(0x1F4, (uint8_t)(LBA >> 8));
-	__outb(0x1F5, (uint8_t)(LBA >> 16)); 
-	__outb(0x1F7,0x30); //Send the write command
+    __outb(0x1F6, 0xE0 | ((LBA >> 24) & 0xF));
+    __outb(0x1F2, sector_count);
+    __outb(0x1F3, (uint8_t)LBA);
+    __outb(0x1F4, (uint8_t)(LBA >> 8));
+    __outb(0x1F5, (uint8_t)(LBA >> 16));
+    __outb(0x1F7, 0x30); //Send the write command
 
-	for (int j = 0; j < sector_count; j++)
-	{
-		WaitBSY();
-		WaitDRQ();
+    for (int j = 0; j < sector_count; j++)
+    {
+        WaitBSY();
+        WaitDRQ();
 
-		for(int i = 0; i < 256; i++)
-		{
-			__outl(0x1F0, bytes[i]);
-		}
-	}
+        for (int i = 0; i < 256; i++)
+        {
+            __outl(0x1F0, bytes[i]);
+        }
+    }
 }
 
-static void WaitBSY()   //Wait for bsy to be 0
+static void WaitBSY() //Wait for bsy to be 0
 {
-	while(__inb(0x1F7) & STATUS_BSY);
+    while (__inb(0x1F7) & STATUS_BSY)
+        ;
 }
-static void WaitDRQ()  //Wait fot drq to be 1
+
+static void WaitDRQ() //Wait fot drq to be 1
 {
-	while(!(__inb(0x1F7) & STATUS_RDY));
+    while (!(__inb(0x1F7) & STATUS_RDY))
+        ;
 }

@@ -4,19 +4,19 @@
 #include "lib/stdint.h"
 
 // USB Base Descriptor Types
-#define USB_DESC_DEVICE                 0x01
-#define USB_DESC_CONF                   0x02
-#define USB_DESC_STRING                 0x03
-#define USB_DESC_INTF                   0x04
-#define USB_DESC_ENDP                   0x05
+#define USB_DESC_DEVICE 0x01
+#define USB_DESC_CONF 0x02
+#define USB_DESC_STRING 0x03
+#define USB_DESC_INTF 0x04
+#define USB_DESC_ENDP 0x05
 
 // USB HID Descriptor Types
-#define USB_DESC_HID                    0x21
-#define USB_DESC_REPORT                 0x22
-#define USB_DESC_PHYSICAL               0x23
+#define USB_DESC_HID 0x21
+#define USB_DESC_REPORT 0x22
+#define USB_DESC_PHYSICAL 0x23
 
 // USB HUB Descriptor Types
-#define USB_DESC_HUB                    0x29
+#define USB_DESC_HUB 0x29
 
 struct USBDeviceDesc
 {
@@ -100,12 +100,12 @@ struct USBHubDesc
 } __attribute__((packed));
 
 // Hub Characteristics
-#define HUB_POWER_MASK                  0x03        // Logical Power Switching Mode
-#define HUB_POWER_GLOBAL                0x00
-#define HUB_POWER_INDIVIDUAL            0x01
-#define HUB_COMPOUND                    0x04        // Part of a Compound Device
-#define HUB_CURRENT_MASK                0x18        // Over-current Protection Mode
-#define HUB_TT_TTI_MASK                 0x60        // TT Think Time
-#define HUB_PORT_INDICATORS             0x80        // Port Indicators
+#define HUB_POWER_MASK 0x03 // Logical Power Switching Mode
+#define HUB_POWER_GLOBAL 0x00
+#define HUB_POWER_INDIVIDUAL 0x01
+#define HUB_COMPOUND 0x04        // Part of a Compound Device
+#define HUB_CURRENT_MASK 0x18    // Over-current Protection Mode
+#define HUB_TT_TTI_MASK 0x60     // TT Think Time
+#define HUB_PORT_INDICATORS 0x80 // Port Indicators
 
 #endif

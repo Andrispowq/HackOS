@@ -6,9 +6,10 @@
 Display* Display::s_Display = nullptr;
 
 Display display;
+
 Display* Display::SharedDisplay()
 {
-    if(s_Display == nullptr)
+    if (s_Display == nullptr)
     {
         s_Display = &display;
     }
@@ -20,17 +21,15 @@ void InitialiseDisplay(Framebuffer* framebuffer, PSF1_FONT* font)
 {
     display.framebuffer = (Framebuffer*)malloc(sizeof(Framebuffer));
     memcpy(display.framebuffer, framebuffer, sizeof(Framebuffer));
-    
+
     display.console.fontColour = 0xFF00FFFF;
     display.console.bgColour = 0xFF505050;
     display.console.current_x = 0;
     display.console.current_y = 0;
     display.console.char_width = 8;
     display.console.char_height = 16;
-    display.console.con_width = display.framebuffer->width / 
-            display.console.char_width;
-    display.console.con_height = display.framebuffer->height / 
-            display.console.char_height;
+    display.console.con_width = display.framebuffer->width / display.console.char_width;
+    display.console.con_height = display.framebuffer->height / display.console.char_height;
     display.font = font;
 }
 
@@ -41,7 +40,7 @@ void clrscr()
     display.console.current_y = 0;
 }
 
-void printf_backspace() 
+void printf_backspace()
 {
     display.put_backspace();
 }
@@ -60,7 +59,7 @@ int Display::puts(const char* str)
 {
     char c;
     int i = 0;
-    while((c = str[i++]) != 0)
+    while ((c = str[i++]) != 0)
     {
         putc(c);
     }
@@ -72,7 +71,7 @@ void putchar_at_xy(Framebuffer* fb, char character, uint32_t x, uint32_t y)
 {
     uint32_t* addr = fb->address;
     uint32_t pitch = fb->pitch;
-    
+
     uint32_t charWidth = display.console.char_width;
     uint32_t charHeight = display.console.char_height;
 
@@ -87,7 +86,6 @@ void putchar_at_xy(Framebuffer* fb, char character, uint32_t x, uint32_t y)
             {
                 addr[_y * pitch + _x] = display.console.fontColour;
             }
-
         }
 
         fontPtr++;
@@ -98,7 +96,7 @@ void putchar_at(Framebuffer* fb, char character, uint32_t xOff, uint32_t yOff)
 {
     uint32_t* addr = fb->address;
     uint32_t pitch = fb->pitch;
-    
+
     uint32_t charWidth = display.console.char_width;
     uint32_t charHeight = display.console.char_height;
 
@@ -123,7 +121,7 @@ void empty_char_at(Framebuffer* fb, uint32_t xOff, uint32_t yOff)
 {
     uint32_t* addr = fb->address;
     uint32_t pitch = fb->pitch;
-    
+
     uint32_t charWidth = display.console.char_width;
     uint32_t charHeight = display.console.char_height;
 
@@ -141,14 +139,22 @@ void empty_char_at(Framebuffer* fb, uint32_t xOff, uint32_t yOff)
 void scroll_up(Framebuffer* fb)
 {
     const uint32_t rows = display.console.char_height;
-    if (rows >= fb->height) { fb->Clear(display.console.bgColour); return; }
+    if (rows >= fb->height)
+    {
+        fb->Clear(display.console.bgColour);
+        return;
+    }
+
     for (uint32_t y = 0; y < fb->height - rows; ++y)
-        memcpy(fb->address + (uint64_t)y * fb->pitch,
-               fb->address + (uint64_t)(y + rows) * fb->pitch, fb->width * sizeof(uint32_t));
+    {
+        memcpy(fb->address + (uint64_t)y * fb->pitch, fb->address + (uint64_t)(y + rows) * fb->pitch,
+               fb->width * sizeof(uint32_t));
+    }
+
     fb->DrawRect(0, fb->height - rows, fb->width, rows, display.console.bgColour);
 }
 
-int Display::putc(char ch) 
+int Display::putc(char ch)
 {
     int xOff = 0;
     int yOff = 0;
@@ -161,16 +167,16 @@ int Display::putc(char ch)
     uint32_t width = display.console.con_width;
     uint32_t height = display.console.con_height;
 
-    if(ch == '\n')
+    if (ch == '\n')
     {
         new_x = 0;
         yOff = 1;
     }
-    else if(ch == '\r')
+    else if (ch == '\r')
     {
         new_x = 0;
     }
-    else if(ch == '\t')
+    else if (ch == '\t')
     {
         xOff = 4;
     }
@@ -185,38 +191,40 @@ int Display::putc(char ch)
         to_put = 1;
     }
 
-    if(to_put == 1)
+    if (to_put == 1)
     {
         putchar_at(framebuffer, ch, x, y);
     }
 
-    if(to_put == 2)
+    if (to_put == 2)
     {
         empty_char_at(framebuffer, x - 1, y);
     }
 
-    if(new_x != -1)
+    if (new_x != -1)
     {
         x = new_x;
     }
-    if(new_y != -1)
+
+    if (new_y != -1)
     {
         y = new_y;
     }
-    
-    if(xOff != 0)
+
+    if (xOff != 0)
     {
         x += xOff;
-        if(x >= width)
+        if (x >= width)
         {
             x = (width - x);
             yOff++;
         }
     }
-    if(yOff != 0)
+
+    if (yOff != 0)
     {
         y += yOff;
-        if(y >= height)
+        if (y >= height)
         {
             scroll_up(framebuffer);
             y = height - 1;

@@ -325,3 +325,39 @@ statuses. The ABI probe checks getcwd/chdir pointer validation, child-directory
 isolation and denied power calls (including an unprivileged child launching
 SHUTDOWN). Cleanup compares reaped tasks with all successful launches. Window
 regressions launch `window` by name, including background owners.
+
+Step 12 checks the graphical console position after `clear` and `print` to prove
+that start/exit boilerplate no longer consumes console lines; debug-port traces
+remain available for lifecycle assertions. `quiet-console.ppm` records the view.
+The shell suite installs disposable normal, dot-prefixed, hidden and read-only
+files, then exercises `ls`, `-l`, `-a`, combined/separate flags, option termination,
+metadata, row layout and invalid arguments. The style-only pass was audited for
+unchanged non-brace tokens, accounting for preprocessor continuations and adjacent
+string literals; host and both firmware suites validate the result.
+
+
+Step 13 adds host tests of the production account registry: fixed IDs, valid and
+invalid names, duplicate/capacity rejection, full-width IDs, supplementary-group
+limits, idempotence and independent credential snapshots. The shell suite builds
+and installs CREDPROBE only into its disposable image. It tests root and non-root
+syscalls directly, invalid output/input pointers, unknown identities/flags,
+ordinary and grandchild inheritance, immutable process snapshots after registry
+updates, root-group membership without UID-0 privilege, same-UID and cross-UID
+kill policy, protected tasks, nested terminal return (including an exited
+launcher), background launch fallback and failed identity
+selection. Command checks cover the new identity/account tools, `runas`, denied
+shutdown/restart and account changes, plus interactive non-root input and Ctrl-C.
+The ABI probe now runs its ordinary permission tests under UID 1000, selected
+through the real root-only launch API. Existing lifecycle checks count all new
+tasks and require complete reclamation. The final root SHUTDOWN command still
+must produce a real QEMU ACPI shutdown event on both firmware paths.
+
+
+Step-13 verification on 2026-10-27 passed 151 host checks with the documented
+UBSan fallback, five boot-asset checks, the BIOS-chain probe, fresh builds and
+all boot/shell/ring-3/window suites on BIOS and UEFI. The local translated ASan
+runtime failed the empty-program allocator preflight; full ASan remains a CI
+requirement. The BIOS stripped kernel is 128,984 bytes within the unchanged
+131,072-byte slot. ELF headers/load segments and both framebuffer captures were
+also checked. The touched account/dispatcher files use `-Os`; frame pointers,
+freestanding flags and interrupt ABI are preserved.

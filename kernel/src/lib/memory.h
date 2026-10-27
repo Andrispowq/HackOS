@@ -10,7 +10,6 @@
 
 #include "hackos/runtime/memory.h"
 
-
 /*
    KERNEL HEAP CODE STARTS HERE
 */
@@ -18,9 +17,9 @@
 uint64_t kmalloc_int(uint64_t size, int align, uint64_t* phys_addr);
 void kfree(void* ptr);
 
-uint64_t kmalloc_a(uint64_t size); // page aligned.
-uint64_t kmalloc_p(uint64_t size, uint64_t* phys); // returns a physical address.
+uint64_t kmalloc_a(uint64_t size);                  // page aligned.
+uint64_t kmalloc_p(uint64_t size, uint64_t* phys);  // returns a physical address.
 uint64_t kmalloc_ap(uint64_t size, uint64_t* phys); // page aligned.
-uint64_t kmalloc(uint64_t size); // uint64_t kmalloc
+uint64_t kmalloc(uint64_t size);                    // uint64_t kmalloc
 
 #endif

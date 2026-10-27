@@ -5,7 +5,10 @@ using namespace User;
 
 inline bool Arguments(int argc, int expected, const char* usage)
 {
-    if (argc == expected) return true;
+    if (argc == expected)
+    {
+        return true;
+    }
 
     Print("Usage: ");
     Print(usage);

@@ -7,7 +7,7 @@
 
 class PageFrameAllocator
 {
-public:
+  public:
     void ReadMemoryMap(MemoryMap* memMap);
 
     void FreePages(void* address, uint64_t pageCount);
@@ -19,13 +19,24 @@ public:
     void* RequestPage();
     void* TryRequestPage();
 
-    uint64_t GetFreeRAM() const { return freeMemory; }
-    uint64_t GetUsedRAM() const { return usedMemory; }
-    uint64_t GetReservedRAM() const { return reservedMemory; }
+    uint64_t GetFreeRAM() const
+    {
+        return freeMemory;
+    }
+
+    uint64_t GetUsedRAM() const
+    {
+        return usedMemory;
+    }
+
+    uint64_t GetReservedRAM() const
+    {
+        return reservedMemory;
+    }
 
     static PageFrameAllocator* SharedAllocator();
 
-private:
+  private:
     static PageFrameAllocator* s_Allocator;
     Bitmap bitmap;
 

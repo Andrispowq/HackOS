@@ -36,98 +36,98 @@
 struct FAT32_BootSector
 {
     uint8_t JumpInstruction[3];
-	uint8_t OEM[8];
-	uint16_t BytesPerSector;
-	uint8_t SectorsPerCluster;
-	uint16_t ReservedSectors;
-	uint8_t NumberOfFATs;
-	uint16_t RootEntries;
-	uint16_t TotalSectors;
-	uint8_t MediaType;
-	uint16_t SectorsPerFAT;
-	uint16_t SectorsPerTrack;
-	uint16_t HeadsPerCylinder;
-	uint32_t HiddenSectors;
-	uint32_t LargeTotalSectors;
+    uint8_t OEM[8];
+    uint16_t BytesPerSector;
+    uint8_t SectorsPerCluster;
+    uint16_t ReservedSectors;
+    uint8_t NumberOfFATs;
+    uint16_t RootEntries;
+    uint16_t TotalSectors;
+    uint8_t MediaType;
+    uint16_t SectorsPerFAT;
+    uint16_t SectorsPerTrack;
+    uint16_t HeadsPerCylinder;
+    uint32_t HiddenSectors;
+    uint32_t LargeTotalSectors;
 
-	uint32_t SectorsPerFAT32;
-	uint16_t Flags;
-	uint16_t Version;
-	uint32_t RootDirStart;
-	uint16_t FSInfoSector;
-	uint16_t BackupBootSector;
+    uint32_t SectorsPerFAT32;
+    uint16_t Flags;
+    uint16_t Version;
+    uint32_t RootDirStart;
+    uint16_t FSInfoSector;
+    uint16_t BackupBootSector;
 
-	uint32_t Reserved0;
-	uint32_t Reserved1;
-	uint32_t Reserved2;
+    uint32_t Reserved0;
+    uint32_t Reserved1;
+    uint32_t Reserved2;
 
-	uint8_t DriveNumber;
-	uint8_t Reserved3;
-	uint8_t BootSignature;
-	uint32_t VolumeSerial;
-	uint8_t VolumeLabel[11];
-	uint8_t FSName[8];
+    uint8_t DriveNumber;
+    uint8_t Reserved3;
+    uint8_t BootSignature;
+    uint32_t VolumeSerial;
+    uint8_t VolumeLabel[11];
+    uint8_t FSName[8];
 
-	uint8_t BootCode[420];
-	uint8_t BootablePartitionSignature[2];
+    uint8_t BootCode[420];
+    uint8_t BootablePartitionSignature[2];
 } __attribute__((packed));
 
 struct FSInfo
 {
-	uint32_t LeadSignature; //0x41615252
-	uint8_t Reserved0[480];
-	uint32_t StructSignature; //0x61417272
-	uint32_t FreeSpace; //Last free cluster count (0xFFFFFFFF -> unknown)
-	uint32_t LastWritten; //Last written cluster number, or 0xFFFFFFFF
-	uint8_t Reserved1[12];
-	uint32_t TrailSignature; //0xAA550000
+    uint32_t LeadSignature; //0x41615252
+    uint8_t Reserved0[480];
+    uint32_t StructSignature; //0x61417272
+    uint32_t FreeSpace;       //Last free cluster count (0xFFFFFFFF -> unknown)
+    uint32_t LastWritten;     //Last written cluster number, or 0xFFFFFFFF
+    uint8_t Reserved1[12];
+    uint32_t TrailSignature; //0xAA550000
 } __attribute__((packed));
 
 struct DirectoryEntry
 {
-	char name[8];
-	char ext[3];
+    char name[8];
+    char ext[3];
 
-	uint8_t attributes;
-	uint8_t reserved;
+    uint8_t attributes;
+    uint8_t reserved;
 
-	uint8_t ctime_ms;
-	uint16_t ctime_time;
-	uint16_t ctime_date;
-	uint16_t atime_date;
-	uint16_t clusterHigh;
+    uint8_t ctime_ms;
+    uint16_t ctime_time;
+    uint16_t ctime_date;
+    uint16_t atime_date;
+    uint16_t clusterHigh;
 
-	uint16_t mtime_time;
-	uint16_t mtime_date;
-	uint16_t clusterLow;
-	uint32_t fileSize;
+    uint16_t mtime_time;
+    uint16_t mtime_date;
+    uint16_t clusterLow;
+    uint32_t fileSize;
 } __attribute__((packed));
 
 struct LongDirectoryEntry
 {
-	uint8_t order;
-	uint16_t name0[5];
-	uint8_t attributes;
-	uint8_t type;
-	uint8_t checksum;
-	uint16_t name1[6];
-	uint16_t reserved;
-	uint16_t name2[2];
+    uint8_t order;
+    uint16_t name0[5];
+    uint8_t attributes;
+    uint8_t type;
+    uint8_t checksum;
+    uint16_t name1[6];
+    uint16_t reserved;
+    uint16_t name2[2];
 } __attribute__((packed));
 
 struct DirEntry
 {
-	char name[128] = { 0 };
-	uint32_t cluster = 0;
-	uint32_t size = 0;
-	uint8_t attributes = 0;
+    char name[128] = {0};
+    uint32_t cluster = 0;
+    uint32_t size = 0;
+    uint8_t attributes = 0;
 
-	uint32_t parentCluster = 0;
-	uint32_t offsetInParentCluster = 0;
-	// Locations of the validated on-disk records; these fields are not serialized.
-	uint32_t directoryCluster = 0;
-	uint32_t firstDirectoryIndex = 0;
-	uint32_t directoryEntryCount = 0;
+    uint32_t parentCluster = 0;
+    uint32_t offsetInParentCluster = 0;
+    // Locations of the validated on-disk records; these fields are not serialized.
+    uint32_t directoryCluster = 0;
+    uint32_t firstDirectoryIndex = 0;
+    uint32_t directoryEntryCount = 0;
 };
 
 #endif

@@ -7,10 +7,15 @@
 
 class FAT32Driver
 {
-public:
+  public:
     FAT32Driver(Device* device, uint32_t part_start);
     ~FAT32Driver();
-    bool IsValid() const { return valid; }
+
+    bool IsValid() const
+    {
+        return valid;
+    }
+
     vector<DirEntry> GetDirectories(uint32_t cluster, uint32_t filter_attributes, bool exclude);
     int OpenFile(const char* path, DirEntry* entry);
     int CreateFile(const char* parentPath, DirEntry* entry);
@@ -18,9 +23,13 @@ public:
     int ReadFile(DirEntry entry, uint64_t offset, void* buffer, uint64_t bytes);
     int WriteFile(DirEntry& entry, uint64_t offset, void* buffer, uint64_t bytes);
     int ResizeFile(DirEntry& entry, uint32_t size);
-    uint32_t GetRootDirStart() const { return RootDirStart; }
 
-private:
+    uint32_t GetRootDirStart() const
+    {
+        return RootDirStart;
+    }
+
+  private:
     bool ValidCluster(uint32_t cluster) const;
     uint32_t ReadFAT(uint32_t cluster) const;
     void WriteFAT(uint32_t cluster, uint32_t value);

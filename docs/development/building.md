@@ -28,7 +28,9 @@ background. Try `input` for interactive text input; Ctrl-C returns to
 the shell. Up/Down browses the fixed 256-command history, and `history` lists it.
 Bare commands resolve in `/usr/bin`; only `cd` and `history` stay in the shell.
 The command suite is built from `libs/commands` and packaged as separate ELF
-programs. Use `cat /usr/hello.txt` (or `read /usr/hello.txt`) instead of the old
+programs. The initial shell is root. Try `id`, `users`, `groups`, `groupadd staff`,
+`useradd alice staff`, and `runas alice id`. Account changes last only for this
+boot. `runas alice shutdown` is denied by the kernel. Login/setup remain deferred. Use `cat /usr/hello.txt` (or `read /usr/hello.txt`) instead of the old
 shell-owned open/read/close session. Explicit paths still work.
 The first image build compiles
 GCC and Binutils from source and takes considerably longer than later cached
@@ -185,7 +187,17 @@ private Unix socket and a bounded timeout; see [testing](testing.md). A
 framebuffer requires a graphical window or VNC: `-nographic` does not turn it
 into a text console.
 
-The kernel compiles `window.cpp`, `window_manager.cpp`, `proc/user/windows.cpp`
-and `mouse.cpp` with `-Os` to keep window and input code within the fixed BIOS
+The kernel compiles the account registry and syscall dispatcher, plus `window.cpp`, `window_manager.cpp`, `proc/user/windows.cpp`
+and `mouse.cpp` with `-Os` to keep these services within the fixed BIOS
 kernel slot. Debug information,
 frame pointers, freestanding flags and the no-red-zone policy are retained.
+
+## Source formatting
+
+Use clang-format **18.1.8** with the root `.clang-format`. Run
+`python3 tools/format.py` to check, or add `--write` to apply it. Set
+`CLANG_FORMAT` if the executable is not on PATH. The tool selects project-owned
+C/C++ in kernel/common/libs/include/tests/util and BIOS, plus the custom UEFI
+loader only. GNU-EFI and supplied UEFI headers are excluded. It preserves file
+modes. New code uses Allman braces, four spaces, separate statements and blank
+lines between definitions; keep logical blocks separated where helpful.

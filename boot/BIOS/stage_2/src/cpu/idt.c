@@ -3,7 +3,7 @@
 idt_gate_t idt[IDT_ENTRIES];
 idt_register_t idt_reg;
 
-void SetIDTGate(uint8_t entry, uint8_t flags, uint64_t handler) 
+void SetIDTGate(uint8_t entry, uint8_t flags, uint64_t handler)
 {
     idt[entry].offset0 = (uint16_t)(handler & 0x000000000000FFFF);
     idt[entry].offset1 = (uint16_t)((handler & 0x00000000FFFF0000) >> 16);
@@ -13,9 +13,9 @@ void SetIDTGate(uint8_t entry, uint8_t flags, uint64_t handler)
     idt[entry].flags = flags;
 }
 
-void SetIDT() 
+void SetIDT()
 {
-    idt_reg.offset = (uint64_t) &idt;
+    idt_reg.offset = (uint64_t)&idt;
     idt_reg.limit = IDT_ENTRIES * sizeof(idt_gate_t) - 1;
 
     __set_idt(&idt_reg);

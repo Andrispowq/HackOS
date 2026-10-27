@@ -41,6 +41,10 @@ include $(COMMON_DIR)/runtime.mk
 # debug information, frame pointers and all freestanding/interrupt ABI flags.
 $(OBJ_DIR)/drivers/screen/window.o $(OBJ_DIR)/drivers/screen/window_manager.o $(OBJ_DIR)/proc/user/windows.o $(OBJ_DIR)/drivers/mouse/mouse.o: CFLAGS += -Os
 
+# Credential validation shares the fixed BIOS payload budget with the syscall
+# dispatcher. Keep debug frames and the same freestanding ABI while sizing it.
+$(OBJ_DIR)/proc/user/accounts.o $(OBJ_DIR)/arch/x86_64/syscall/syscall.o: CFLAGS += -Os
+
 .PHONY: kernel link clean
 kernel: $(BUILD_DIR)/kernel.elf
 link: $(BIN_DIR)/kernel.elf

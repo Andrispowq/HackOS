@@ -17,7 +17,7 @@ struct GDTGate
 
 class GDTR
 {
-public:
+  public:
     void SetGate(uint8_t gate, uint64_t base, uint32_t limit, uint8_t access, uint8_t granularity);
     void Flush();
 

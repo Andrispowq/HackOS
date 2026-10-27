@@ -1,6 +1,9 @@
 #include "hackos/user.h"
 
-extern "C" { volatile uint64_t event_gate = 0; }
+extern "C"
+{
+    volatile uint64_t event_gate = 0;
+}
 
 static bool Check(bool condition)
 {
@@ -38,15 +41,22 @@ int main(int argc, char** argv)
     }
 
     uint64_t handle = syscall_window_create(&spec);
-    if (!Check(handle != HACKOS_ERROR)) return 1;
+    if (!Check(handle != HACKOS_ERROR))
+    {
+        return 1;
+    }
 
     bool initial = syscall_window_event(handle, (HackosWindowEvent*)0x100000) == HACKOS_ERROR;
     initial = syscall_window_event(handle, (HackosWindowEvent*)0x4000001fffff) == HACKOS_ERROR && initial;
-    initial = syscall_window_event(handle, &event) == 1 && event.type == HACKOS_WINDOW_FOCUS && event.focused == 1 && initial;
+    initial =
+        syscall_window_event(handle, &event) == 1 && event.type == HACKOS_WINDOW_FOCUS && event.focused == 1 && initial;
     initial = syscall_window_event(handle, &event) == 0 && initial;
     initial = syscall_window_state(handle, (HackosWindowState*)0x100000) == HACKOS_ERROR && initial;
     initial = syscall_window_state(handle, &state) == 0 && state.focused == 1 && state.width == 200 && initial;
-    if (!Check(initial)) return 1;
+    if (!Check(initial))
+    {
+        return 1;
+    }
 
     if (argc == 2 && User::Equal(argv[1], "events"))
     {
@@ -60,7 +70,10 @@ int main(int argc, char** argv)
         ok = syscall_window_event(handle, &event) == 1 && event.type == HACKOS_WINDOW_OVERFLOW && ok;
         ok = syscall_window_event(handle, &event) == 0 && ok;
         ok = syscall_window_state(handle, &state) == 0 && state.focused == 1 && ok;
-        if (!Check(ok)) return 1;
+        if (!Check(ok))
+        {
+            return 1;
+        }
 
         User::Print("WINDOW_EVENTS_OK\n");
         return 0;
@@ -70,7 +83,10 @@ int main(int argc, char** argv)
     {
         if (User::Equal(argv[1], "fault") || User::Equal(argv[1], "minimized"))
         {
-            if (!Check(syscall_window_mode(handle, HACKOS_WINDOW_MINIMIZE) == HACKOS_WINDOW_MINIMIZED)) return 1;
+            if (!Check(syscall_window_mode(handle, HACKOS_WINDOW_MINIMIZE) == HACKOS_WINDOW_MINIMIZED))
+            {
+                return 1;
+            }
         }
 
         if (User::Equal(argv[1], "fault"))
@@ -100,6 +116,7 @@ int main(int argc, char** argv)
     {
         c = 'x';
     }
+
     ok = syscall_window_create(&spec) == HACKOS_ERROR && ok;
     spec.title[0] = 0;
 
@@ -109,6 +126,7 @@ int main(int argc, char** argv)
         window = syscall_window_create(&spec);
         ok = window != HACKOS_ERROR && ok;
     }
+
     ok = syscall_window_create(&spec) == HACKOS_ERROR && ok;
     for (auto window : extra)
     {
@@ -137,10 +155,12 @@ int main(int argc, char** argv)
     ok = syscall_window_mode(handle, HACKOS_WINDOW_RESTORE) == 0 && ok;
     ok = syscall_window_mode(handle, HACKOS_WINDOW_MAXIMIZE) == HACKOS_WINDOW_MAXIMIZED && ok;
     ok = syscall_window_state(handle, &state) == 0 && state.x == 1 && state.width > 320 && ok;
-    ok = syscall_window_mode(handle, HACKOS_WINDOW_MINIMIZE) == (HACKOS_WINDOW_MINIMIZED | HACKOS_WINDOW_MAXIMIZED) && ok;
+    ok = syscall_window_mode(handle, HACKOS_WINDOW_MINIMIZE) == (HACKOS_WINDOW_MINIMIZED | HACKOS_WINDOW_MAXIMIZED) &&
+         ok;
     ok = syscall_window_mode(handle, HACKOS_WINDOW_RESTORE) == HACKOS_WINDOW_MAXIMIZED && ok;
     ok = syscall_window_mode(handle, HACKOS_WINDOW_RESTORE) == 0 && ok;
-    ok = syscall_window_state(handle, &state) == 0 && state.x == 100 && state.y == 100 && state.width == 200 && state.height == 170 && ok;
+    ok = syscall_window_state(handle, &state) == 0 && state.x == 100 && state.y == 100 && state.width == 200 &&
+         state.height == 170 && ok;
 
     char number[21] = {};
     unsigned digits = 0;
@@ -169,10 +189,16 @@ int main(int argc, char** argv)
     ok = fresh != HACKOS_ERROR && fresh != handle && ok;
     ok = syscall_window_close(handle) == HACKOS_ERROR && ok;
 
-    if (!Check(ok)) return 1;
+    if (!Check(ok))
+    {
+        return 1;
+    }
 
     User::Print("WINDOW_API_OK\n");
-    if (!Check(syscall_window_mode(fresh, HACKOS_WINDOW_MINIMIZE) == HACKOS_WINDOW_MINIMIZED)) return 1;
+    if (!Check(syscall_window_mode(fresh, HACKOS_WINDOW_MINIMIZE) == HACKOS_WINDOW_MINIMIZED))
+    {
+        return 1;
+    }
 
     // Leave the fresh minimized handle open to verify normal-exit cleanup.
     return 0;

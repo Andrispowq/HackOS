@@ -11,7 +11,7 @@
 
 class WindowManager
 {
-public:
+  public:
     WindowManager();
     ~WindowManager();
 
@@ -25,7 +25,7 @@ public:
     void Keyboard(uint32_t key);
     uint64_t ChangeMode(Window* window, uint64_t operation);
 
-private:
+  private:
     void Focus(Window* window);
     void Mouse(int32_t x, int32_t y, uint32_t buttons);
     Window* Hit(int32_t x, int32_t y);

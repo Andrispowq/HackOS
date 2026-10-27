@@ -7,7 +7,7 @@ isr_t interrupt_handlers[256];
 
 /* Can't do this with a loop because we need the address
  * of the function names */
-void InstallISR() 
+void InstallISR()
 {
     SetIDTGate(0, IDT_TA_InterruptGate, (uint64_t)isr0);
     SetIDTGate(1, IDT_TA_InterruptGate, (uint64_t)isr1);
@@ -52,7 +52,7 @@ void InstallISR()
     __outb(0x21, 0x01);
     __outb(0xA1, 0x01);
     __outb(0x21, 0x0);
-    __outb(0xA1, 0x0); 
+    __outb(0xA1, 0x0);
 
     // Install the IRQs
     SetIDTGate(IRQ0, IDT_TA_InterruptGate, (uint64_t)irq0);
@@ -77,46 +77,43 @@ void InstallISR()
 }
 
 /* To print the message which defines every exception */
-char *exception_messages[] = 
-{
-    "Division By Zero",
-    "Debug",
-    "Non Maskable Interrupt",
-    "Breakpoint",
-    "Into Detected Overflow",
-    "Out of Bounds",
-    "Invalid Opcode",
-    "No Coprocessor",
+char* exception_messages[] = {"Division By Zero",
+                              "Debug",
+                              "Non Maskable Interrupt",
+                              "Breakpoint",
+                              "Into Detected Overflow",
+                              "Out of Bounds",
+                              "Invalid Opcode",
+                              "No Coprocessor",
 
-    "Double Fault",
-    "Coprocessor Segment Overrun",
-    "Bad TSS",
-    "Segment Not Present",
-    "Stack Fault",
-    "General Protection Fault",
-    "Page Fault",
-    "Unknown Interrupt",
+                              "Double Fault",
+                              "Coprocessor Segment Overrun",
+                              "Bad TSS",
+                              "Segment Not Present",
+                              "Stack Fault",
+                              "General Protection Fault",
+                              "Page Fault",
+                              "Unknown Interrupt",
 
-    "Coprocessor Fault",
-    "Alignment Check",
-    "Machine Check",
-    "Reserved",
-    "Reserved",
-    "Reserved",
-    "Reserved",
-    "Reserved",
+                              "Coprocessor Fault",
+                              "Alignment Check",
+                              "Machine Check",
+                              "Reserved",
+                              "Reserved",
+                              "Reserved",
+                              "Reserved",
+                              "Reserved",
 
-    "Reserved",
-    "Reserved",
-    "Reserved",
-    "Reserved",
-    "Reserved",
-    "Reserved",
-    "Reserved",
-    "Reserved"
-};
+                              "Reserved",
+                              "Reserved",
+                              "Reserved",
+                              "Reserved",
+                              "Reserved",
+                              "Reserved",
+                              "Reserved",
+                              "Reserved"};
 
-void ISRHandler(registers_t* r) 
+void ISRHandler(registers_t* r)
 {
     if (interrupt_handlers[r->int_no] != 0)
     {
@@ -129,19 +126,21 @@ void ISRHandler(registers_t* r)
     }
 }
 
-void RegisterInterruptHandler(uint8_t index, isr_t handler) 
+void RegisterInterruptHandler(uint8_t index, isr_t handler)
 {
     interrupt_handlers[index] = handler;
 }
 
-void IRQHandler(registers_t* regs) 
+void IRQHandler(registers_t* regs)
 {
-    if (regs->int_no >= 40) 
+    if (regs->int_no >= 40)
+    {
         __outb(0xA0, 0x20);
-    
+    }
+
     __outb(0x20, 0x20);
 
-    if (interrupt_handlers[regs->int_no] != 0) 
+    if (interrupt_handlers[regs->int_no] != 0)
     {
         isr_t handler = interrupt_handlers[regs->int_no];
         handler(regs);

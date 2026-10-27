@@ -2,10 +2,9 @@
 
 // Callers serialize access. Overflow discards the incomplete sequence so the
 // consumer can resynchronize from an authoritative state snapshot.
-template <typename T, unsigned Capacity>
-class EventQueue
+template <typename T, unsigned Capacity> class EventQueue
 {
-public:
+  public:
     bool Push(const T& event)
     {
         if (count == Capacity)
@@ -21,7 +20,10 @@ public:
 
     bool Pop(T& event)
     {
-        if (!count) return false;
+        if (!count)
+        {
+            return false;
+        }
 
         event = events[read];
         read = (read + 1) % Capacity;
@@ -29,7 +31,10 @@ public:
         return true;
     }
 
-    unsigned Count() const { return count; }
+    unsigned Count() const
+    {
+        return count;
+    }
 
     void Clear()
     {
@@ -45,7 +50,10 @@ public:
 
     bool TakeOverflow()
     {
-        if (!overflow) return false;
+        if (!overflow)
+        {
+            return false;
+        }
 
         overflow = false;
         read = 0;
@@ -53,7 +61,7 @@ public:
         return true;
     }
 
-private:
+  private:
     T events[Capacity] = {};
     unsigned read = 0;
     unsigned count = 0;
