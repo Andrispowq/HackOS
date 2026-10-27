@@ -5,6 +5,7 @@ import json
 import os
 from pathlib import Path
 import re
+import select
 import shutil
 import socket
 import subprocess
@@ -16,22 +17,44 @@ from common import ROOT, OUT, Report, command, require_success
 
 
 class QMP:
-    def __init__(self, path):
+    def __init__(self, path=None, process=None):
         self.events = []
-        self.socket = socket.socket(socket.AF_UNIX)
-        self.socket.settimeout(10)
-        self.socket.connect(str(path))
-        self.stream = self.socket.makefile("rwb", buffering=0)
-        self.stream.readline()
+        self.socket = None
+        self.pending = b''
+        if process is None:
+            self.socket = socket.socket(socket.AF_UNIX)
+            self.socket.settimeout(10)
+            self.socket.connect(str(path))
+            self.reader = self.writer = self.socket.makefile("rwb", buffering=0)
+        else:
+            self.reader, self.writer = process.stdout, process.stdin
+        self.stream = self.reader  # Existing socket callers also iterate raw shutdown events.
+        self.readline()
         self.call("qmp_capabilities")
+
+    def readline(self):
+        if self.socket:
+            return self.reader.readline()
+        deadline = time.monotonic() + 10
+        while b'\n' not in self.pending:
+            remaining = deadline - time.monotonic()
+            if remaining <= 0 or not select.select([self.reader], [], [], remaining)[0]:
+                raise TimeoutError('QMP response timed out')
+            chunk = os.read(self.reader.fileno(), 4096)
+            if not chunk:
+                raise RuntimeError('QMP disconnected')
+            self.pending += chunk
+        line, self.pending = self.pending.split(b'\n', 1)
+        return line
 
     def call(self, execute, arguments=None):
         request = {"execute": execute}
         if arguments is not None:
             request["arguments"] = arguments
-        self.stream.write(json.dumps(request).encode() + b"\n")
+        self.writer.write(json.dumps(request).encode() + b"\n")
+        self.writer.flush()
         while True:
-            raw = self.stream.readline()
+            raw = self.readline()
             if not raw:
                 raise RuntimeError("QMP disconnected")
             result = json.loads(raw)
@@ -49,13 +72,16 @@ class QMP:
     def type(self, text):
         punctuation = {">": "dot", "<": "comma", "|": "backslash", " ": "spc", ".": "dot", "/": "slash", "-": "minus",
                        "\n": "ret", "\b": "backspace", "_": "minus", "%": "5", "~": "grave_accent", "&": "7", '"': "apostrophe", "'": "apostrophe", "\\": "backslash",
-                       "^": "6", "$": "4", "*": "8", "[": "bracket_left", "]": "bracket_right", "+": "equal"}
+                       "^": "6", "$": "4", "*": "8", "[": "bracket_left", "]": "bracket_right", "+": "equal", ":": "semicolon"}
         for ch in text:
-            self.key(punctuation.get(ch, ch.lower()), ch.isupper() or ch in "_%~&<>|\"^$*+")
+            self.key(punctuation.get(ch, ch.lower()), ch.isupper() or ch in "_%~&<>|\"^$*+:")
 
     def close(self):
-        self.stream.close()
-        self.socket.close()
+        self.reader.close()
+        if self.writer is not self.reader:
+            self.writer.close()
+        if self.socket:
+            self.socket.close()
 
 
 def build_probe(directory, source, waiting=False, extra=None):

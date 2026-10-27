@@ -6,6 +6,7 @@ int main()
 {
     char name[HACKOS_ACCOUNT_NAME] = {};
     char password[HACKOS_PASSWORD_MAX + 1] = {};
+    syscall_console(1);
     Print("\nHackOS login\n");
     for (;;)
     {
@@ -55,6 +56,7 @@ int main()
             continue;
         }
 
+        syscall_console(1);
         if (state == HACKOS_AUTH_SETUP)
         {
             Print("First-boot setup. Create the initial administrator (UID 0).\nUsername: ");

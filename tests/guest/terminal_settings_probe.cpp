@@ -69,6 +69,8 @@ int main(int argc, char** argv)
     int64_t status = -1;
     CHECK(syscall_wait(pid, &status, 0) == pid && status == 0);
 
+    CHECK(Command("set", "font_size", "16", 0) == 0);
+    CHECK(syscall_terminal_get(&initial) == 0);
     CHECK(Command("set", "font_size", "32", 0) == 0);
     CHECK(syscall_terminal_get(&after) == 0 && after.fontSize == 32);
     CHECK(after.columns == initial.columns / 2 && after.rows == initial.rows / 2);
@@ -97,8 +99,8 @@ int main(int argc, char** argv)
     CHECK(Command("set", "font_size", "default", 0) == 0);
     CHECK(Command("set", "bg_col", "default", 0) == 0);
     CHECK(Command("set", "font_col", "default", 0) == 0);
-    CHECK(syscall_terminal_get(&after) == 0 && after.fontSize == 16 && after.bgColour == 0x505050ff &&
-          after.fontColour == 0x00ffffff);
+    CHECK(syscall_terminal_get(&after) == 0 && after.fontSize == 30 && after.bgColour == 0x000000ff &&
+          after.fontColour == 0xffffffff);
     CHECK(Command("set", "font_size", "8", 0) == 0);
     CHECK(Command("reset", nullptr, nullptr, 0) == 0);
     CHECK(syscall_terminal_get(&initial) == 0 && Same(initial, after));

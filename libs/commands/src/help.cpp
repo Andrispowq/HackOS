@@ -13,6 +13,7 @@ int main(int argc, char**)
     Print("Files: xxd <file>, mkdir <path>, rm <file>, mv <source> <destination>.\n");
     Print("Filters: grep [-Finvclq] <pattern> [file ...], wc [-lwc] [file ...].\n");
     Print("Filters: head/tail [-n N|-c N] [file ...], tee [-a] [file ...], more [-n lines] [file ...].\n");
+    Print("Filters: sort [-bfnru], uniq [-cdui], cut -b/-c/-f LIST, tr [-cds] SET1 [SET2]. Use --help.\n");
     Print("Filters read stdin by default. more: Space pages, Enter advances, q quits. Use --help.\n");
     Print("Permissions: chmod <octal-mode> <path>, chown <user> <group> <path> (root).\n");
     Print("Editor: edit <file>; Ctrl+S saves, Ctrl+X exits without saving.\n");

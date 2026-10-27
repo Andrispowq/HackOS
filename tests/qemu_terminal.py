@@ -134,7 +134,7 @@ def test(firmware, timeout):
         def read(name):
             return require_success(command(['mtype', '-i', filesystem(image), '::/TMP/' + name]), name)
 
-        defaults = f'font_size = 16\nbg_col = 0x505050ff\nfont_col = 0x00ffffff\ncolumns = {width // 8}\nrows = {height // 16}\n'
+        defaults = f'font_size = 30\nbg_col = 0x000000ff\nfont_col = 0xffffffff\ncolumns = {width // 15}\nrows = {height // 30}\n'
         assert read('defaults') == read('reset') == defaults
         assert read('count') == '3\n' and read('rgba') == '0xffffff80\n'
         assert read('rows') == str(height // 32) + '\n' and read('columns') == str(width // 16) + '\n'

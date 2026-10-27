@@ -204,6 +204,11 @@ future changes; prior results are not a substitute.
 
 ## Userspace and scheduling
 
+- [ ] Optimize login password hashing/verification: login currently takes roughly
+  five seconds (user reported). Profile and optimize the PBKDF2-HMAC-SHA256
+  implementation while preserving the password work factor and existing account
+  format; distinguish hashing time from other login overhead.
+
 - [x] Load minimal static programs into private memory with W/X permissions,
   TSS kernel entry stacks, timer preemption and exit reclamation on BIOS/UEFI.
 - [x] Expose a restricted `int 0x80` user ABI for exit and checked literal output;

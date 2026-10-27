@@ -40,11 +40,13 @@ waits. `echo` replaces `print`; `time` selects RTC date/time and startup ticks.
 Root-only `sysinfo` reports CPU, RAM/map, block devices, PCI/USB, PS/2, display
 and ACPI through copied records; see `docs/system/utilities.md`. See
 `docs/system/streams.md` for the stream ABI, limits and lifecycle rules.
-Normal-user `grep`, `wc`, `head`, `tail`, `tee` and `more` support streams and
+Normal-user `grep`, `wc`, `head`, `tail`, `tee`, `more`, `sort`, `uniq`, `cut` and `tr` support streams and
 redirection. Foreground pipeline stages can read paging keys independently of
 stdin. Ordinary background children do not inherit that access; terminal control
 and delegation still require the individual owner. Syscall 80 queries copied terminal geometry/flags. Grep has a bounded BRE subset and
-64 KiB line limit; tail retains at most 128 KiB of suffix data.
+64 KiB line limit; tail retains at most 128 KiB of suffix data. Sort buffers up to
+128 KiB/4096 lines; uniq/cut allow 64 KiB lines and tr streams bytes. See
+`docs/system/utilities.md` for their Unix-like option subsets and bounds.
 `terminal get/set/reset` controls console font height (even 8–64 pixels) and RGBA
 colours through syscalls 81–82. Queries are public; mutations require the individual
 foreground owner and clear the console. Settings last until reset/reboot, and

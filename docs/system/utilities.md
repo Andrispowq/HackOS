@@ -26,12 +26,14 @@ with a deliberately small option set.
 
 ## Text filters and pager
 
-`grep`, `wc`, `head`, `tail`, `tee` and `more` are standalone programs available
+`grep`, `wc`, `head`, `tail`, `tee`, `more`, `sort`, `uniq`, `cut` and `tr` are standalone programs available
 to ordinary users. File access uses the caller's existing permissions. All use
 stdin/stdout/stderr, support `--help` and `--`, and put diagnostics on stderr.
 Options precede operands; unknown options fail instead of being ignored.
-Except for `tee`, omitted files or a `-` operand select stdin; several files are
-processed in order. `tee` always reads stdin and treats `-` as a literal filename.
+Omitted input files or a `-` input operand select stdin. Grep/wc/head/tail/more/cut
+process several files in order; sort combines their lines. Uniq accepts one input
+and an optional output file (`-` means stdout). Tr accepts sets rather than files
+and always reads stdin. Tee always reads stdin and treats `-` as a literal filename.
 
 ```sh
 cat /usr/hello.txt | grep -in hello | tee /tmp/matches | wc -l
@@ -40,6 +42,9 @@ tail -n 10 < /tmp/log
 head -c 32 /tmp/data > /tmp/prefix
 cat /tmp/log | more
 echo another line | tee -a /tmp/log
+cut -d: -f1 /tmp/records | tr A-Z a-z | sort | uniq -c
+cut -s -d: -f2 /tmp/records | sort -nr > /tmp/numbers
+tr -d '[:digit:]' < /tmp/text | tr -s '[:space:]'
 ```
 
 | Command | Supported options and behavior |
@@ -50,6 +55,10 @@ echo another line | tee -a /tmp/log
 | `tail [-n [+]N] [-c [+]N] [-qv] [file ...]` | Last N lines/bytes; default ten lines. `+N` starts at the one-based line/byte N (0 also means the beginning). Header flags as for head. Zero without `+` drains input and emits nothing |
 | `tee [-a] [file ...]` | Copy stdin to stdout and every file; create/truncate by default, `-a` appends. Reports open/write/close/flush failures and continues surviving outputs. A broken stdout pipe ends the command |
 | `more [-n lines] [file ...]` | Page foreground terminal output; default one screen minus one row. Space advances a page, Enter one row, q quits; Ctrl-Z/C use normal job control. `-n` accepts 1–10000 rows |
+| `sort [-bfnru] [file ...]` | Sort all input lines by unsigned byte order; `-b` ignores leading spaces/tabs, `-f` folds ASCII case, `-n` compares leading decimal numbers, `-r` reverses, `-u` emits one line per equal comparison key |
+| `uniq [-cdui] [-f N] [-s N] [-w N] [input [output]]` | Collapse adjacent equal lines; `-c` prefixes counts (minimum width seven), `-d` keeps repeated groups, `-u` keeps single lines, `-i` folds ASCII case. Skip N blank-separated fields, then N bytes; compare at most N bytes with `-w` |
+| `cut (-b LIST \| -c LIST \| -f LIST) [-d delimiter] [-s] [file ...]` | Select one-based byte/character positions or fields. Lists accept `N`, `N-M`, `N-`, `-M`, separated by commas. Fields default to tab; `-d` selects one byte (empty means NUL). `-s` suppresses undelimited lines |
+| `tr [-cCdst] SET1 [SET2]` | Translate stdin bytes; `-d` deletes SET1, `-s` squeezes adjacent repeats from the last set after deletion/translation, `-c`/`-C` complements SET1 over all 256 bytes. `-t` limits translation to SET2 length |
 
 Counts accept decimal integers; `-n2` and `-c32` also work for head/tail, and
 more accepts `-n2`. The last head/tail count option selects the unit and count.
@@ -57,6 +66,45 @@ These are intentionally small Unix-style subsets: no size suffixes, negative
 head counts, tail follow mode, locale/Unicode word handling, recursive grep,
 extended regular expressions or multiple grep patterns. Long option aliases
 other than `--help` are not implemented.
+
+Sort buffers at most **128 KiB including line terminators and 4096 lines** across
+all operands. Exceeding either bound fails before emitting sorted output. There
+is no temporary-file/external sort. Numeric comparison is exact for decimal text
+of any length within that bound: leading spaces/tabs, an optional minus sign,
+digits and a decimal point. Missing numbers compare as zero; plus signs,
+exponents, thousands separators and locale formats are not recognized. Equal
+keys use the full original line as a bytewise tie-breaker, except with `-u`, which
+retains the first input representative. There are no `-k` keys, merge/check modes
+or `-o` output operand; use shell redirection to a separate file.
+
+Uniq remembers only two lines and compares adjacent groups, so use `sort | uniq`
+for global deduplication. It keeps each group's first original line. `-d -u`
+together select no groups. Field skipping counts leading spaces/tabs plus the
+following nonblank field; byte skipping and comparison width apply afterward.
+Zero is valid for uniq counts, including `-w0` (all lines compare equal).
+Cut emits selections in input order, once per position even for overlapping or
+out-of-order ranges. Non-delimited lines pass through unchanged unless `-s` is
+set; empty fields count. `-d`/`-s` require `-f`. `-c` selects bytes just like `-b`;
+there is no multibyte decoding. Cut supports at most 128 ranges. Uniq and cut
+accept **64 KiB per line**, excluding the newline; total input length is unbounded.
+Sort, uniq and cut treat NUL/high bytes as data and terminate a final partial line
+with a newline. Unsupported options, malformed ranges/sets and exceeded limits
+are explicit failures. Usage errors exit 2; input/output/limit failures exit 1.
+
+Tr preserves every byte not selected for translation/deletion and adds no newline.
+Sets support literals, ascending byte ranges (`a-z`), backslash escapes
+(`\\`, `\a`, `\b`, `\f`, `\n`, `\r`, `\t`, `\v`), and one-to-three-digit
+octal escapes through `\377`, including `\000`. Quote sets to preserve shell
+metacharacters; double every backslash for HackOS shell parsing, even inside
+quotes (for example, `tr -d "\\000"`). ASCII classes are `[:alnum:]`, `[:alpha:]`,
+`[:blank:]`, `[:cntrl:]`, `[:digit:]`, `[:graph:]`, `[:lower:]`, `[:print:]`,
+`[:punct:]`, `[:space:]`, `[:upper:]` and `[:xdigit:]`. Translation's SET2 may use
+case classes only, paired with opposite case classes at the same position in
+SET1. A short SET2 repeats its last byte unless `-t` is set; a duplicate SET1 byte
+uses its last translation. `-d` takes one set, `-ds` two; `-s` alone takes one set
+for squeezing, or two for translation followed by squeezing. Each expanded set
+allows 1024 bytes; input size is unbounded. Equivalence/repetition expressions,
+locale collation, Unicode and long option aliases other than `--help` are absent.
 
 The grep pattern subset includes literals, `.`, leading `^`, trailing `$`, `*`,
 bracket sets/ranges/negation (`[abc]`, `[a-z]`, `[^abc]`), and backslash-escaped
@@ -91,8 +139,8 @@ upstream writers can finish with a broken-pipe result.
 
 ```sh
 terminal get                     # list all settings
-terminal get font_size           # print just 16, by default
-terminal set font_size 32         # double the original text size
+terminal get font_size           # print just 30, by default
+terminal set font_size 60         # double the default text size
 terminal set bg_col 0x101820ff
 terminal set font_col 0xe8eef2ff
 terminal get rows | cat > /tmp/terminal-rows
@@ -108,9 +156,9 @@ fail. Queries are readable without ownership and never consume keyboard input.
 
 | Key | Meaning | Default |
 | --- | --- | --- |
-| `font_size` | Font height in pixels, even integers from 8 through 64; width is half the height | `16` (8×16 cell) |
-| `bg_col` | Background as eight hexadecimal RGBA digits, optionally prefixed by `0x` or `0X` | `0x505050ff` |
-| `font_col` | Text as eight hexadecimal RGBA digits | `0x00ffffff` |
+| `font_size` | Font height in pixels, even integers from 8 through 64; width is half the height | `30` (15×30 cell) |
+| `bg_col` | Background as eight hexadecimal RGBA digits, optionally prefixed by `0x` or `0X` | `0x000000ff` |
+| `font_col` | Text as eight hexadecimal RGBA digits | `0xffffffff` |
 | `columns`, `rows` | Read-only count of complete character cells | Framebuffer dimensions divided by cell size |
 
 Colour queries always print `0xrrggbbaa`. Alpha `ff` is opaque and `00` is

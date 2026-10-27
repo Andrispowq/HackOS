@@ -35,6 +35,9 @@ Normal users can run `grep -in hello /usr/hello.txt`, `wc /usr/hello.txt`,
 `head -n 5 /usr/hello.txt`, `tail -c 32 /usr/hello.txt`, and
 `cat /usr/hello.txt | tee /tmp/copy | more`. Pipelines support up to four stages, with
 ordered redirections and quoted paths. `cat` preserves exact bytes.
+`sort`, `uniq`, `cut` and `tr` also run as normal users; try
+`cut -d: -f1 /tmp/records | tr A-Z a-z | sort | uniq -c`.
+Each supports `--help`; see the [utility limits](../system/utilities.md).
 Use `terminal get` to inspect console settings, `terminal set font_size 32`
 for larger text, and `terminal reset` to restore the default size and colours.
 Settings clear the visible console and require foreground ownership.

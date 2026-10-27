@@ -6,8 +6,8 @@ TEST(console_settings_atomic_validation_and_reset)
     Console console;
     CHECK(console.Configure(HACKOS_TERMINAL_RESET, 0, 1919, 1079));
     auto initial = console.Settings();
-    CHECK(initial.fontSize == 16 && initial.bgColour == 0x505050ff && initial.fontColour == 0x00ffffff);
-    CHECK(initial.columns == 239 && initial.rows == 67 && !initial.reserved);
+    CHECK(initial.fontSize == 30 && initial.bgColour == 0x000000ff && initial.fontColour == 0xffffffff);
+    CHECK(initial.columns == 127 && initial.rows == 35 && !initial.reserved);
     console.current_x = 12;
     console.current_y = 34;
     const uint64_t invalidSizes[] = {0, 7, 9, 65, 0x100000010ULL, ~0ULL};
@@ -47,7 +47,7 @@ TEST(console_rgba_roundtrip_and_alpha)
     CHECK(console.Configure(HACKOS_TERMINAL_BG_COLOUR, 0xffffff00, 800, 600));
     CHECK(console.Background() == 0xff000000);
     CHECK(console.Configure(HACKOS_TERMINAL_RESET, 0, 800, 600));
-    CHECK(console.Background() == 0xff505050 && console.Foreground() == 0xff00ffff);
+    CHECK(console.Background() == 0xff000000 && console.Foreground() == 0xffffffff);
     return 0;
 }
 
@@ -127,11 +127,11 @@ TEST(console_scroll_uses_whole_rows_and_clears_remainder)
     {
         for (unsigned x = 0; x < fb.pitch; ++x)
         {
-            CHECK(pixels[y * fb.pitch + x] == (x >= 4 ? 0 : y < 8 ? y + 9 : 0xff505050));
+            CHECK(pixels[y * fb.pitch + x] == (x >= 4 ? 0 : y < 8 ? y + 9 : 0xff000000));
         }
     }
     fb.height = 8;
     console.Scroll(fb);
-    CHECK(fb.GetPixel(0, 0) == 0xff505050 && fb.GetPixel(3, 7) == 0xff505050);
+    CHECK(fb.GetPixel(0, 0) == 0xff000000 && fb.GetPixel(3, 7) == 0xff000000);
     return 0;
 }

@@ -1,14 +1,14 @@
 #include "output.h"
 
 static const char* keys[] = {"font_size", "bg_col", "font_col", "columns", "rows"};
-static const uint32_t defaults[] = {16, 0x505050ff, 0x00ffffff};
+static const uint32_t defaults[] = {30, 0x000000ff, 0xffffffff};
 
 static int Usage(bool help)
 {
     const char* text = "Usage: terminal get [key] | terminal set <key> <value> | terminal reset\n"
-                       "  font_size  Font height in pixels: even numbers 8..64 (default 16).\n"
-                       "  bg_col     Background colour as 0xRRGGBBAA (default 0x505050ff).\n"
-                       "  font_col   Text colour as 0xRRGGBBAA (default 0x00ffffff).\n"
+                       "  font_size  Font height in pixels: even numbers 8..64 (default 30).\n"
+                       "  bg_col     Background colour as 0xRRGGBBAA (default 0x000000ff).\n"
+                       "  font_col   Text colour as 0xRRGGBBAA (default 0xffffffff).\n"
                        "  columns, rows  Read-only terminal dimensions in characters.\n"
                        "get without a key lists all values. set also accepts 'default'.\n"
                        "Colours accept eight hex digits with optional 0x prefix. Alpha blends\n"

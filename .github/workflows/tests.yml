@@ -180,6 +180,15 @@ jobs:
             --mount "type=bind,source=$PWD,target=/work,readonly" \
             --mount "type=bind,source=$PWD/tests/out,target=/work/tests/out" \
             hackos-tests:toolchain python3 tests/qemu_filters.py --firmware "$FIRMWARE"
+      - name: Exercise normal-user sort, uniq, cut and tr
+        if: ${{ !cancelled() && steps.build.outcome == 'success' }}
+        env:
+          FIRMWARE: ${{ matrix.firmware }}
+        run: |
+          docker run --rm --network none --user "$(id -u):$(id -g)" \
+            --mount "type=bind,source=$PWD,target=/work,readonly" \
+            --mount "type=bind,source=$PWD/tests/out,target=/work/tests/out" \
+            hackos-tests:toolchain python3 tests/qemu_text_tools.py --firmware "$FIRMWARE"
       - name: Exercise terminal appearance and foreground authorization
         if: ${{ !cancelled() && steps.build.outcome == 'success' }}
         env:
@@ -250,6 +259,7 @@ jobs:
             tests/out/qemu-streams-${{ matrix.firmware }}/
             tests/out/qemu-utilities-${{ matrix.firmware }}/
             tests/out/qemu-filters-${{ matrix.firmware }}/
+            tests/out/qemu-text-tools-${{ matrix.firmware }}/
             tests/out/qemu-files-${{ matrix.firmware }}/
             tests/out/qemu-storage-${{ matrix.firmware }}/
             tests/out/qemu-user-${{ matrix.firmware }}/

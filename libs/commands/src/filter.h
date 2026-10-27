@@ -41,13 +41,14 @@ class FilterOutput
 {
   public:
     uint64_t error = 0;
+    uint64_t fd = 1;
 
     bool Flush()
     {
         unsigned offset = 0;
         while (!error && offset < used)
         {
-            uint64_t written = syscall_fd_write(1, buffer + offset, used - offset, HACKOS_WAIT_FOREVER);
+            uint64_t written = syscall_fd_write(fd, buffer + offset, used - offset, HACKOS_WAIT_FOREVER);
             if (!written || written > used - offset)
             {
                 error = written ? written : HACKOS_ERROR;

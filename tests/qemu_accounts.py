@@ -75,7 +75,8 @@ class Guest:
 
 
 @contextmanager
-def boot(directory, image, firmware, name, timeout, *, write_error=False, entropy=True, reboot=False, serial=True, paused=False):
+def boot(directory, image, firmware, name, timeout, *, write_error=False, entropy=True, reboot=False, serial=True, paused=False,
+         qmp_stdio=False):
     with tempfile.TemporaryDirectory(prefix='hackos-accounts-') as temporary:
         temporary = Path(temporary)
         g = Guest()
@@ -95,9 +96,10 @@ def boot(directory, image, firmware, name, timeout, *, write_error=False, entrop
                 '-serial', f'file:{g.serial}' if serial else 'none', '-net', 'none',
                 '-drive', f'file={drive},format=raw,werror=report',
                 '-usb', '-device', 'usb-ehci,id=ehci', '-device', 'qemu-xhci,id=xhci',
-                '-qmp', f'unix:{qmp_path},server=on,wait=off',
-                '-gdb', f'unix:{g.gdb},server=on,wait=off',
+                '-qmp', 'stdio' if qmp_stdio else f'unix:{qmp_path},server=on,wait=off',
                 '-debugcon', f'file:{g.console}', '-global', 'isa-debugcon.iobase=0xe9']
+        if not qmp_stdio:
+            args += ['-gdb', f'unix:{g.gdb},server=on,wait=off']
         if paused:
             args += ['-S']
         if not reboot:
@@ -109,14 +111,15 @@ def boot(directory, image, firmware, name, timeout, *, write_error=False, entrop
             args += ['-drive', f'if=pflash,format=raw,unit=0,file={ovmf}/OVMF_CODE-pure-efi.fd,readonly=on',
                      '-drive', f'if=pflash,format=raw,unit=1,file={variables}']
         with (directory / (name + '-qemu.log')).open('w') as log:
-            g.process = subprocess.Popen(args, stdout=log, stderr=subprocess.STDOUT)
+            g.process = subprocess.Popen(args, stdin=subprocess.PIPE if qmp_stdio else None,
+                                         stdout=subprocess.PIPE if qmp_stdio else log, stderr=log, bufsize=0)
             g.qmp = None
             try:
                 deadline = time.monotonic() + timeout
-                while not qmp_path.exists() and time.monotonic() < deadline:
+                while not qmp_stdio and not qmp_path.exists() and time.monotonic() < deadline:
                     assert g.process.poll() is None, 'QEMU could not start'
                     time.sleep(0.05)
-                g.qmp = QMP(qmp_path)
+                g.qmp = QMP(process=g.process) if qmp_stdio else QMP(qmp_path)
                 yield g
             finally:
                 if g.qmp:
@@ -126,10 +129,10 @@ def boot(directory, image, firmware, name, timeout, *, write_error=False, entrop
                 except subprocess.TimeoutExpired:
                     g.process.kill()
                     g.process.wait()
-                output = g.output()
+                output = g.output() if g.console.exists() else ''
                 for secret in (ADMIN_PASSWORD, ALICE_PASSWORD, CHANGED_PASSWORD, 'WrongPass123'):
                     assert secret not in output, 'Password leaked to console/debug log'
-                    if serial:
+                    if serial and g.serial.exists():
                         assert secret not in g.serial.read_text(errors='replace'), 'Password leaked to serial log'
 
 

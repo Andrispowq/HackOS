@@ -580,7 +580,7 @@ Full ASan+UBSan validation remains a native x86-64 CI requirement.
 
 ## Stream filter and pager regressions
 
-`python3 tests/filter_commands.py` compiles the real grep/wc/head/tail/tee/more
+`python3 tests/filter_commands.py` compiles the real grep/wc/head/tail/tee/more/sort/uniq/cut/tr
 sources and libc output/string routines, substituting only hosted syscall
 transport. It runs with ASan+UBSan in CI (`--sanitizers undefined` is the explicit
 local fallback). It compares hundreds of deterministic binary streams and
@@ -591,7 +591,7 @@ wrapping. `make -C tests test-filter-commands` is the equivalent entry point.
 
 `python3 tests/qemu_filters.py --firmware bios` (and `uefi`), or
 `make -C tests test-filters FIRMWARE=...`, boots a disposable image, provisions a
-normal guest login, and runs all six tools under that identity. It verifies
+normal guest login, and runs the six original tools under that identity. It verifies
 four-stage pipes, saved output with mtools, permission denials, early consumer
 exit, redirected/background more, Space/Enter/q, Ctrl-Z/fg, and paging while the
 upstream producer remains blocked on a full pipe. FILTERPROBE validates copied
@@ -603,7 +603,20 @@ Both firmware jobs run this alongside the existing stream/job-control suites.
 Reports and screenshots are in `tests/out/qemu-filters-*`; hosted results are in
 `tests/out/filter-commands*`.
 
-Filter validation passed all eight hosted command groups with ASan+UBSan on the
+The hosted filter suite also covers sort/uniq/cut/tr: byte and exact decimal ordering,
+unique comparison keys, adjacent groups, field/byte ranges, ASCII classes,
+translation/deletion/squeezing, malformed arguments, buffer limits, short I/O
+and broken pipes. Deterministic binary-stream comparisons exercise the real
+command sources. `python3 tests/qemu_text_tools.py --firmware bios` (and `uefi`),
+or `make -C tests test-text-tools FIRMWARE=...`, runs the four new tools under
+a normal-user login and verifies four-stage pipelines, file/input/output operands, append/background
+redirection, permission denials, early consumers and repeated jobs on BIOS
+and UEFI. Both firmware CI jobs run this suite; reports are in
+`tests/out/qemu-text-tools-*`. This suite uses QMP over subprocess pipes without
+a debugger socket. Linux retains LeakSanitizer; macOS disables only
+unsupported leak detection while retaining ASan and UBSan.
+
+The original six-command filter validation passed all eight hosted command groups with ASan+UBSan on the
 native Linux runtime, 194 existing UBSan host checks, five boot-asset checks,
 the BIOS loader-chain probe, fresh BIOS/UEFI image builds and all eleven QEMU
 suites on each firmware path. The stripped kernel is 220,432 bytes within the

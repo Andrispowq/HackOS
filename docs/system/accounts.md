@@ -10,8 +10,9 @@ There is no automatic root shell or default password.
 
 ## Setup and daily use
 
-At boot and after logout, the console offers `1) login`, `2) restart` and
-`3) shutdown`. Enter a number or action name (case-insensitive). Invalid input
+At boot and after logout, the console clears before offering `1) login`,
+`2) restart` and `3) shutdown`. Selecting login clears it again before the setup
+or username prompt. Enter a number or action name (case-insensitive). Invalid input
 returns to the menu. Restart boots the same image again in the normal runner.
 Login starts setup on a new installation; restart and
 shutdown also work before setup or when account storage is damaged.

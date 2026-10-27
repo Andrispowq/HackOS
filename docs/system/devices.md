@@ -98,7 +98,7 @@ the IRQ. See [window events](userspace.md#window-interaction-and-events).
 ## Console rendering
 
 The console scales the bundled PSF1 bitmap to even pixel heights from 8 to 64
-(default 16), with a half-height cell width. Glyph drawing clips to framebuffer
+(default 30), with a half-height cell width. Glyph drawing clips to framebuffer
 bounds and respects scanline pitch; scrolling moves complete text rows and clears
 the remaining bottom strip. Window titles and controls retain their native font.
 The `terminal` utility controls font height and RGBA colours; see

@@ -5,10 +5,10 @@
 
 struct Console
 {
-    uint32_t bgColour = 0xff505050, fontColour = 0xff00ffff;
+    uint32_t bgColour = 0xff000000, fontColour = 0xffffffff;
     uint32_t current_x = 0, current_y = 0;
     uint32_t con_width = 0, con_height = 0;
-    uint32_t char_width = 8, char_height = 16;
+    uint32_t char_width = 15, char_height = 30;
 
     bool Configure(uint64_t key, uint64_t value, uint32_t width, uint32_t height);
     HackosTerminalSettings Settings() const;
