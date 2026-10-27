@@ -18,6 +18,7 @@ struct HackosProcessInfo
     char name[256];
     uint32_t uid, gid;
     uint64_t parentPid;
+    uint64_t processGroup;
 };
 
 constexpr uint32_t HACKOS_ROOT_UID = 0;
@@ -56,7 +57,7 @@ struct HackosClock
 };
 
 static_assert(sizeof(HackosFileInfo) == 288, "file ABI");
-static_assert(sizeof(HackosProcessInfo) == 288, "process ABI");
+static_assert(sizeof(HackosProcessInfo) == 296, "process ABI");
 static_assert(sizeof(HackosClock) == 16, "clock ABI");
 constexpr uint64_t HACKOS_ERROR = ~0ULL;
 constexpr uint64_t HACKOS_DENIED = ~1ULL;
@@ -80,6 +81,15 @@ constexpr uint32_t HACKOS_DIRECTORY = 16;
 constexpr uint64_t HACKOS_MAX_ARGS = 16;
 constexpr uint64_t HACKOS_ARG_BYTES = 1024; // includes all terminating NULs
 constexpr uint64_t HACKOS_WAIT_NOHANG = 1;
+constexpr uint64_t HACKOS_INPUT_NONBLOCK = 1;
+constexpr uint64_t HACKOS_JOB_FOREGROUND = 0;
+constexpr uint64_t HACKOS_JOB_BACKGROUND = 1;
+constexpr uint64_t HACKOS_JOB_TERMINATE = 2;
+constexpr uint64_t HACKOS_JOB_QUERY = 3;
+constexpr uint64_t HACKOS_JOB_STOPPED = ~5ULL;
+constexpr uint64_t HACKOS_JOB_INTERRUPTED = ~6ULL;
+constexpr uint64_t HACKOS_HEAP_BASE = 0x0000400000100000ULL;
+constexpr uint64_t HACKOS_HEAP_LIMIT = 512 * 1024;
 
 constexpr uint64_t HACKOS_KEY_SAVE = 19;
 constexpr uint64_t HACKOS_KEY_EXIT = 24;
@@ -89,6 +99,7 @@ constexpr uint64_t HACKOS_KEY_DELETE = 132;
 constexpr uint64_t HACKOS_KEY_UP = 128;
 constexpr uint64_t HACKOS_KEY_DOWN = 129;
 constexpr uint64_t HACKOS_KEY_INTERRUPT = 3;
+constexpr uint64_t HACKOS_KEY_STOP = 26;
 
 // Window dimensions describe the client area; the kernel adds a 30-pixel title bar.
 struct HackosWindowSpec

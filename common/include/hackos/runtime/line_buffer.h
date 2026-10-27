@@ -56,6 +56,11 @@ class LineBuffer
         return Echo;
     }
 
+    bool Overflowed() const
+    {
+        return tooLong;
+    }
+
     size_t Length() const
     {
         return length;

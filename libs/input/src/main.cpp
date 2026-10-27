@@ -8,17 +8,11 @@ int main()
     bool discard = false;
     for (;;)
     {
-        uint64_t value = syscall_input();
-        if (value == HACKOS_DENIED)
+        uint64_t value = syscall_terminal_read(0);
+        if (value == HACKOS_DENIED || value == HACKOS_ERROR)
         {
             User::Print("Input requires a foreground launch.\n");
             return 1;
-        }
-
-        if (!value)
-        {
-            syscall_yield();
-            continue;
         }
 
         if (value == HACKOS_INPUT_OVERFLOW)

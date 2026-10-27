@@ -2,11 +2,10 @@
 #include "../../libs/libc/src/memory.h"
 #include "../../libs/libc/src/string.h"
 
-// Explicit allocator adapter for the retained split implementation; the active
-// ring-3 runtime has no heap API and does not link this legacy adapter.
-uint64_t malloc(uint64_t size)
+// Explicit allocator adapter for the production split implementation.
+void* malloc(size_t size)
 {
-    return (uint64_t)test_alloc(size);
+    return test_alloc(size);
 }
 
 void free(void* pointer)

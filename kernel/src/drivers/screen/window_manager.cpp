@@ -272,6 +272,10 @@ void WindowManager::Update()
                 {
                     RequestTerminalInterrupt();
                 }
+                else if (state.key == HACKOS_KEY_STOP)
+                {
+                    RequestTerminalStop();
+                }
             }
 
             continue;

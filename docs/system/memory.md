@@ -96,3 +96,11 @@ copies the terminator and returns the original destination.
 
 See the [testing plan](../development/testing.md) for allocator, map, and
 support-library cases, and [TODO](../TODO.md) for the immediate repairs.
+
+Step 17 reserves a separate 512 KiB private user heap starting at
+`0x0000400000100000`; ELF load segments remain below it. `heap_resize` grows a
+page-rounded prefix transactionally, zeroes new frames, marks them writable/NX,
+and rolls back allocation failure. Shrink releases whole pages and reloads CR3
+before returning to user code. A separate 128-entry frame ledger keeps the heap
+quota independent of the 64 image/stack-page quota. Exit reclamation releases both
+ledgers after switching away. See [userspace](userspace.md) for allocator semantics.

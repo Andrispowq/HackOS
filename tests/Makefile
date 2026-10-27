@@ -38,3 +38,7 @@ test-files:
 .PHONY: test-storage
 test-storage:
 	$(PYTHON) qemu_storage.py --firmware $(FIRMWARE)
+
+.PHONY: test-usability
+test-usability:
+	$(PYTHON) qemu_usability.py --firmware $(FIRMWARE)

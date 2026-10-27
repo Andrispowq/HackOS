@@ -66,7 +66,7 @@ Power also requires UID 0, except for the boot login agent while it owns the
 logged-out terminal and displays login/restart/shutdown actions. Kill permits the
 same UID or root. Accounts persist in two FAT32
 slots, and first-boot setup creates the administrator. See [accounts](accounts.md).
-Only `cd`, `history` and `logout` remain
+Directory/history/session and job controls remain
 built-ins; bare names resolve to standalone programs in `/usr/bin`. Explicit
 paths and the `user` compatibility prefix also launch isolated programs; no interactive command
 executes a ring-0 ELF. The binary-only `USERTEST.ELF` input remains packaged but
@@ -82,7 +82,7 @@ is no longer called at boot.
   test boundary; see [filesystems](filesystems.md).
 - Kernel support functions resemble libc but do not all have standard libc
   semantics. Read the implementation before substituting a hosted function.
-- Userspace currently shares kernel assumptions and objects. Treat the
-  [program interface](userspace.md) as experimental.
+- Userspace exchanges copied ABI records and process-owned handles with the kernel.
+  Treat the [program interface](userspace.md) as experimental.
 
 Continue with [memory](memory.md), [devices](devices.md), or [graphics](graphics.md).

@@ -224,6 +224,12 @@ TEST(keyboard_editor_controls_left_right_ctrl_and_breaks)
         CHECK(!keys.Pop(c));
         keys.PushScancode(0x2d);
         CHECK(keys.Pop(c) && c == 24);
+        keys.PushScancode(0x2a); // Shift does not suppress Ctrl-Z.
+        keys.PushScancode(0x2c);
+        CHECK(keys.Pop(c) && c == 26);
+        keys.PushScancode(0xac);
+        keys.PushScancode(0xaa);
+        CHECK(!keys.Pop(c));
         if (side)
         {
             keys.PushScancode(0xe0);

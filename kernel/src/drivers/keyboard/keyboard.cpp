@@ -1,5 +1,6 @@
 #include "keyboard.h"
 #include "input.h"
+#include "proc/tasking/process.h"
 
 #include "drivers/mouse/mouse.h"
 #include "hackos/runtime/event_queue.h"
@@ -43,12 +44,14 @@ void DeliverKeyboard(uint32_t key)
     }
 
     terminalInput.Push((char)key);
+    WakeTerminalReaders();
 }
 
 void KeyboardOverflow()
 {
     InterruptGuard guard;
     terminalInput.Overflow();
+    WakeTerminalReaders();
 }
 
 void InitKeyboard()

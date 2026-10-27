@@ -8,14 +8,13 @@ ASM = nasm
 ASM_FLAGS = -f elf64
 OBJ_DIR = bin-int
 CFLAGS = -std=gnu++17 -O2 -g -ffreestanding -mno-red-zone -mcmodel=large -fno-pie -fno-stack-protector -fno-omit-frame-pointer -fno-exceptions -fno-rtti -MMD -MP -I ../../include -I ../../common/include
-OBJS = bin-int/user.o bin-int/start.o
+OBJS = bin-int/user.o bin-int/memory.o bin-int/stdio.o bin-int/string.o bin-int/start.o
 COMMON_DIR := ../../common
-COMMON_NO_SPLIT := true
 include $(COMMON_DIR)/runtime.mk
 .DEFAULT_GOAL := all
 .PHONY: all clean
 all: bin/libc.a
-bin-int/user.o: src/user.cpp Makefile
+bin-int/%.o: src/%.cpp Makefile
 	@mkdir -p $(@D)
 	$(CXX) $(CFLAGS) -c $< -o $@
 bin-int/start.o: src/start.asm Makefile

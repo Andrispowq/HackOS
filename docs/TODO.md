@@ -83,7 +83,7 @@ accounts, authentication and setup are addressed in step 14.
 
 ## Proposed continuation after step 14
 
-Steps 1–16 are implemented. The order below is a proposal for future iterations,
+Steps 1–17 are implemented. The order below is a proposal for future iterations,
 not authorization to implement them automatically. A fresh chat should read
 `AGENTS.md`, this file, `docs/system/userspace.md`, and the build/testing guides
 before starting. Preserve the root `.clang-format` style, leave vendored code
@@ -124,12 +124,15 @@ alone, and verify both BIOS and UEFI for each implementation step.
     and `ls -l` expose the model. Host and BIOS/UEFI disposable-image tests cover
     failure/full-volume behavior, persistence and interrupted journal recovery.
     See [storage contracts and limits](system/filesystems.md).
-17. **Userspace usability:** blocking terminal input, job/process-group control,
-    a user heap, remaining runtime helpers and shell completion. Split this into
-    smaller iterations as needed.
+17. **Userspace usability — implemented:** blocking decoded terminal input;
+    controller-owned process groups, Ctrl-Z/Ctrl-C, `jobs`/`fg`/`bg`/`wait` and
+    group termination; a bounded private heap with malloc/calloc/realloc/free,
+    C++ allocation, split and userspace formatting; quote-aware Tab completion.
+    See [userspace contracts and limits](system/userspace.md). POSIX signals,
+    pipelines, raw scancode events and a general virtual-memory API remain deferred.
 
-The remaining subsystem lists below are the broader hardening backlog. Step 17
-and later work require a new request.
+The remaining subsystem lists below are the broader hardening backlog. Later
+work requires a new request.
 Step 14 host validation passed 163 checks under UBSan, plus boot-asset and
 BIOS-chain checks. The local translated ASan runtime fails its empty-program
 preflight, so this does not claim ASan coverage. Rerun fresh BIOS/UEFI builds and
@@ -202,18 +205,19 @@ future changes; prior results are not a substitute.
   256-command shell history with Up/Down draft navigation.
 - [x] Add bounded whole-file saves, file/directory creation, file deletion/moves,
   and editor controls to the safe ABI (step 15).
-- [ ] Add blocking input, process-group/job control, a user heap and raw-key events.
-  Port remaining legacy runtime helpers.
+- [x] Add blocking input, process-group/job control, a user heap and allocation/formatting
+  runtime helpers (step 17).
+- [ ] Add raw key-up/modifier events if a consumer needs them; decoded keys remain the terminal contract.
 - [x] Add minimize/maximize/restore, a restore bar, and signed mouse-wheel
   events to the owned window API and standalone demo.
 - [x] Add bounded window dragging/resizing, focus/z-order, per-window input
   events and overflow recovery.
 - [x] Port the old window test to `USR/BIN/WINDOW` using process-owned handles,
   bounded pixel copies, close polling, and automatic lifecycle cleanup.
-- [ ] Extend automatic file/window cleanup to future user allocations. Add
-  priorities and broader scheduler stress tests.
+- [x] Reclaim private heap pages on every process exit path (step 17).
+- [ ] Add priorities and broader scheduler stress tests.
 - [ ] Replace binary-only `usertest.elf` with a source-built fixture.
-- [ ] Add shell completion and a blocking terminal input API for programs.
+- [x] Add shell completion and a blocking terminal input API for programs (step 17).
 - [x] Integrate the window manager without overwriting console contents.
 
 ## Tests and development

@@ -21,18 +21,12 @@ inline bool ReadLine(char* buffer, uint64_t capacity, bool hidden)
     EraseSecret(buffer, capacity);
     for (;;)
     {
-        uint64_t ch = syscall_input();
-        if (ch == HACKOS_DENIED || ch == HACKOS_KEY_INTERRUPT)
+        uint64_t ch = syscall_terminal_read(0);
+        if (ch == HACKOS_DENIED || ch == HACKOS_ERROR || ch == HACKOS_KEY_INTERRUPT)
         {
             EraseSecret(buffer, capacity);
             Print("\n");
             return false;
-        }
-
-        if (!ch)
-        {
-            syscall_yield();
-            continue;
         }
 
         if (ch == HACKOS_INPUT_OVERFLOW)

@@ -108,13 +108,7 @@ int main(int argc, char** argv)
     Draw(argv[1], message);
     for (;;)
     {
-        uint64_t key = syscall_input();
-        if (!key)
-        {
-            syscall_yield();
-            continue;
-        }
-
+        uint64_t key = syscall_terminal_read(0);
         if (key == HACKOS_DENIED || key == HACKOS_ERROR)
         {
             Print("edit: terminal unavailable.\n");

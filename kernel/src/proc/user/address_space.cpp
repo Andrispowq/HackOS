@@ -26,11 +26,62 @@ void* UserAddressSpace::AllocatePage()
 UserAddressSpace::~UserAddressSpace()
 {
     // Called on a kernel task's stack after switching away from this CR3.
+    ResizeHeap(0);
     while (ownedCount)
     {
         PageFrameAllocator::SharedAllocator()->FreePages(owned[--ownedCount], 1);
         --user_pages_live;
     }
+}
+
+bool UserAddressSpace::ResizeHeap(uint64_t bytes)
+{
+    if (!leaf || bytes > HACKOS_HEAP_LIMIT)
+    {
+        return false;
+    }
+
+    uint64_t pages = (bytes + 4095) / 4096;
+    uint64_t allocated = heapPages;
+    while (allocated < pages)
+    {
+        void* page = PageFrameAllocator::SharedAllocator()->TryRequestPage();
+        if (!page)
+        {
+            while (allocated > heapPages)
+            {
+                PageFrameAllocator::SharedAllocator()->FreePages(heapFrames[--allocated], 1);
+                heapFrames[allocated] = nullptr;
+                --user_pages_live;
+            }
+
+            return false;
+        }
+
+        memset(page, 0, 4096);
+        heapFrames[allocated++] = page;
+        ++user_pages_live;
+    }
+
+    for (uint64_t i = heapPages; i < pages; ++i)
+    {
+        auto& entry = leaf->entries[((HACKOS_HEAP_BASE - USER_BASE) >> 12) + i];
+        entry = {};
+        entry.address = (uint64_t)heapFrames[i] >> 12;
+        entry.present = entry.user_access = entry.writeable = entry.execution_disabled = 1;
+    }
+
+    while (heapPages > pages)
+    {
+        --heapPages;
+        leaf->entries[((HACKOS_HEAP_BASE - USER_BASE) >> 12) + heapPages] = {};
+        PageFrameAllocator::SharedAllocator()->FreePages(heapFrames[heapPages], 1);
+        heapFrames[heapPages] = nullptr;
+        --user_pages_live;
+    }
+
+    heapPages = pages;
+    return true;
 }
 
 static void LinkUserTable(PageTableEntry& entry, PageTable* table)

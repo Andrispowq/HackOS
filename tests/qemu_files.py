@@ -39,7 +39,8 @@ def test(firmware, timeout):
             g.enter('root', 'New password: ')
             g.password(ADMIN_PASSWORD, 'Action: ')
             g.login('root', ADMIN_PASSWORD)
-            g.shell('fileprobe', 'FILE_ABI_OK')
+            # This fixture deliberately leaves a live reader in its process group.
+            g.shell('fileprobe &', 'FILE_ABI_OK')
             g.wait('FILE_READER_READY')
             g.shell('rm /files/held.txt', 'rm: failed')
             g.shell('mv /files/held.txt /held.txt', 'mv: failed')

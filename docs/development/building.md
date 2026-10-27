@@ -28,7 +28,9 @@ and type/click in the client. Close X, press Q, or use Ctrl-C. Program commands 
 completion before showing the prompt; a separate trailing `&` launches in the
 background. Try `input` for interactive text input; Ctrl-C returns to
 the shell. Up/Down browses the fixed 256-command history, and `history` lists it.
-Bare commands resolve in `/usr/bin`; only `cd`, `history` and `logout` stay in the shell.
+Bare commands resolve in `/usr/bin`; directory/history/session and job controls stay in the shell.
+Tab completes commands and paths. Ctrl+Z stops a foreground job; `jobs`, `fg`,
+`bg`, `wait` and `kill %job` manage its process group.
 The command suite is built from `libs/commands` and packaged as separate ELF
 programs. Step 15 adds `xxd`, `mkdir`, `rm`, `mv` and `edit`. Try `mkdir /notes`
 and `edit /notes/hello.txt`; Ctrl+S saves and Ctrl+X exits without saving. The
@@ -155,8 +157,8 @@ The old kernel/libc header paths forward to shared headers so existing source
 includes remain usable. Consumers also need `common/include` and `include` on
 their include path; the program Makefiles and guest-test builder supply both.
 Generated dependencies track the common headers and syscall catalogue. The
-active libc omits allocation-dependent split adapters and old raw-pointer
-helpers; only userspace links syscall wrappers. The kernel calls services directly.
+active libc includes a private user heap, allocation-based split and checked
+userspace formatting; old raw-pointer kernel helpers remain excluded; only userspace links syscall wrappers. The kernel calls services directly.
 
 Libc is recreated when relinking so archive members removed by an extraction
 cannot remain as stale definitions.

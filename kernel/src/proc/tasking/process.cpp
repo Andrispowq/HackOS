@@ -20,7 +20,100 @@ uint64_t tasks_reaped;
 uint64_t user_files_live;
 extern PageTableManager KernelDirectory;
 
-static uint64_t terminalOwner, terminalShell, pendingInterrupt;
+static uint64_t terminalOwner, terminalShell, pendingInterrupt, pendingGroupInterrupt, pendingStop;
+
+static Process* FindProcess(uint64_t pid)
+{
+    for (auto p = ready_queue; p; p = p->next)
+    {
+        if (p->pid == pid && p->state != PROCESS_STATE_ZOMBIE)
+        {
+            return p;
+        }
+    }
+
+    return nullptr;
+}
+
+static unsigned JobState(uint64_t group)
+{
+    unsigned state = 0;
+    for (auto p = ready_queue; p; p = p->next)
+    {
+        if (p->processGroup == group && p->state != PROCESS_STATE_ZOMBIE)
+        {
+            if (p->state != PROCESS_STATE_STOPPED)
+            {
+                return 1;
+            }
+
+            state = 2;
+        }
+    }
+
+    return state;
+}
+
+static void WakeJobWaiters()
+{
+    for (auto p = ready_queue; p; p = p->next)
+    {
+        if (p->state == PROCESS_STATE_WAITING && p->waitingGroup && JobState(p->waitingGroup) != 1)
+        {
+            p->state = PROCESS_STATE_ALIVE;
+        }
+    }
+}
+
+void WakeTerminalReaders()
+{
+    for (auto p = ready_queue; p; p = p->next)
+    {
+        if (p->state == PROCESS_STATE_INPUT)
+        {
+            p->state = PROCESS_STATE_ALIVE;
+        }
+    }
+}
+
+uint64_t ReadTerminal(uint64_t flags)
+{
+    InterruptGuard guard;
+    if (flags & ~HACKOS_INPUT_NONBLOCK)
+    {
+        return HACKOS_ERROR;
+    }
+
+    for (;;)
+    {
+        if (!OwnsTerminal(current_process->pid))
+        {
+            return HACKOS_DENIED;
+        }
+
+        char ch;
+        auto result = ReadKeyboard(ch);
+        if (result == KeyboardRead::Overflow)
+        {
+            return HACKOS_INPUT_OVERFLOW;
+        }
+
+        if (result == KeyboardRead::Character)
+        {
+            return (uint8_t)ch;
+        }
+
+        if (flags & HACKOS_INPUT_NONBLOCK)
+        {
+            return 0;
+        }
+
+        // Interrupts stay masked from the empty check through the state change.
+        // The nested scheduling interrupt resumes here after a producer wakes us.
+        current_process->state = PROCESS_STATE_INPUT;
+        ScheduleIRQ();
+    }
+}
 
 void SetTerminalOwner(uint64_t pid)
 {
@@ -35,6 +128,19 @@ void SetTerminalOwner(uint64_t pid)
         pendingInterrupt = 0;
     }
 
+    auto owner = FindProcess(pid);
+    if (owner)
+    {
+        for (auto p = ready_queue; p; p = p->next)
+        {
+            if (p->processGroup == owner->processGroup)
+            {
+                p->stoppedTerminalOwner = p == owner;
+            }
+        }
+    }
+
+    WakeTerminalReaders();
     terminalOwner = pid;
     ClearKeyboard(); // typeahead must never cross an ownership boundary
 }
@@ -60,10 +166,28 @@ static bool ProtectedTerminal(uint64_t pid)
 void RequestTerminalInterrupt()
 {
     // Input dispatch latches a target only. Do not kill/yield while a
-    // PreemptionGuard is active. Ctrl-C at the shell stays an event.
-    if (terminalOwner && !ProtectedTerminal(terminalOwner))
+    // PreemptionGuard is active. Ctrl-C can also cancel the shell's wait
+    // without terminating the background group it was observing.
+    auto owner = FindProcess(terminalOwner);
+    if (owner && owner->systemShell && owner->waitingGroup)
     {
-        pendingInterrupt = terminalOwner;
+        owner->jobWaitInterrupted = true;
+        owner->state = PROCESS_STATE_ALIVE;
+        ClearKeyboard();
+    }
+    else if (owner && !owner->systemShell)
+    {
+        pendingGroupInterrupt = owner->processGroup;
+        ClearKeyboard();
+    }
+}
+
+void RequestTerminalStop()
+{
+    auto owner = FindProcess(terminalOwner);
+    if (owner && !owner->systemShell && owner->jobOwnerPid)
+    {
+        pendingStop = owner->processGroup;
         ClearKeyboard();
     }
 }
@@ -170,7 +294,7 @@ bool IsRunning(uint64_t pid)
     {
         if (p->pid == pid)
         {
-            return p->state == PROCESS_STATE_ALIVE || p->state == PROCESS_STATE_WAITING;
+            return p->state != PROCESS_STATE_ZOMBIE && p->state != PROCESS_STATE_DEAD;
         }
     }
 
@@ -214,6 +338,17 @@ static void CompleteProcess(Process* child)
     }
 
     child->state = PROCESS_STATE_ZOMBIE;
+    // A nested shell/controller owns the groups it explicitly created. End
+    // those jobs before discarding its completion records and terminal link.
+    for (auto p = ready_queue; p; p = p->next)
+    {
+        if (p != child && p->jobOwnerPid == child->pid && p->state != PROCESS_STATE_ZOMBIE)
+        {
+            p->exitStatus = 137;
+            CompleteProcess(p);
+        }
+    }
+
     if (child->systemShell && !child->authenticationAgent && child->sessionId)
     {
         // Include detached/background descendants and runas identities. The
@@ -241,8 +376,29 @@ static void CompleteProcess(Process* child)
 
     if (child->pid == terminalOwner)
     {
+        auto receiver = FindProcess(returnPid);
+        if (!receiver || receiver->processGroup != child->processGroup)
+        {
+            for (auto p = ready_queue; p; p = p->next)
+            {
+                if (p->processGroup == child->processGroup && p->state != PROCESS_STATE_ZOMBIE &&
+                    p->state != PROCESS_STATE_STOPPED)
+                {
+                    returnPid = p->pid;
+                    if (!p->terminalReturnPid)
+                    {
+                        p->terminalReturnPid = child->jobOwnerPid;
+                    }
+
+                    break;
+                }
+            }
+        }
+
         SetTerminalOwner(returnPid);
     }
+
+    WakeJobWaiters();
 
     for (auto parent = ready_queue; parent; parent = parent->next)
     {
@@ -312,6 +468,159 @@ uint64_t WaitForChild(uint64_t pid, int64_t* status, uint64_t flags)
     return pid;
 }
 
+static ChildResult* OwnedJob(uint64_t group)
+{
+    if (current_process->authenticationAgent || !group)
+    {
+        return nullptr;
+    }
+
+    for (auto& result : current_process->children)
+    {
+        if (result.pid == group && result.job)
+        {
+            return &result;
+        }
+    }
+
+    return nullptr;
+}
+
+uint64_t WaitForJob(uint64_t group, int64_t* status, uint64_t flags)
+{
+    InterruptGuard guard;
+    auto result = OwnedJob(group);
+    if (!result || (flags & ~HACKOS_WAIT_NOHANG) ||
+        (status && !current_process->userSpace->WritableRange((uint64_t)status, sizeof(*status))))
+    {
+        return HACKOS_ERROR;
+    }
+
+    current_process->jobWaitInterrupted = false;
+    while (JobState(group) == 1 && !current_process->jobWaitInterrupted)
+    {
+        if (flags & HACKOS_WAIT_NOHANG)
+        {
+            return 0;
+        }
+
+        current_process->waitingGroup = group;
+        current_process->state = PROCESS_STATE_WAITING;
+        ScheduleIRQ();
+    }
+
+    current_process->waitingGroup = 0;
+    if (current_process->jobWaitInterrupted)
+    {
+        current_process->jobWaitInterrupted = false;
+        return HACKOS_JOB_INTERRUPTED;
+    }
+
+    bool stopped = JobState(group) == 2;
+    int64_t value = stopped ? 148 : result->status;
+    if (status)
+    {
+        current_process->userSpace->CopyToUser((uint64_t)status, &value, sizeof(value));
+    }
+
+    if (!stopped)
+    {
+        *result = {};
+    }
+
+    return stopped ? HACKOS_JOB_STOPPED : group;
+}
+
+uint64_t ControlJob(uint64_t group, uint64_t operation)
+{
+    InterruptGuard guard;
+    if (!OwnedJob(group))
+    {
+        return HACKOS_DENIED;
+    }
+
+    if (operation > HACKOS_JOB_QUERY)
+    {
+        return HACKOS_ERROR;
+    }
+
+    if (operation == HACKOS_JOB_QUERY)
+    {
+        return JobState(group);
+    }
+
+    if (!OwnsTerminal(current_process->pid))
+    {
+        return HACKOS_DENIED;
+    }
+
+    Process* reader = nullptr;
+    for (auto p = ready_queue; p; p = p->next)
+    {
+        if (p->processGroup != group || p->state == PROCESS_STATE_ZOMBIE)
+        {
+            continue;
+        }
+
+        if (operation == HACKOS_JOB_TERMINATE)
+        {
+            p->exitStatus = 137;
+            CompleteProcess(p);
+            continue;
+        }
+
+        if (!reader || p->stoppedTerminalOwner)
+        {
+            reader = p;
+        }
+
+        if (p->state == PROCESS_STATE_STOPPED)
+        {
+            // Recheck a suspended wait/read predicate, including a child that
+            // completed while its parent was stopped.
+            p->state = PROCESS_STATE_ALIVE;
+        }
+    }
+
+    if (operation == HACKOS_JOB_TERMINATE)
+    {
+        return 0;
+    }
+
+    if (!reader)
+    {
+        return HACKOS_ERROR;
+    }
+
+    if (operation == HACKOS_JOB_FOREGROUND)
+    {
+        reader->terminalReturnPid = current_process->pid;
+        SetTerminalOwner(reader->pid);
+    }
+
+    return 0;
+}
+
+static void StopJob(uint64_t group)
+{
+    uint64_t owner = 0;
+    for (auto p = ready_queue; p; p = p->next)
+    {
+        if (p->processGroup == group && !p->systemShell && p->state != PROCESS_STATE_ZOMBIE)
+        {
+            owner = p->jobOwnerPid;
+            p->stoppedTerminalOwner = p->pid == terminalOwner;
+            p->state = PROCESS_STATE_STOPPED;
+        }
+    }
+
+    if (owner)
+    {
+        SetTerminalOwner(owner);
+        WakeJobWaiters();
+    }
+}
+
 [[noreturn]] void _Kill()
 {
     asm volatile("cli" ::: "memory");
@@ -363,6 +672,28 @@ Registers* Schedule(Registers* frame)
     if (!enabled || preemption_depth)
     {
         return frame;
+    }
+
+    if (pendingGroupInterrupt)
+    {
+        uint64_t group = pendingGroupInterrupt;
+        pendingGroupInterrupt = 0;
+        pendingStop = 0;
+        for (auto p = ready_queue; p; p = p->next)
+        {
+            if (p->processGroup == group && !p->systemShell && p->state != PROCESS_STATE_ZOMBIE)
+            {
+                p->exitStatus = 130;
+                CompleteProcess(p);
+            }
+        }
+    }
+
+    if (pendingStop)
+    {
+        uint64_t group = pendingStop;
+        pendingStop = 0;
+        StopJob(group);
     }
 
     if (pendingInterrupt)

@@ -15,13 +15,19 @@ int main(int argc, char** argv)
         Print(info.name);
         Print(" (");
         Number(info.pid);
-        Print(info.state == 0 ? ") ALIVE" : info.state == 3 ? ") WAITING" : ") ZOMBIE");
+        Print(info.state == 0   ? ") ALIVE"
+              : info.state == 3 ? ") WAITING"
+              : info.state == 4 ? ") INPUT"
+              : info.state == 5 ? ") STOPPED"
+                                : ") ZOMBIE");
         Print(" uid=");
         Number(info.uid);
         Print(" gid=");
         Number(info.gid);
         Print(" ppid=");
         Number(info.parentPid);
+        Print(" pgid=");
+        Number(info.processGroup);
         Print("\n");
     }
 

@@ -28,6 +28,14 @@ logged-out terminal), and kill requires the same owner UID or root. Persistent a
 UID-0 administrator. Passwords use PBKDF2-HMAC-SHA256 and RDRAND salts.
 `logout` terminates the session and its descendants before returning to login. Ctrl-C is deferred from
 IRQ context to a safe scheduler point. Shell history is a static 256-command ring.
+Step 17 adds blocking terminal reads, controller-owned process groups and
+Ctrl-Z/Ctrl-C job control (`jobs`, `fg`, `bg`, `wait`, `kill %job`). Descendants
+inherit groups, completion waits cover the entire job, and stopped jobs retain
+resources until resumed or terminated. Tab completes commands and quoted paths.
+Libc has a private 512 KiB heap, allocation/split helpers and userspace integer
+formatting. Heap pages are NX and reclaimed on every exit path; direct heap
+resizing must not be mixed with libc allocation. Process-info records are 296
+bytes including PGID. See the userspace guide for bounds and non-POSIX limits.
 Step-15 `xxd`, `mkdir`, `rm`, `mv` and `edit` are standalone programs. Whole-file
 reads/editor saves are bounded to 32 KiB; Ctrl+S saves and Ctrl+X exits without
 saving. Mutations use checked filesystem methods, reject open/read-only paths
@@ -147,7 +155,8 @@ in the kernel; command parsing and line editing run in the ring-3 shell.
   `q35` device topology. Check ELF class, machine, entry point, and load segments
   with target `readelf`, and compare BIOS payload sizes to the table above.
   Run `tests/qemu_accounts.py`, `tests/qemu_shell.py`, `tests/qemu_user.py`,
-  `tests/qemu_windows.py`, `tests/qemu_files.py` and `tests/qemu_storage.py` with
+  `tests/qemu_windows.py`, `tests/qemu_files.py`, `tests/qemu_storage.py` and
+  `tests/qemu_usability.py` with
   `--firmware bios` and `--firmware uefi` after fresh image builds for interactive input, ABI, register-state and task-lifecycle checks.
   Use a disposable image for FAT32 write tests and a copied OVMF VARS file.
 - Screen output is graphical; `-nographic` alone does not expose the framebuffer

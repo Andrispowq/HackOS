@@ -19,10 +19,12 @@ make -C tests build-images FIRMWARE=bios
 make -C tests test-qemu FIRMWARE=bios
 make -C tests test-shell FIRMWARE=bios
 make -C tests test-user FIRMWARE=bios
+make -C tests test-usability FIRMWARE=bios
 make -C tests build-images FIRMWARE=uefi
 make -C tests test-qemu FIRMWARE=uefi
 make -C tests test-shell FIRMWARE=uefi
 make -C tests test-user FIRMWARE=uefi
+make -C tests test-usability FIRMWARE=uefi
 ```
 
 `test` runs host tests, asset checks, and the BIOS MBR/stage-1 probe. The full
@@ -479,3 +481,41 @@ captures were inspected. Both account slots survived an old-format preserving
 rebuild byte for byte. Formatting (18.1.8), workflow lint and Compose checks
 passed. The final report set is `tests/out/step16-final/validation.json`; full
 ASan+UBSan remains required on native x86-64 CI.
+
+
+## Userspace usability regressions
+
+`python3 tests/qemu_usability.py --firmware bios` (or `uefi`), also available
+through `make -C tests test-usability FIRMWARE=...`, installs USABPROBE only into
+a disposable image. Real PS/2 input exercises command/path completion, quoted
+filenames, blocked reads, Ctrl-Z, `jobs`, `fg`, `bg`, `wait` and group termination.
+GDB checks the shell/reader's blocked states, stopped groups with multiple members,
+restored terminal ownership, interruptible background waits, distinct private heap
+frames, NX permissions and cleanup after exit, fault, Ctrl-C, group kill and
+logout. A leader exits before its child to verify that group waiting survives
+idle reclamation. Nested shells and
+root/non-root controllers exercise job ownership, invalid flags, bad/read-only
+status pointers, polling and consumed results. Existing CPL3 entry checks now
+wake the blocked shell with an empty Backspace after the debugger resumes. They
+inspect the saved frame through the SysV entry argument at an exact instruction
+breakpoint, avoiding optimized-variable locations in the function prologue. The
+file-handle fixture runs in the background because it intentionally leaves an
+orphan reader alive; foreground group waits now correctly include that reader.
+
+The runtime probe tests heap limits, zeroing after shrink/regrowth, invalid sizes,
+16-byte alignment, calloc overflow, realloc data preservation/failure, exhaustion,
+coalescing, new/delete, split cleanup and bounded/integer formatting. Executing a
+heap page must fault. Host tests run the production allocator/completion parser
+and address-space heap mapping with explicit growth/frame adapters, including
+allocation rollback and guards. Reports and framebuffer captures live under
+`tests/out/qemu-usability-{bios,uefi}/`; CI runs both firmware paths.
+
+Step 17 local validation passed 185 UBSan host checks, five boot-asset checks,
+the BIOS loader-chain probe, fresh BIOS/UEFI builds and all eight QEMU suites
+(boot, usability, storage, accounts, shell, isolated programs, windows and
+file/editor) on both firmware paths. The stripped kernel is 198,672 bytes in
+the unchanged 393,216-byte BIOS slot. ELF headers/load segments and usability
+framebuffer captures were inspected. Both public parallel build paths passed,
+as did formatting (18.1.8), workflow lint and Compose checks. The final report
+set is `tests/out/step17-verified/validation.json`; full ASan+UBSan remains
+required on native x86-64 CI.

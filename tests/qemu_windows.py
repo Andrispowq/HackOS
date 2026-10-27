@@ -74,20 +74,30 @@ def test(firmware, timeout):
                     qmp.call("stop")
                     boot_script = directory/"shell-entry.gdb"
                     boot_script.write_text("set pagination off\nset confirm off\ntarget remote " + str(gdb_path) + "\npython\nimport gdb\n" + """
-bp = gdb.Breakpoint("syscall_handler", type=gdb.BP_HARDWARE_BREAKPOINT)
+bp = gdb.Breakpoint("*" + str(int(gdb.parse_and_eval("&syscall_handler"))), type=gdb.BP_HARDWARE_BREAKPOINT)
 gdb.execute("continue")
-r = gdb.parse_and_eval("r").dereference()
+r = gdb.parse_and_eval("(Registers*)$rdi").dereference()
 p = gdb.parse_and_eval("current_process")
-assert int(p["pid"]) == 3 and int(p["systemShell"]) and int(p["userSpace"])
-assert int(r["cs"]) == 0x1b and int(r["ss"]) == 0x23
-assert int(gdb.parse_and_eval("$cr3")) == int(p["pageTable"]["pml4"])
+assert int(p["pid"]) == 3 and int(p["systemShell"]) and int(p["userSpace"]), str(p.dereference())
+assert int(r["cs"]) == 0x1b and int(r["ss"]) == 0x23, str(r)
+assert int(gdb.parse_and_eval("$cr3")) == int(p["pageTable"]["pml4"]), "Wrong CR3"
 print("SHELL_CPL3_OK")
 bp.delete()
 """ + "end\ndetach\nquit\n")
-                    result = command([os.environ.get("GDB", "gdb"), "--batch", "--nx", "-q", built/"kernel.elf", "-x", boot_script], timeout=20)
-                    (directory/"shell-entry.log").write_text(result.stdout)
-                    require_success(result, "inspect shell privilege")
-                    assert "SHELL_CPL3_OK" in result.stdout, result.stdout
+                    # The shell now blocks between keys. Resume the debugger
+                    # before injecting a harmless empty Backspace to wake it.
+                    debugger = subprocess.Popen([os.environ.get("GDB", "gdb"), "--batch", "--nx", "-q", built/"kernel.elf", "-x", boot_script],
+                                                stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True)
+                    try:
+                        wait_for(lambda: qmp.call("query-status")["running"], "debugger resumed blocked shell")
+                        qmp.key("backspace")
+                        debug_output, _ = debugger.communicate(timeout=20)
+                    finally:
+                        if debugger.poll() is None:
+                            debugger.kill()
+                            debugger.wait()
+                    (directory/"shell-entry.log").write_text(debug_output)
+                    assert debugger.returncode == 0 and "SHELL_CPL3_OK" in debug_output, debug_output
                     qmp.call("cont")
 
                     def enter(text, expected):
@@ -176,10 +186,10 @@ p = gdb.parse_and_eval("ready_queue")
 while int(p) and p["name"].string() != "~/USR/BIN/WINDOW":
     p = p["next"]
 assert int(p) and int(p["userSpace"]), "Demo lacks private address space"
-bp = gdb.Breakpoint("syscall_handler", type=gdb.BP_HARDWARE_BREAKPOINT)
+bp = gdb.Breakpoint("*" + str(int(gdb.parse_and_eval("&syscall_handler"))), type=gdb.BP_HARDWARE_BREAKPOINT)
 bp.condition = "current_process->pid == " + str(int(p["pid"]))
 gdb.execute("continue")
-frame = gdb.parse_and_eval("r")
+frame = gdb.parse_and_eval("(Registers*)$rdi")
 assert int(frame["cs"]) & 3 == 3, "Window calls did not originate at CPL3"
 bp.delete()
 """)

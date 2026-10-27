@@ -81,16 +81,7 @@ static void Info(HackosFileInfo& info, ActiveFile* file)
 
 static uint64_t UserInput()
 {
-    if (!OwnsTerminal(Caller()->pid))
-    {
-        return HACKOS_DENIED;
-    }
-
-    char ch;
-    auto result = ReadKeyboard(ch);
-    return result == KeyboardRead::Overflow    ? HACKOS_INPUT_OVERFLOW
-           : result == KeyboardRead::Character ? (uint8_t)ch
-                                               : 0;
+    return ReadTerminal(HACKOS_INPUT_NONBLOCK);
 }
 
 static uint64_t UserConsole(uint64_t operation)
@@ -151,6 +142,7 @@ static uint64_t UserProcessInfo(uint64_t index, HackosProcessInfo* destination)
     info.uid = p->credentials.uid;
     info.gid = p->credentials.gid;
     info.parentPid = p->parentPid;
+    info.processGroup = p->processGroup;
     Name(info.name, p->name);
     return Output(destination, &info, sizeof(info)) ? 1 : HACKOS_ERROR;
 }
@@ -278,6 +270,49 @@ static uint64_t UserSpawnForeground(const char* name, uint64_t argc, const char*
     // Dispatcher holds a PreemptionGuard: the child cannot run before handoff.
     uint64_t pid = UserSpawnArgs(name, argc, argv);
     if (pid != HACKOS_ERROR)
+    {
+        GiveTerminal(pid);
+    }
+
+    return pid;
+}
+
+static uint64_t UserSpawnJob(const char* name, uint64_t argc, const char* const* argv, uint64_t flags)
+{
+    if (flags & ~HACKOS_SPAWN_FOREGROUND)
+    {
+        return HACKOS_ERROR;
+    }
+
+    if ((flags & HACKOS_SPAWN_FOREGROUND) && !OwnsTerminal(Caller()->pid))
+    {
+        return HACKOS_DENIED;
+    }
+
+    uint64_t pid = UserSpawnArgs(name, argc, argv);
+    if (pid == HACKOS_ERROR || pid == HACKOS_DENIED)
+    {
+        return pid;
+    }
+
+    for (auto p = ready_queue; p; p = p->next)
+    {
+        if (p->pid == pid)
+        {
+            p->processGroup = pid;
+            p->jobOwnerPid = Caller()->pid;
+        }
+    }
+
+    for (auto& result : Caller()->children)
+    {
+        if (result.pid == pid)
+        {
+            result.job = true;
+        }
+    }
+
+    if (flags & HACKOS_SPAWN_FOREGROUND)
     {
         GiveTerminal(pid);
     }
@@ -1051,11 +1086,33 @@ static void syscall_handler(Registers* r)
         return;
     }
 
+    if (r->rax == HACKOS_SYS_terminal_read)
+    {
+        r->rax = ReadTerminal(r->rdi);
+        return;
+    }
+
+    if (r->rax == HACKOS_SYS_job_wait)
+    {
+        r->rax = WaitForJob(r->rdi, (int64_t*)r->rsi, r->rdx);
+        return;
+    }
+
     PreemptionGuard guard;
     switch (r->rax)
     {
     case HACKOS_SYS_user_write:
         r->rax = user_write((const char*)r->rdi, r->rsi);
+        break;
+    case HACKOS_SYS_spawn_job:
+        r->rax = UserSpawnJob((const char*)r->rdi, r->rsi, (const char* const*)r->rdx, r->rcx);
+        break;
+    case HACKOS_SYS_job_control:
+        r->rax = ControlJob(r->rdi, r->rsi);
+        break;
+    case HACKOS_SYS_heap_resize:
+        r->rax = Caller()->userSpace->ResizeHeap(r->rdi) ? HACKOS_HEAP_BASE : HACKOS_ERROR;
+        Caller()->pageTable->SetAsCurrent();
         break;
     case HACKOS_SYS_input:
         r->rax = UserInput();

@@ -186,3 +186,37 @@ TEST(user_copyout_permissions_and_strings)
     CHECK(live_frames == 0 && user_pages_live == 0);
     return 0;
 }
+
+TEST(user_heap_mapping_bounds_zeroing_shrink_and_rollback)
+{
+    setup_user_space();
+    {
+        UserAddressSpace space;
+        CHECK(space.Initialise());
+        CHECK(!space.ResizeHeap(HACKOS_HEAP_LIMIT + 1) && !space.ResizeHeap(~0ULL));
+        CHECK(!space.WritableRange(HACKOS_HEAP_BASE, 1));
+        CHECK(space.ResizeHeap(4097));
+        CHECK(space.WritableRange(HACKOS_HEAP_BASE, 8192));
+        CHECK(!space.WritableRange(HACKOS_HEAP_BASE + 8192, 1));
+        char value = 'x';
+        CHECK(space.CopyFromUser(&value, HACKOS_HEAP_BASE + 4096, 1) && value == 0);
+        CHECK(space.CopyToUser(HACKOS_HEAP_BASE + 4096, "x", 1));
+        CHECK(space.ResizeHeap(4096));
+        CHECK(!space.WritableRange(HACKOS_HEAP_BASE + 4096, 1));
+        CHECK(space.ResizeHeap(8192));
+        CHECK(space.CopyFromUser(&value, HACKOS_HEAP_BASE + 4096, 1) && value == 0);
+        int live = live_frames;
+        fail_request = requests + 2;
+        CHECK(!space.ResizeHeap(32768));
+        CHECK(live_frames == live && !space.WritableRange(HACKOS_HEAP_BASE + 8192, 1));
+        fail_request = -1;
+        CHECK(space.ResizeHeap(HACKOS_HEAP_LIMIT));
+        CHECK(space.WritableRange(HACKOS_HEAP_BASE, HACKOS_HEAP_LIMIT));
+        CHECK(!space.WritableRange(HACKOS_HEAP_BASE + HACKOS_HEAP_LIMIT, 1));
+        CHECK(!space.WritableRange(USER_STACK_BOTTOM - 4096, 1));
+        CHECK(space.ResizeHeap(0) && live_frames == 4);
+    }
+
+    CHECK(!user_pages_live && !live_frames);
+    return 0;
+}

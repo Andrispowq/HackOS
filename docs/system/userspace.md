@@ -14,9 +14,11 @@ See [persistent accounts and recovery](accounts.md). `kernel_main` remains idle,
 
 [proc/user](../../kernel/src/proc/user/) loads static x86-64 ELF executables into
 private physical frames. Each process owns four page-table pages and up to 64
-code/data/stack pages. Its 2 MiB virtual arena starts at `0x0000400000000000`;
+code/data/stack pages, plus up to 128 private heap pages. Its 2 MiB virtual arena
+starts at `0x0000400000000000`;
 the last 16 KiB is a zeroed, non-executable stack preceded by an unmapped guard
-page. Shared kernel mappings remain supervisor-only. Multiple programs can use
+page. ELF segments stay below the heap at `0x0000400000100000`. Shared kernel
+mappings remain supervisor-only. Multiple programs can use
 the same virtual addresses without sharing their private frames.
 
 The loader validates file and virtual ranges, requires readable segments,
@@ -68,11 +70,13 @@ incompatible with the active ABI and must be ported and rebuilt.
 [libs/shell/src/main.cpp](../../libs/shell/src/main.cpp) owns command parsing,
 line editing, working-directory state, formatting and its current file handle.
 Keyboard IRQs only decode and enqueue characters. The authenticated shell reads those
-characters through the input syscall and yields when the queue is empty.
+characters through a blocking terminal-read syscall; an empty queue puts it in
+`INPUT` state until input or an ownership change wakes it.
 Console rendering and hardware operations remain kernel services.
 
 | Command | Behavior |
 | --- | --- |
+| `jobs`, `fg [job]`, `bg [job]`, `wait [job]`, `kill %job` | List jobs, resume in foreground/background, wait, or terminate an owned group; job numbers are PIDs |
 | `history` | List the newest 256 submitted commands; Up/Down recalls them |
 | `help`, `clear` | Show commands or clear the console |
 | `print <text>` | Print literal text, including percent signs |
@@ -97,15 +101,19 @@ Console rendering and hardware operations remain kernel services.
 
 Input supports the US layout, Shift, Caps Lock, Backspace and Up/Down arrows.
 Lines longer than 255 characters are discarded. Queue overflow discards input
-until Enter. There is no completion, pipelines, environment expansion, process
-group/job control or blocking terminal-read API yet. Program output shares the console with the shell.
+until Enter. Tab completes built-ins, `/usr/bin` commands and file/directory paths.
+Completion matches FAT case, extends a common prefix and lists ambiguous matches;
+unique directories gain `/`, files/commands gain a space. Quotes and escaped spaces
+are decoded and safely re-escaped; `cd` offers directories only. Scans are bounded
+to 1024 directory entries and the 255-character line limit. Pipelines, redirection
+and environment expansion remain unsupported. Program output shares the console.
 
 All commands are parsed once into a command name and arguments. The parser
 splits on spaces/tabs (the interactive line editor accepts printable characters). Single or double quotes group
 words (including empty strings); a backslash escapes the next character, also
 inside quotes. Unmatched quotes, a trailing backslash or excessive arguments
 reject the command before execution. Each command program validates its arguments. Unsupported counts/options print usage;
-`ps aux` lists the same name/PID/state/UID/GID/parent-PID information as `ps`;
+`ps aux` lists the same name/PID/state/UID/GID/parent-PID/process-group information as `ps`;
 CPU/memory accounting is not available. `print` joins decoded arguments with single
 spaces; quote text to preserve internal spaces. Clock shortcuts apply only to
 one argument (`tick`, `time`, or `date`). Quoted/escaped paths work for `cd` and
@@ -113,7 +121,7 @@ one argument (`tick`, `time`, or `date`). Quoted/escaped paths work for `cd` and
 background `&`. The old shell-owned `open`/`read`/`close` session is retired;
 file handles remain process-owned and commands read/close their own files.
 
-Only `cd`, `history` and `logout` execute inside the shell. Other names resolve in
+Directory/history/session operations and job-control commands execute inside the shell. Other names resolve in
 `/usr/bin` (the FAT image's `USR/BIN` directory), without searching the current
 directory or an environment PATH. Paths containing `/`, or beginning with `~`,
 are explicit; `user <path>` remains an explicit-launch compatibility spelling.
@@ -135,30 +143,98 @@ user USR/BIN/RING3
 ./USR/BIN/TEST background &
 ```
 
-The foreground prompt appears only after wait returns. Nonzero statuses are
+The foreground prompt appears after the whole job finishes or stops. Nonzero statuses are
 reported. `spawn_foreground` copies arguments and grants input ownership before
-the child can run, avoiding a spawn-to-handoff race. The shell then waits without
-reading input. A bare trailing `&` uses ordinary spawn and grants no terminal
-access; the shell collects background results with nonblocking waits.
+the child can run, avoiding a spawn-to-handoff race. `spawn_job` additionally
+creates a distinct process group and records the caller as its controller. The
+shell uses this for every launch and waits without reading input. A bare trailing
+`&` grants no terminal access; completed background jobs are collected and
+reported at command boundaries, without interrupting a partially typed line.
 
 Any current terminal owner can delegate foreground input to a child. Ownership
 returns to that launcher automatically on exit, fault, kill or Ctrl-C. If a
 launcher exits first, return links are redirected to its own launcher (ultimately
 the session shell, then login), before the dead task is reclaimed. The keyboard
 queue is cleared at each handoff so child input cannot accidentally execute as
-shell commands. `input()` remains nonblocking: a foreground program reads events
-and yields on zero. Echo and line editing are program responsibilities. Try
+shell commands. `input()` remains a compatible nonblocking poll.
+`terminal_read(0)` atomically checks the queue and sleeps; flag
+`HACKOS_INPUT_NONBLOCK` polls instead. Both return decoded key/control events or
+overflow, and deny a background reader immediately. Enqueue, overflow and terminal
+handoff wake blocked readers; they recheck ownership before consuming anything.
+Shell, login/password entry, input demo and editor use blocking reads. Echo and
+line editing are program responsibilities. Try
 `./USR/BIN/INPUT` for the packaged interactive example: it echoes edited lines,
 accepts `exit`, and can be interrupted with Ctrl-C.
 
 Both Ctrl keys support Ctrl-C. With terminal focus it terminates the foreground
-process with status 130 even if the program never reads input or its queue is
-full. Idle records the target PID; the scheduler terminates it only after
+process group with status 130 even if its members never read input or its queue
+is full. Idle records the target group; the scheduler terminates it only after
 preemption guards end. Deferred cleanup closes files/windows and frees user
 memory. With window focus the target is that window's owner, including background
 processes. The shell is protected; at its prompt Ctrl-C cancels the current line
-and history navigation. This targets one process, not a process group; children
-do not inherit terminal input.
+and history navigation. Ordinary children inherit the group, including `runas`
+descendants. A live owner delegates input explicitly. If it exits with surviving
+group members, ownership returns to a surviving launcher or another member of
+that foreground group. The shell continues waiting until the whole group ends;
+terminal return links survive leader reclamation.
+
+## Jobs and stopped processes
+
+Ctrl-Z with terminal focus stops all members of the foreground group and returns
+input to its controller. `STOPPED` processes are skipped by the scheduler and
+retain their address spaces, files and windows. `jobs` lists running/stopped
+jobs. `fg [job]` resumes a group, restores its last reader and waits; `bg [job]`
+resumes without input. Omitting the job selects the newest tracked job. Numeric
+IDs and `%ID` both work. `kill %ID` terminates the complete owned group;
+`kill PID` retains the existing per-process permission policy. `wait [job]`
+waits without changing input ownership; bare `wait` visits every tracked job.
+A stopped result is reported without consuming its completion record. Ctrl-C
+cancels a session-shell `wait` while leaving its background job running.
+
+`job_wait` validates the controller record, flags and optional writable status
+pointer before blocking. It returns zero for a running job with `NOHANG`,
+`HACKOS_JOB_STOPPED` with status 148 for a stopped group, or the leader PID and
+its exit status after all group members exit. `HACKOS_JOB_INTERRUPTED` cancels a
+session-shell wait without changing its status buffer or consuming the result.
+Only the completed result is consumed. Invalid/repeated waits do not consume
+another result. `job_control`
+queries running (1), stopped (2) or completed (0), or atomically resumes/transfers
+input/terminates an owned job. Mutations require the controller to own terminal
+input. No caller can attach a process to another controller's group. A nested
+shell can create its own jobs; controller exit also ends those jobs. Session
+logout still ends every descendant, including stopped jobs under other UIDs.
+
+This is bounded single-terminal job control, not POSIX signals: there are no
+signal handlers, pipelines, `setpgid`/`setsid`, or automatic SIGTTIN/SIGTTOU.
+A resumed background reader receives `HACKOS_DENIED`. Stopped windows retain
+existing pixels; raw PS/2 scancodes and modifier/key-up records are not exposed
+by the decoded terminal API.
+
+## Private heap and runtime helpers
+
+`heap_resize(bytes)` commits a page-rounded prefix of the fixed 512 KiB heap at
+`HACKOS_HEAP_BASE`. It returns that base or `HACKOS_ERROR`; zero releases it.
+New pages are zeroed, writable, user-only and non-executable. A failed growth
+rolls back new frames without disturbing existing bytes. Shrinking unmaps whole
+pages and flushes translations before return. The process owns the frames, and
+idle reclaims all remaining heap pages after exit, fault or kill. The fixed
+image-page quota and stack guard remain independent of the heap quota.
+
+The active libc supplies 16-byte-aligned `malloc`, checked `calloc`, `realloc`
+and `free`, with block splitting/coalescing and growth on demand. `malloc(0)`
+returns null; allocation failure leaves existing data intact; `realloc(p, 0)`
+frees it. Freed blocks are reused inside the process; libc retains committed
+pages until process exit. Do not mix direct heap resizing with libc allocation.
+`new`/`new[]` and sized/unsized delete use this heap; allocation failure through
+`new` exits with status 127 because exceptions are disabled. The allocation-based
+`split` helper is linked again; callers free each string and the pointer vector.
+
+`printf`, `snprintf` and `vsnprintf` format in userspace with literal checked
+writes, supporting `%s`, `%c`, signed/unsigned decimal, hex, pointers, `%%` and
+`l`/`ll`/`z` lengths. Width, precision and floating point are unsupported and return
+-1. Bounded formatting NUL-terminates when capacity is nonzero and returns the
+untruncated character count. Physical-address allocation and legacy raw kernel
+objects remain unavailable; window programs use the existing owned-handle ABI.
 
 ## Command history
 
@@ -209,8 +285,9 @@ belong exclusively to the parent PID, and file/window handles remain scoped to
 the owning process; sharing a UID never transfers handles or wait rights.
 Terminal backspace/clear and foreground handoff depend on terminal ownership,
 not root. `systemShell` identifies the protected terminal anchor only; it is no
-longer a power/kill/account privilege. Ctrl-C still targets the physically
-focused terminal/window process and is not a process-group signal.
+longer a power/kill/account privilege. Terminal Ctrl-C targets the foreground group; window Ctrl-C retains its
+window-owner target. Job control is authorized by the controller/child record,
+not by a matching UID or an executable name.
 
 For example, `groupadd staff`, `useradd alice staff`, `usermod alice users`, then
 `runas alice id` displays the selected UID, primary GID and supplementary group.
@@ -288,6 +365,11 @@ return an error rather than being reinterpreted as new operations.
 | 58 | `flush(handle)` | Flush filesystem for a valid owned handle; zero or error |
 | 59 | `chmod(path, mode)` | Owner/root only, nine permission bits (0000–0777); zero or error |
 | 60 | `chown(path, uid, gid)` | Root only, registered user/group IDs; zero or error |
+| 61 | `terminal_read(flags)` | Blocking decoded input; flag 1 polls; terminal owner only |
+| 62 | `job_wait(group, status, flags)` | Owned group completion/stop; flag 1 polls; validates optional status before blocking |
+| 63 | `job_control(group, operation)` | Owned job: 0 foreground, 1 background, 2 terminate, 3 query |
+| 64 | `heap_resize(bytes)` | Commit/release a private page-rounded heap prefix up to 512 KiB; return heap base |
+| 65 | `spawn_job(path, argc, argv, flags)` | Create a controlled process group; flag 1 requests atomic foreground handoff |
 
 Calls use `int 0x80`: RAX is the number, RDI/RSI/RDX/RCX/R8 hold arguments,
 and saved RAX receives the result. Successful operations without another result
@@ -305,18 +387,19 @@ records with pinned sizes and zeroed padding. `HackosCredentials` is 48 bytes
 (UID, primary GID, supplementary count, zero reserved, eight GIDs); unused GIDs
 are zero. User records append a 32-byte name (80 bytes total); group records
 contain GID, zero reserved and a 32-byte name (40 bytes). The process record is
-now 288 bytes: its original PID/state/name prefix is followed by UID/GID and
-parent PID. `HackosFileInfo` is now 288 bytes: its original 272-byte prefix
+now 296 bytes: its original PID/state/name prefix is followed by UID/GID,
+parent PID and process-group ID at offset 288. `HackosFileInfo` is now 288 bytes: its original 272-byte prefix
 is followed by uint32 UID, GID, mode and metadataVersion (1). All file-info
-consumers must be rebuilt with this layout; old binary consumers are unsupported.
+and process-info consumers must be rebuilt with these layouts; old binary consumers are unsupported.
 IDs accepted as syscall arguments are validated at full 64-bit width, so high
-bits cannot alias root. Unknown spawn flags are rejected before task creation.
+bits cannot alias root. Process states 4 and 5 mean blocked terminal input and
+stopped; existing states retain their numbers. Unknown spawn flags are rejected before task creation.
 Paths are NUL-terminated within 256 bytes; normalization accepts `/`, `~` or
 a path relative to the caller's working directory. Copy-in validates mapped user pages; copy-out
 also requires writable pages and validates the whole range before touching it.
 Read validates the destination before advancing a file offset. Input events
 include Up/Down (128/129), Left/Right (130/131), Delete (132), Ctrl+S (19),
-Ctrl+X (24), and `HACKOS_KEY_INTERRUPT` (3, protected shell/login prompt).
+Ctrl+X (24), Ctrl+Z (26), and `HACKOS_KEY_INTERRUPT` (3, protected shell/login prompt).
 Both Ctrl keys produce the editor controls regardless of Shift/Caps Lock;
 release events are not delivered. No syscall
 returns kernel addresses, virtual objects, format strings or `va_list` objects.
