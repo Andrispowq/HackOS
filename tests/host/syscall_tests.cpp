@@ -16,13 +16,13 @@ static_assert(HACKOS_SYS_exit == 0 && HACKOS_SYS_user_write == 14 && HACKOS_SYS_
                   HACKOS_SYS_job_wait == 62 && HACKOS_SYS_job_control == 63 && HACKOS_SYS_heap_resize == 64 &&
                   HACKOS_SYS_spawn_job == 65 && HACKOS_SYS_fd_open == 66 && HACKOS_SYS_spawn_io == 76 &&
                   HACKOS_SYS_fd_flush == 78 && HACKOS_SYS_hardware == 79 && HACKOS_SYS_terminal_info == 80 &&
-                  HACKOS_SYSCALL_COUNT == 81,
+                  HACKOS_SYS_terminal_get == 81 && HACKOS_SYS_terminal_set == 82 && HACKOS_SYSCALL_COUNT == 83,
               "User syscall ABI changed");
 
 TEST(syscall_record_layout)
 {
     CHECK(sizeof(HackosPollFd) == 16 && sizeof(HackosSpawnIo) == 32);
-    CHECK(sizeof(HackosTerminalInfo) == 16);
+    CHECK(sizeof(HackosTerminalInfo) == 16 && sizeof(HackosTerminalSettings) == 24);
     CHECK(sizeof(HackosClock) == 16 && __builtin_offsetof(HackosClock, year) == 14);
     CHECK(sizeof(HackosHardwareInfo) == 128);
     CHECK(sizeof(HackosWindowSpec) == 48);

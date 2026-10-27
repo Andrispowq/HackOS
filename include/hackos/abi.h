@@ -180,6 +180,17 @@ struct HackosTerminalInfo
 
 static_assert(sizeof(HackosTerminalInfo) == 16, "terminal info ABI");
 
+constexpr uint64_t HACKOS_TERMINAL_RESET = 0, HACKOS_TERMINAL_FONT_SIZE = 1, HACKOS_TERMINAL_BG_COLOUR = 2,
+                   HACKOS_TERMINAL_FONT_COLOUR = 3;
+
+struct HackosTerminalSettings
+{
+    uint32_t fontSize, bgColour, fontColour; // Pixel height and 0xRRGGBBAA colours.
+    uint32_t columns, rows, reserved;
+};
+
+static_assert(sizeof(HackosTerminalSettings) == 24, "terminal settings ABI");
+
 // spawn_io creates a held job member. group=0 starts a new owned group;
 // job_control starts the completed group. Only these three descriptors transfer.
 struct HackosSpawnIo

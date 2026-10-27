@@ -95,6 +95,17 @@ or the terminal and updates focus/capture. Mouse packets are processed when
 their final byte arrives, and the cursor is drawn by the compositor rather than
 the IRQ. See [window events](userspace.md#window-interaction-and-events).
 
+## Console rendering
+
+The console scales the bundled PSF1 bitmap to even pixel heights from 8 to 64
+(default 16), with a half-height cell width. Glyph drawing clips to framebuffer
+bounds and respects scanline pitch; scrolling moves complete text rows and clears
+the remaining bottom strip. Window titles and controls retain their native font.
+The `terminal` utility controls font height and RGBA colours; see
+[terminal appearance](utilities.md#terminal-appearance) for alpha, ownership and
+lifetime. A successful setting clears the visible console without deleting shell
+history. Queries report the resulting complete-cell rows and columns.
+
 ## Userspace inventory
 
 Root can run `sysinfo` for a full report, or select `cpu`, `memory`, `memory-map`,

@@ -62,7 +62,7 @@ into two phases:
 The standalone `~/USR/BIN/SHELL` owns command parsing and PS/2 line editing in
 ring 3. Its checked syscall interface supplies terminal, file, process and power
 services, plus inherited working directories and UID/GID/group credentials.
-[System utilities](utilities.md) provide normal-user text filters and paging,
+[System utilities](utilities.md) provide normal-user text filters, paging and terminal appearance,
 literal output, the clock and root-only
 hardware reports. [Standard streams](streams.md) add descriptors, pipes, redirection, poll and
 scheduler deadlines.

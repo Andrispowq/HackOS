@@ -7,16 +7,9 @@
 #include "lib/data_structures/vector.h"
 
 #include "drivers/screen/framebuffer.h"
+#include "drivers/screen/console.h"
 
 #define COLOUR(r, g, b, a) ((a << 24) | (r << 16) | (g << 8) | b)
-
-struct Console
-{
-    uint32_t bgColour, fontColour;
-    uint32_t current_x, current_y;
-    uint32_t con_width, con_height;
-    uint32_t char_width, char_height;
-};
 
 class Display
 {
@@ -25,6 +18,7 @@ class Display
     int putc(char ch);
     void put_backspace();
     void clear();
+    bool ConfigureTerminal(uint64_t key, uint64_t value);
 
     void DrawBackbuffer();
     void Refresh();

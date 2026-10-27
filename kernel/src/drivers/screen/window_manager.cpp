@@ -440,9 +440,6 @@ void WindowManager::DrawRestoreBar()
     uint32_t y = drawBuffer.height - restoreBarHeight;
     drawBuffer.DrawRect(0, y, drawBuffer.width, restoreBarHeight, 0xff202020);
     unsigned index = 0;
-    auto& console = Display::SharedDisplay()->console;
-    uint32_t oldColour = console.fontColour;
-    console.fontColour = 0xffffffff;
 
     for (size_t i = 0; i < windows.size(); i++)
     {
@@ -455,15 +452,13 @@ void WindowManager::DrawRestoreBar()
         uint32_t x = index * width;
         drawBuffer.DrawRect(x + 1, y + 2, width - 2, restoreBarHeight - 4, 0xff366b96);
         const char* title = window->GetTitle();
-        for (unsigned j = 0; title[j] && (j + 1) * console.char_width + 8 < width; j++)
+        for (unsigned j = 0; title[j] && (j + 1) * 8 + 8 < width; j++)
         {
-            putchar_at_xy(drawBuffer, title[j], x + 4 + j * console.char_width, y + 6);
+            putchar_at_xy(drawBuffer, title[j], x + 4 + j * 8, y + 6);
         }
 
         index++;
     }
-
-    console.fontColour = oldColour;
 }
 
 uint64_t WindowManager::ChangeMode(Window* window, uint64_t operation)

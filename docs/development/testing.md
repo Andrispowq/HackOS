@@ -615,3 +615,23 @@ binaries were verified identical to the full-regression run. Results and source
 hashes are saved in `tests/out/filters-verified/`.
 The existing x86-64 host suite still requires ASan+UBSan in native x86-64 CI;
 its local UBSan fallback is separate from the sanitized command checks.
+
+## Terminal appearance regressions
+
+`python3 tests/qemu_terminal.py --firmware bios` (and `--firmware uefi`) uses a
+disposable image to check the terminal getter/setter ABI, invalid destinations,
+atomic rejection, ordinary-user access, background and non-foreground child
+denial, CLI validation and exit codes, reset, pipelines and redirected values.
+It compares actual screenshot pixels at 8, 30 and 32 pixel heights to the bundled
+PSF font, including tabs and RGBA compositing. The host console tests cover every
+even size from 8 through 64, clipping/unsigned glyph indices, padded scanlines,
+whole-row scrolling, geometry, alpha and reset. The existing shell, windows and
+filter suites cover input/foreground handoff, window chrome and paging regressions.
+
+Terminal validation passed 198 UBSan host checks, 13 isolated framebuffer/console
+checks with native Linux ASan+UBSan, fresh BIOS/UEFI builds, and the terminal,
+shell, windows, filters, streams and usability QEMU suites on both firmware paths.
+Screenshot pixels and previews were checked. The BIOS kernel is 227,552 bytes
+within its 393,216-byte slot. Formatting, Python syntax and workflow lint passed.
+Source hashes are in `tests/out/terminal-build-manifest.json`; guest suite results
+are in `tests/out/terminal-{bios,uefi}-validation.json`.

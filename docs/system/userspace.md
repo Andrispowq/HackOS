@@ -85,6 +85,7 @@ Console rendering and hardware operations remain kernel services.
 | `ps [aux]`, `kill <pid>` | List tasks or stop a user program; idle, login and session shell are protected |
 | `ls [-la] [path]`, `wd`, `cd <path>` | Browse the first filesystem; `~` denotes its root |
 | `cat [path]`, `read [path]` | Copy a file or stdin to stdout in bounded chunks, preserving exact bytes |
+| `terminal` | Normal-user appearance queries and foreground-only settings; see [terminal appearance](utilities.md#terminal-appearance) |
 | `grep`, `wc`, `head`, `tail`, `tee`, `more` | Normal-user stream filters and pager; see [options and limits](utilities.md#text-filters-and-pager) |
 | `xxd <file>` | Load at most 32 KiB and print offsets, hex, binary and ASCII columns |
 | `mkdir <path>` | Create one directory with an existing parent |
@@ -391,6 +392,20 @@ return an error rather than being reinterpreted as new operations.
 | 66–78 | Stream descriptors, pipe, poll, timed waits, sleep and mapped spawn | See the [complete stream ABI](streams.md#descriptor-abi) |
 | 79 | `hardware(section, index, out)` | UID 0 only; copy a zero-initialized 128-byte `HackosHardwareInfo`; 1 record, 0 end, error otherwise |
 | 80 | `terminal_info(fd, out)` | Copy 16-byte geometry and foreground flags; no root requirement; see [streams](streams.md#descriptor-abi) |
+| 81 | `terminal_get(out)` | Copy a 24-byte `HackosTerminalSettings` snapshot; no ownership/root requirement |
+| 82 | `terminal_set(key, value)` | Foreground owner only; set console appearance or reset defaults |
+
+`HackosTerminalSettings` contains six uint32 fields: pixel `fontSize`, RGBA
+`bgColour`, RGBA `fontColour`, `columns`, `rows`, and zero `reserved`. The colours
+are **0xRRGGBBAA**, unlike the kernel framebuffer's internal 0xAARRGGBB pixels.
+`terminal_get` returns zero after a checked copy or `HACKOS_ERROR` for an invalid
+destination. `terminal_set` keys are RESET=0 (value must be zero), FONT_SIZE=1
+(even 8–64), BG_COLOUR=2 and FONT_COLOUR=3 (32-bit values). It checks ownership
+first, returning `HACKOS_DENIED` for a non-owner, including root. Invalid keys,
+values or sizes that leave no complete cell return `HACKOS_ERROR` without
+mutation. Success returns zero after atomically updating geometry, resetting the
+cursor and clearing the console. No syscall blocks or changes terminal ownership.
+See [terminal appearance](utilities.md#terminal-appearance) for lifetime and alpha.
 
 Calls use `int 0x80`: RAX is the number, RDI/RSI/RDX/RCX/R8 hold arguments,
 and saved RAX receives the result. Successful operations without another result

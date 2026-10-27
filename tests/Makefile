@@ -56,3 +56,7 @@ test-filters:
 	$(PYTHON) qemu_filters.py --firmware $(FIRMWARE)
 test-filter-commands:
 	$(PYTHON) filter_commands.py
+
+.PHONY: test-terminal
+test-terminal:
+	$(PYTHON) qemu_terminal.py --firmware $(FIRMWARE)

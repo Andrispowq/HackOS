@@ -93,11 +93,6 @@ void Window::InputOverflow()
 
 void Window::Draw(Framebuffer* framebuffer)
 {
-    Console& mainConsole = Display::SharedDisplay()->console;
-
-    uint32_t old_colour = mainConsole.fontColour;
-    mainConsole.fontColour = 0xFFFFFFFF;
-
     //Draw navbar
     uint32_t colour = focused ? 0xFF366B96 : 0xFF666666;
     uint32_t borderColour = 0xFF303030;
@@ -120,9 +115,9 @@ void Window::Draw(Framebuffer* framebuffer)
 
     int index = 0;
     char c = 0;
-    while ((c = title[index]) != 0 && 10 + (index + 1) * mainConsole.char_width < sizeX - 78)
+    while ((c = title[index]) != 0 && 10 + (index + 1) * 8 < sizeX - 78)
     {
-        putchar_at_xy(*framebuffer, c, (x + index * mainConsole.char_width), y);
+        putchar_at_xy(*framebuffer, c, (x + index * 8), y);
         index++;
     }
 
@@ -132,8 +127,6 @@ void Window::Draw(Framebuffer* framebuffer)
     {
         framebuffer->DrawRect(startX + sizeX - 8, startY + sizeY - 8, 8, 8, borderColour);
     }
-
-    mainConsole.fontColour = old_colour;
 }
 
 void Window::MoveWindow(uint32_t x, uint32_t y)

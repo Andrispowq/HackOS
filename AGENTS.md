@@ -45,6 +45,10 @@ redirection. Foreground pipeline stages can read paging keys independently of
 stdin. Ordinary background children do not inherit that access; terminal control
 and delegation still require the individual owner. Syscall 80 queries copied terminal geometry/flags. Grep has a bounded BRE subset and
 64 KiB line limit; tail retains at most 128 KiB of suffix data.
+`terminal get/set/reset` controls console font height (even 8–64 pixels) and RGBA
+colours through syscalls 81–82. Queries are public; mutations require the individual
+foreground owner and clear the console. Settings last until reset/reboot, and
+window chrome keeps its native font. See `docs/system/utilities.md`.
 Libc has a private 512 KiB heap, allocation/split helpers and userspace integer
 formatting. Heap pages are NX and reclaimed on every exit path; direct heap
 resizing must not be mixed with libc allocation. Process-info records are 296

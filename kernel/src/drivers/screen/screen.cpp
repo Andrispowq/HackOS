@@ -55,14 +55,7 @@ void InitialiseDisplay(Framebuffer framebuffer, PSF1_FONT* font)
     display.backbuffer = backbuffer;
 
     display.framebuffer = framebuffer;
-    display.console.fontColour = 0xFF00FFFF;
-    display.console.bgColour = 0xFF505050;
-    display.console.current_x = 0;
-    display.console.current_y = 0;
-    display.console.char_width = 8;
-    display.console.char_height = 16;
-    display.console.con_width = display.framebuffer.width / display.console.char_width;
-    display.console.con_height = display.framebuffer.height / display.console.char_height;
+    display.console.Configure(HACKOS_TERMINAL_RESET, 0, framebuffer.width, framebuffer.height);
     display.font = font;
 }
 
@@ -107,7 +100,7 @@ void Display::clear()
 {
     PreemptionGuard guard;
     dirty = true;
-    backbuffer.Clear(console.bgColour);
+    backbuffer.Clear(console.Background());
 }
 
 void Display::put_backspace()
@@ -127,91 +120,28 @@ int Display::puts(const char* str)
     return i;
 }
 
+bool Display::ConfigureTerminal(uint64_t key, uint64_t value)
+{
+    PreemptionGuard guard;
+    if (!console.Configure(key, value, backbuffer.width, backbuffer.height))
+    {
+        return false;
+    }
+    clear();
+    return true;
+}
+
 void putchar_at_xy(Framebuffer fb, char character, uint32_t x, uint32_t y)
 {
-    uint32_t* addr = fb.address;
-    uint32_t pitch = fb.pitch;
-
-    uint32_t charWidth = display.console.char_width;
-    uint32_t charHeight = display.console.char_height;
-
-    PSF1_FONT* font = display.font;
-
-    char* fontPtr = (char*)font->glyphBuffer + (character * font->psf1_Header->charsize);
-    for (uint32_t _y = y; _y < (y + charHeight); _y++)
-    {
-        for (uint32_t _x = x; _x < (x + charWidth); _x++)
-        {
-            if ((*fontPtr & (0b10000000 >> (_x - x))) > 0)
-            {
-                addr[_y * pitch + _x] = display.console.fontColour;
-            }
-        }
-
-        fontPtr++;
-    }
+    // Window chrome keeps its native font independently of terminal settings.
+    DrawConsoleGlyph(fb, *display.font, (uint8_t)character, x, y, 8, display.font->psf1_Header->charsize, 0xffffffff);
 }
 
-void putchar_at(Framebuffer fb, char character, uint32_t xOff, uint32_t yOff)
+static void empty_char_at(Framebuffer& fb, uint32_t x, uint32_t y)
 {
-    uint32_t* addr = fb.address;
-    uint32_t pitch = fb.pitch;
-
-    uint32_t charWidth = display.console.char_width;
-    uint32_t charHeight = display.console.char_height;
-
-    PSF1_FONT* font = display.font;
-
-    char* fontPtr = (char*)font->glyphBuffer + (character * font->psf1_Header->charsize);
-    for (uint32_t y = yOff * charHeight; y < (yOff * charHeight + charHeight); y++)
-    {
-        for (uint32_t x = xOff * charWidth; x < (xOff * charWidth + charWidth); x++)
-        {
-            if ((*fontPtr & (0b10000000 >> (x - (xOff * charWidth)))) > 0)
-            {
-                addr[y * pitch + x] = display.console.fontColour;
-            }
-        }
-
-        fontPtr++;
-    }
-}
-
-void empty_char_at(Framebuffer fb, uint32_t xOff, uint32_t yOff)
-{
-    uint32_t* addr = fb.address;
-    uint32_t pitch = fb.pitch;
-
-    uint32_t charWidth = display.console.char_width;
-    uint32_t charHeight = display.console.char_height;
-
-    PSF1_FONT* font = display.font;
-
-    for (uint32_t y = yOff * charHeight; y < (yOff * charHeight + charHeight); y++)
-    {
-        for (uint32_t x = xOff * charWidth; x < (xOff * charWidth + charWidth); x++)
-        {
-            addr[y * pitch + x] = display.console.bgColour;
-        }
-    }
-}
-
-void scroll_up(Framebuffer fb)
-{
-    const uint32_t rows = display.console.char_height;
-    if (rows >= fb.height)
-    {
-        fb.Clear(display.console.bgColour);
-        return;
-    }
-
-    for (uint32_t y = 0; y < fb.height - rows; ++y)
-    {
-        memcpy(fb.address + (uint64_t)y * fb.pitch, fb.address + (uint64_t)(y + rows) * fb.pitch,
-               fb.width * sizeof(uint32_t));
-    }
-
-    fb.DrawRect(0, fb.height - rows, fb.width, rows, display.console.bgColour);
+    const Console& console = display.console;
+    fb.DrawRect(x * console.char_width, y * console.char_height, console.char_width, console.char_height,
+                console.Background());
 }
 
 int Display::putc(char ch)
@@ -267,7 +197,8 @@ int Display::putc(char ch)
     else
     {
         empty_char_at(backbuffer, x, y);
-        putchar_at(backbuffer, ch, x, y);
+        DrawConsoleGlyph(backbuffer, *font, (uint8_t)ch, x * console.char_width, y * console.char_height,
+                         console.char_width, console.char_height, console.Foreground());
         if (++x == width)
         {
             x = 0;
@@ -277,7 +208,7 @@ int Display::putc(char ch)
 
     if (y >= height)
     {
-        scroll_up(backbuffer);
+        console.Scroll(backbuffer);
         y = height - 1;
     }
 

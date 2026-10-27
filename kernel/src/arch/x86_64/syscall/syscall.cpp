@@ -109,6 +109,21 @@ static uint64_t UserConsole(uint64_t operation)
     return 0;
 }
 
+static uint64_t UserTerminalGet(HackosTerminalSettings* destination)
+{
+    HackosTerminalSettings settings = Display::SharedDisplay()->console.Settings();
+    return Output(destination, &settings, sizeof(settings)) ? 0 : HACKOS_ERROR;
+}
+
+static uint64_t UserTerminalSet(uint64_t key, uint64_t value)
+{
+    if (!OwnsTerminal(Caller()->pid))
+    {
+        return HACKOS_DENIED;
+    }
+    return Display::SharedDisplay()->ConfigureTerminal(key, value) ? 0 : HACKOS_ERROR;
+}
+
 static uint64_t UserClock(HackosClock* destination)
 {
     struct tm time = {};
@@ -1301,6 +1316,12 @@ static void syscall_handler(Registers* r)
         break;
     case HACKOS_SYS_terminal_info:
         r->rax = UserTerminalInfo(r->rdi, (HackosTerminalInfo*)r->rsi);
+        break;
+    case HACKOS_SYS_terminal_get:
+        r->rax = UserTerminalGet((HackosTerminalSettings*)r->rdi);
+        break;
+    case HACKOS_SYS_terminal_set:
+        r->rax = UserTerminalSet(r->rdi, r->rsi);
         break;
     case HACKOS_SYS_spawn_io:
         r->rax = UserSpawnIo((const char*)r->rdi, r->rsi, (const char* const*)r->rdx, (const HackosSpawnIo*)r->rcx);

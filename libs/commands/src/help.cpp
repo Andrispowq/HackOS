@@ -8,6 +8,7 @@ int main(int argc, char**)
     }
 
     Print("Commands: help, clear, echo [-n] [text], time [--date|--time|--ticks], ps [aux], kill <pid>\n");
+    Print("Terminal: terminal get [key], terminal set <key> <value>, terminal reset; terminal --help.\n");
     Print("Files: ls [-la] [path], wd, cat [path], read [path]. Shell: cd <path>, history.\n");
     Print("Files: xxd <file>, mkdir <path>, rm <file>, mv <source> <destination>.\n");
     Print("Filters: grep [-Finvclq] <pattern> [file ...], wc [-lwc] [file ...].\n");

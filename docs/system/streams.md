@@ -83,6 +83,9 @@ are defined in [abi.h](../../include/hackos/abi.h); wrappers come from
 field. Flag 1 identifies a terminal; flag 2 reports that the caller may read
 foreground input at the time of the query. Reading always rechecks permission.
 The query consumes no input, exposes no pointers and requires no root privilege.
+Geometry reflects the current `terminal` font size; appearance queries/setters
+use slots 81–82, documented in [userspace](userspace.md) and
+[terminal appearance](utilities.md#terminal-appearance).
 It lets pagers read keys separately from pipe/file stdin and avoid prompts in
 redirected output. See [filter utilities](utilities.md#text-filters-and-pager).
 

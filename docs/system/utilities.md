@@ -2,10 +2,11 @@
 
 [System index](index.md) · [Userspace](userspace.md) · [Devices](devices.md)
 
-These standalone ring-3 programs use inherited stdout/stderr. They work in
-pipelines, in the background and with file redirection. Exit status is 0 on
+These standalone ring-3 programs use inherited stdout/stderr for pipelines and
+file redirection. Interactive operations and appearance changes require foreground
+access, as described below. Exit status is 0 on
 success, 1 for an unavailable service/denied operation/output failure, and 2 for
-invalid usage, except for the grep statuses described below. New images package `ECHO`, `TIME` and `SYSINFO`; `PRINT` is retired.
+invalid usage, except for the grep statuses described below. `PRINT` is retired in favour of `ECHO`.
 
 ## Literal output
 
@@ -85,6 +86,47 @@ four-column stops, control bytes use caret notation, and high bytes display as
 `?`; wrapped rows count toward a page. Redirected output is never sanitized.
 A final full page at EOF needs no extra key. Early quit closes the input pipe so
 upstream writers can finish with a broken-pipe result.
+
+## Terminal appearance
+
+```sh
+terminal get                     # list all settings
+terminal get font_size           # print just 16, by default
+terminal set font_size 32         # double the original text size
+terminal set bg_col 0x101820ff
+terminal set font_col 0xe8eef2ff
+terminal get rows | cat > /tmp/terminal-rows
+terminal set font_size default
+terminal reset                   # restore size and both colours
+```
+
+`terminal get [key]`, `terminal set <key> <value>`, `terminal reset` and
+`terminal --help` are available to ordinary users. Queries work with pipes and
+redirection and print no escape sequences. Set/reset requires the calling
+process to own the foreground terminal, even for UID 0; background attempts
+fail. Queries are readable without ownership and never consume keyboard input.
+
+| Key | Meaning | Default |
+| --- | --- | --- |
+| `font_size` | Font height in pixels, even integers from 8 through 64; width is half the height | `16` (8×16 cell) |
+| `bg_col` | Background as eight hexadecimal RGBA digits, optionally prefixed by `0x` or `0X` | `0x505050ff` |
+| `font_col` | Text as eight hexadecimal RGBA digits | `0x00ffffff` |
+| `columns`, `rows` | Read-only count of complete character cells | Framebuffer dimensions divided by cell size |
+
+Colour queries always print `0xrrggbbaa`. Alpha `ff` is opaque and `00` is
+transparent: the background blends over black, then the text over that result.
+Window surfaces still appear above the console. Each writable key accepts
+`default`. Invalid keys, numbers or colours fail without changing settings.
+`reset` can recover an invisible or low-contrast theme.
+
+Every successful set/reset clears the visible console and moves the cursor to
+the top left. It does not erase shell history. Settings apply to the single
+system console, survive logout, and last until reset or reboot; there is no
+saved per-account profile. Fonts use nearest-neighbour scaling of the bundled
+PSF glyphs, so non-integral scaling can look less even. Window titles and controls
+keep their native font. Pagers query the updated rows/columns when they start.
+The custom `terminal` interface covers console appearance; it is not a POSIX
+`stty` implementation and does not change terminal input modes.
 
 ## Clock
 

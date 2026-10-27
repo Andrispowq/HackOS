@@ -35,6 +35,9 @@ Normal users can run `grep -in hello /usr/hello.txt`, `wc /usr/hello.txt`,
 `head -n 5 /usr/hello.txt`, `tail -c 32 /usr/hello.txt`, and
 `cat /usr/hello.txt | tee /tmp/copy | more`. Pipelines support up to four stages, with
 ordered redirections and quoted paths. `cat` preserves exact bytes.
+Use `terminal get` to inspect console settings, `terminal set font_size 32`
+for larger text, and `terminal reset` to restore the default size and colours.
+Settings clear the visible console and require foreground ownership.
 Tab completes commands and paths. Ctrl+Z stops a foreground job; `jobs`, `fg`,
 `bg`, `wait` and `kill %job` manage its process group.
 The command suite is built from `libs/commands` and packaged as separate ELF
