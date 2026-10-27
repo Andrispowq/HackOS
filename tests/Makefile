@@ -46,3 +46,7 @@ test-usability:
 .PHONY: test-streams
 test-streams:
 	$(PYTHON) qemu_streams.py --firmware $(FIRMWARE)
+
+.PHONY: test-utilities
+test-utilities:
+	$(PYTHON) qemu_utilities.py --firmware $(FIRMWARE)

@@ -17,6 +17,7 @@
 #include "arch/x86_64/syscall/syscall.h"
 
 #include "drivers/screen/window_manager.h"
+#include "arch/x86_64/timer/rtc.h"
 
 bool fromUEFI = 0;
 extern PageTableManager KernelDirectory;
@@ -88,6 +89,7 @@ void InitialiseRSDP(struct KernelInfo* info)
 
     if (fadt)
     {
+        SetRTCCenturyRegister(fadt->GetFADT().Century);
         fadt->ACPIEnable();
     }
 

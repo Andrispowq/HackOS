@@ -61,6 +61,18 @@ uint8_t MouseRead()
 
 static MousePacketDecoder decoder;
 static uint8_t mouseDevice;
+static bool mouseEnabled;
+
+bool MouseEnabled()
+{
+    return mouseEnabled;
+}
+
+uint8_t MouseDeviceId()
+{
+    return mouseDevice;
+}
+
 static int MousePositionX, MousePositionY;
 
 static uint32_t Width, Height;
@@ -265,7 +277,7 @@ void InitialiseMouse(uint32_t width, uint32_t height)
     }
 
     decoder.Configure(mouseDevice);
-    MouseCommand(0xf4);
+    mouseEnabled = MouseCommand(0xf4);
 
     RegisterInterruptHandler(IRQ12, mouse_callback);
 }

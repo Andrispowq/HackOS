@@ -3,6 +3,7 @@
 
 #include "lib/stdint.h"
 #include "acpi/system_table.h"
+#include "hackos/hardware.h"
 
 // Useful thing
 #define PCI_MAKE_ID(bus, dev, func) ((bus) << 16) | ((dev) << 11) | ((func) << 8)
@@ -133,6 +134,10 @@ struct BaseAddressRegister
 };
 
 void EnumeratePCI(ACPI::MCFGHeader* mcfg);
+bool InventoryAvailable();
+uint32_t InventoryCount();
+uint32_t InventoryDropped();
+bool InventoryRecord(uint64_t index, HackosHardwareInfo& info);
 
 uint8_t Read8(uint32_t id, uint32_t reg);
 uint16_t Read16(uint32_t id, uint32_t reg);

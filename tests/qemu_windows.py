@@ -422,7 +422,7 @@ assert int(gdb.parse_and_eval("user_windows_live")) == 0
 assert int(gdb.parse_and_eval("KernelWindowManager->focused")) == 0
 assert int(gdb.parse_and_eval("terminalOwner")) == 3
 """)
-                    enter("print focus_returned", "\nfocus_returned\n")
+                    enter("echo focus_returned", "\nfocus_returned\n")
 
                     offset = len(output())
                     qmp.type("./USR/BIN/WINPROBE events\n")

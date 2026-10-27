@@ -12,7 +12,36 @@ extern PageTableManager KernelDirectory;
 
 namespace PCI
 {
-void EnumerateFunction(uint64_t deviceAddress, uint64_t function)
+static decltype(HackosHardwareInfo::pci) inventory[512];
+static uint32_t inventoryCount, inventoryDropped;
+static bool inventoryAvailable;
+
+bool InventoryAvailable()
+{
+    return inventoryAvailable;
+}
+
+uint32_t InventoryCount()
+{
+    return inventoryCount;
+}
+
+uint32_t InventoryDropped()
+{
+    return inventoryDropped;
+}
+
+bool InventoryRecord(uint64_t index, HackosHardwareInfo& info)
+{
+    if (index >= inventoryCount)
+    {
+        return false;
+    }
+    info.pci = inventory[index];
+    return true;
+}
+
+void EnumerateFunction(uint64_t deviceAddress, uint64_t function, uint16_t segment, uint8_t bus, uint8_t slot)
 {
     uint64_t offset = function << 12;
 
@@ -21,14 +50,28 @@ void EnumerateFunction(uint64_t deviceAddress, uint64_t function)
 
     PCIDeviceHeader* pciDeviceHeader = (PCIDeviceHeader*)functionAddress;
 
-    if (pciDeviceHeader->DeviceID == 0)
+    if (pciDeviceHeader->VendorID == 0xFFFF)
     {
         return;
     }
 
-    if (pciDeviceHeader->DeviceID == 0xFFFF)
+    if (inventoryCount < 512)
     {
-        return;
+        inventory[inventoryCount++] = {segment,
+                                       pciDeviceHeader->VendorID,
+                                       pciDeviceHeader->DeviceID,
+                                       bus,
+                                       slot,
+                                       (uint8_t)function,
+                                       pciDeviceHeader->Class,
+                                       pciDeviceHeader->Subclass,
+                                       pciDeviceHeader->ProgIF,
+                                       pciDeviceHeader->RevisionID,
+                                       pciDeviceHeader->HeaderType};
+    }
+    else
+    {
+        ++inventoryDropped;
     }
 
     /*kprintf("Found function (%s: %s, %s, %s)\n",
@@ -58,6 +101,8 @@ void EnumerateFunction(uint64_t deviceAddress, uint64_t function)
             }
         }
 
+        break;
+
     case 0x0C: // serial bus controller
         switch (pciDeviceHeader->Subclass)
         {
@@ -65,8 +110,10 @@ void EnumerateFunction(uint64_t deviceAddress, uint64_t function)
             switch (pciDeviceHeader->ProgIF)
             {
             case 0x00: //UHCI
-                InitialiseUHCI(PCI_MAKE_ID(pciDeviceHeader->Class, pciDeviceHeader->Subclass, pciDeviceHeader->ProgIF),
-                               pciDeviceHeader);
+                if (segment == 0)
+                {
+                    InitialiseUHCI(PCI_MAKE_ID(bus, slot, function), pciDeviceHeader);
+                }
                 break;
 
             case 0x10: //OHCI
@@ -82,7 +129,7 @@ void EnumerateFunction(uint64_t deviceAddress, uint64_t function)
     }
 }
 
-void EnumerateDevice(uint64_t busAddress, uint64_t device)
+void EnumerateDevice(uint64_t busAddress, uint64_t device, uint16_t segment, uint8_t bus)
 {
     uint64_t offset = device << 15;
 
@@ -91,60 +138,50 @@ void EnumerateDevice(uint64_t busAddress, uint64_t device)
 
     PCIDeviceHeader* pciDeviceHeader = (PCIDeviceHeader*)deviceAddress;
 
-    if (pciDeviceHeader->DeviceID == 0)
+    if (pciDeviceHeader->VendorID == 0xFFFF)
     {
         return;
     }
 
-    if (pciDeviceHeader->DeviceID == 0xFFFF)
+    uint64_t functions = pciDeviceHeader->HeaderType & PCI_TYPE_MULTIFUNC ? 8 : 1;
+    for (uint64_t function = 0; function < functions; function++)
     {
-        return;
-    }
-
-    for (uint64_t function = 0; function < 8; function++)
-    {
-        EnumerateFunction(deviceAddress, function);
+        EnumerateFunction(deviceAddress, function, segment, bus, device);
     }
 }
 
-void EnumerateBus(uint64_t baseAddress, uint64_t bus)
+void EnumerateBus(uint64_t baseAddress, uint64_t bus, uint16_t segment)
 {
     uint64_t offset = bus << 20;
 
     uint64_t busAddress = baseAddress + offset;
-    KernelDirectory.MapMemory(busAddress, busAddress);
-
-    PCIDeviceHeader* pciDeviceHeader = (PCIDeviceHeader*)busAddress;
-
-    if (pciDeviceHeader->DeviceID == 0)
-    {
-        return;
-    }
-
-    if (pciDeviceHeader->DeviceID == 0xFFFF)
-    {
-        return;
-    }
-
     for (uint64_t device = 0; device < 32; device++)
     {
-        EnumerateDevice(busAddress, device);
+        EnumerateDevice(busAddress, device, segment, bus);
     }
 }
 
 void EnumeratePCI(ACPI::MCFGHeader* mcfg)
 {
+    inventoryCount = inventoryDropped = 0;
+    inventoryAvailable = false;
+    if (mcfg->header.Length < sizeof(ACPI::MCFGHeader))
+    {
+        return;
+    }
     uint64_t entries = ((mcfg->header.Length) - sizeof(ACPI::MCFGHeader)) / sizeof(ACPI::DeviceConfig);
 
     for (uint64_t t = 0; t < entries; t++)
     {
         ACPI::DeviceConfig* newDeviceConfig =
             (ACPI::DeviceConfig*)((uint64_t)mcfg + sizeof(ACPI::MCFGHeader) + (sizeof(ACPI::DeviceConfig) * t));
-        for (uint64_t bus = newDeviceConfig->StartBus; bus < newDeviceConfig->EndBus; bus++)
+        for (uint64_t bus = newDeviceConfig->StartBus; bus <= newDeviceConfig->EndBus; bus++)
         {
-            EnumerateBus(newDeviceConfig->BaseAddress, bus);
+            EnumerateBus(newDeviceConfig->BaseAddress, bus, newDeviceConfig->PCISegGroup);
         }
     }
+
+    inventoryAvailable = true;
 }
 
 // Stuff for reading the PCI

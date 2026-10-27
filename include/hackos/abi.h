@@ -52,8 +52,8 @@ static_assert(sizeof(HackosGroupInfo) == 40, "group ABI");
 struct HackosClock
 {
     uint64_t ticks;
-    uint8_t second, minute, hour, day, month, year;
-    uint8_t reserved[2];
+    uint8_t second, minute, hour, day, month, reserved;
+    uint16_t year; // Full Gregorian year; all fields are binary, month is 1..12.
 };
 
 static_assert(sizeof(HackosFileInfo) == 288, "file ABI");

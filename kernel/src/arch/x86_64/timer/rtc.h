@@ -15,5 +15,7 @@ struct tm
 
 void InitRTC(struct tm* kernel_time);
 void GetTimeRTC(struct tm* tm);
+bool TryGetTimeRTC(struct tm* value);
+void SetRTCCenturyRegister(uint8_t index);
 
 #endif

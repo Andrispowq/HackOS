@@ -29,7 +29,9 @@ an ELF loader, a scheduler, and an experimental userspace library.
 Both boot paths start a ring-3 login agent. First-boot setup creates the chosen
 administrator; successful login starts the standalone PS/2 shell. Accounts persist
 across boots, and `logout` ends the session. See [accounts and recovery](docs/system/accounts.md).
-Try `help`, `ls`, `ps` or `print tick`. Run `user USR/BIN/RING3` for the minimal
+Try `help`, `ls`, `ps` or `time --ticks`. `echo` prints literal text; root can run
+`sysinfo` for a hardware report or select a section such as `sysinfo memory`.
+See [system utilities](docs/system/utilities.md). Run `user USR/BIN/RING3` for the minimal
 isolated ring-3 print/preemption/exit demo. Both `./` and `user` accept arguments and wait for isolated programs to exit
 (append `&` for background execution); `shutdown` requests kernel ACPI
 power-off. `./USR/BIN/INPUT` demonstrates interactive input; Ctrl-C stops the

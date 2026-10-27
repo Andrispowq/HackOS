@@ -12,6 +12,8 @@
 #define PS2YOverflow 0b10000000
 
 void InitialiseMouse(uint32_t width, uint32_t height);
+bool MouseEnabled();
+uint8_t MouseDeviceId();
 
 double GetMouseX();
 double GetMouseY();

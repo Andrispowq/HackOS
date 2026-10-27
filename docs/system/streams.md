@@ -21,11 +21,11 @@ open files are capabilities, including when root deliberately passes them to a
 ## Shell syntax
 
 ```text
-print hello > /tmp/message
-print again >> /tmp/message
+echo hello > /tmp/message
+echo again >> /tmp/message
 cat < /tmp/message | cat
 cat /missing 2> /tmp/errors
-print hello | cat > "/tmp/two words"
+echo hello | cat > "/tmp/two words"
 runas guest cat /root-only 2>&1 | cat
 ```
 

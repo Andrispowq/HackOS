@@ -33,7 +33,7 @@ def test(firmware, timeout):
             g.login('root', ADMIN_PASSWORD)
             g.shell('storprobe', 'STORAGE_ROOT_OK')
             g.shell('runas guest storprobe guest', 'STORAGE_GUEST_OK')
-            g.shell('chmod 755 /usr/bin/print', '$ ')
+            g.shell('chmod 755 /usr/bin/echo', '$ ')
             g.shell('chown guest users /tmp/new', '$ ')
             g.shell('ls -l /tmp', '-rw-r----- 1000 1000')
             g.screen('permissions')

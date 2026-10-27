@@ -5,6 +5,11 @@
 volatile uint64_t tick;
 static uint32_t frequency;
 
+uint32_t TimerFrequency()
+{
+    return frequency;
+}
+
 static void timer_callback(Registers*)
 {
     ++tick;

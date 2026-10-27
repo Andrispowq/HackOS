@@ -176,7 +176,7 @@ for p in users:
                         offset = len(output()); qmp.type("user USR/BIN/"+name+"\n")
                         wait(lambda: "Rejected user program:" in output()[offset:] or "Cannot load user program:" in output()[offset:], "reject "+name)
                         wait(lambda: "root@root:~$ " in output()[offset:], "shell prompt after rejected image")
-                    enter("print ring3_survived", "\nring3_survived\n")
+                    enter("echo ring3_survived", "\nring3_survived\n")
                     assert "\nring3_survived\n" in output()
                     time.sleep(0.1)
                     inspect("reclamation", '''

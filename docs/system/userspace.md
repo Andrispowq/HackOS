@@ -79,8 +79,9 @@ Console rendering and hardware operations remain kernel services.
 | `jobs`, `fg [job]`, `bg [job]`, `wait [job]`, `kill %job` | List jobs, resume in foreground/background, wait, or terminate an owned group; job numbers are PIDs |
 | `history` | List the newest 256 submitted commands; Up/Down recalls them |
 | `help`, `clear` | Show commands or clear the console |
-| `print <text>` | Print literal text, including percent signs |
-| `print tick`, `print time`, `print date` | Show monotonic ticks or RTC values |
+| `echo [-n] [text...]` | Join literal arguments with spaces; `-n` suppresses the final newline |
+| `time [-d|--date] [-t|--time] [-k|--ticks] [-a|--all]` | Show the RTC date/time and ticks since kernel timer startup; flags combine |
+| `sysinfo [section]` | Root-only hardware report; default `full`; see [utilities](utilities.md) |
 | `ps [aux]`, `kill <pid>` | List tasks or stop a user program; idle, login and session shell are protected |
 | `ls [-la] [path]`, `wd`, `cd <path>` | Browse the first filesystem; `~` denotes its root |
 | `cat [path]`, `read [path]` | Copy a file or stdin to stdout in bounded chunks, preserving exact bytes |
@@ -114,9 +115,10 @@ words (including empty strings); a backslash escapes the next character, also
 inside quotes. Unmatched quotes, a trailing backslash or excessive arguments
 reject the command before execution. Each command program validates its arguments. Unsupported counts/options print usage;
 `ps aux` lists the same name/PID/state/UID/GID/parent-PID/process-group information as `ps`;
-CPU/memory accounting is not available. `print` joins decoded arguments with single
-spaces; quote text to preserve internal spaces. Clock shortcuts apply only to
-one argument (`tick`, `time`, or `date`). Quoted/escaped paths work for `cd` and
+CPU/memory accounting is not available. `echo` joins decoded arguments with single
+spaces; quote text to preserve internal spaces. Leading `-n` options suppress the
+newline; all other arguments, including `tick`, `date`, `time` and `--`, are literal.
+The separate `time` utility reads the clock. Quoted/escaped paths work for `cd` and
 `cat`/`read`; empty paths are rejected. The `cd` and `history` built-ins reject
 background `&`. The old shell-owned `open`/`read`/`close` session is retired;
 file handles remain process-owned and commands read/close their own files.
@@ -332,7 +334,7 @@ return an error rather than being reinterpreted as new operations.
 | 14 | `user_write(buffer, length)` | Literal console bytes, maximum 1024; returns count |
 | 15 | `input()` | Character/event, 0 if empty, 256 for queue overflow; terminal owner only |
 | 16 | `console(operation)` | 0 backspace, 1 clear, 2 query ownership without consuming input; terminal owner only |
-| 17 | `clock(out)` | Copies ticks and RTC fields; RTC retains existing BCD representation |
+| 17 | `clock(out)` | Copies ticks and binary calendar fields (full year, month 1–12); 0 or error |
 | 18 | `process_info(index, out)` | Copies one process record; 1 found, 0 end |
 | 19 | `kill(pid)` | Stops another user task owned by the same UID, or any user task as root; idle/login/session shell/self protected |
 | 20 | `spawn(path)` | Copies a bounded path and loads an isolated ELF; returns PID |
@@ -382,6 +384,7 @@ return an error rather than being reinterpreted as new operations.
 | 64 | `heap_resize(bytes)` | Commit/release a private page-rounded heap prefix up to 512 KiB; return heap base |
 | 65 | `spawn_job(path, argc, argv, flags)` | Create a controlled process group; flag 1 requests atomic foreground handoff |
 | 66–78 | Stream descriptors, pipe, poll, timed waits, sleep and mapped spawn | See the [complete stream ABI](streams.md#descriptor-abi) |
+| 79 | `hardware(section, index, out)` | UID 0 only; copy a zero-initialized 128-byte `HackosHardwareInfo`; 1 record, 0 end, error otherwise |
 
 Calls use `int 0x80`: RAX is the number, RDI/RSI/RDX/RCX/R8 hold arguments,
 and saved RAX receives the result. Successful operations without another result

@@ -315,7 +315,7 @@ pixel correctness, input progress and eventual final-frame flush are asserted
 separately.
 
 The step-10 shell suite checks built-in argument dispatch (`ps aux`), quoted
-command names/paths, whitespace, empty/escaped arguments, print joining, malformed
+command names/paths, whitespace, empty/escaped arguments, echo joining, malformed
 syntax and count limits. Invalid power/file/process arguments must produce usage
 without performing their operation. It also checks the full 16-argument program
 limit through `user` and preserves the existing launch, history and wait checks.
@@ -328,7 +328,7 @@ isolation and denied power calls (including an unprivileged child launching
 SHUTDOWN). Cleanup compares reaped tasks with all successful launches. Window
 regressions launch `window` by name, including background owners.
 
-Step 12 checks the graphical console position after `clear` and `print` to prove
+Step 12 checks the graphical console position after `clear` and `echo` to prove
 that start/exit boilerplate no longer consumes console lines; debug-port traces
 remain available for lifecycle assertions. `quiet-console.ppm` records the view.
 The shell suite installs disposable normal, dot-prefixed, hidden and read-only
@@ -553,3 +553,27 @@ support; job-control tests synchronize on observed scheduler state and command
 prompts, and pipeline output checks exclude debug-only lifecycle messages.
 The final report and source hashes are under `tests/out/step18-verified/`.
 Full ASan+UBSan remains required on native x86-64 CI.
+
+## Clock and hardware utility regressions
+
+`python3 tests/qemu_utilities.py --firmware bios` (and `uefi`), or
+`make -C tests test-utilities FIRMWARE=...`, installs UTILPROBE into a disposable
+image. It validates `echo` output byte for byte, each clock flag and combinations,
+every hardware section, root denial through both the utility and direct syscalls,
+invalid output pointers, out-of-range indices, PCI addresses/controller counts,
+and report pipelines/redirection. mtools verifies saved files independently;
+framebuffer captures and a full text report live in `tests/out/qemu-utilities-*`.
+CI runs it on both firmware paths alongside the existing suites.
+
+Host RTC tests cover BCD/binary modes, 12/24-hour conversion, midnight/noon,
+century/leap-year validation, year rollover during sampling, and bounded failure
+when the update-in-progress bit stays set. FAT keeps its internal `tm` conventions
+(years since 1900, zero-based month); the public clock uses calendar values.
+
+Utility validation passed 194 UBSan host checks, five boot-asset checks, the BIOS
+loader-chain probe, fresh BIOS/UEFI builds and all ten QEMU suites on both
+firmware paths. The stripped kernel is 220,208 bytes in the 393,216-byte BIOS
+slot. ELF load segments/BSS and utility framebuffer captures were checked.
+Formatting (clang-format 18.1.8) and workflow lint passed. Final results, sample
+hardware reports and source hashes are under `tests/out/utilities-verified/`.
+Full ASan+UBSan validation remains a native x86-64 CI requirement.

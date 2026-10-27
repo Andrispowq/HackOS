@@ -36,7 +36,10 @@ Step 18 adds inherited stdin/stdout/stderr descriptors, shared open-file positio
 bounded pipes, ordered shell redirection and four-stage pipeline jobs. Descriptor,
 child and job waits accept timeouts; poll and sleep block in the scheduler.
 COM1 records loader/kernel entry, terminal output and faults with bounded hardware
-waits. See `docs/system/streams.md` for the ABI, limits and lifecycle rules.
+waits. `echo` replaces `print`; `time` selects RTC date/time and startup ticks.
+Root-only `sysinfo` reports CPU, RAM/map, block devices, PCI/USB, PS/2, display
+and ACPI through copied records; see `docs/system/utilities.md`. See
+`docs/system/streams.md` for the stream ABI, limits and lifecycle rules.
 Libc has a private 512 KiB heap, allocation/split helpers and userspace integer
 formatting. Heap pages are NX and reclaimed on every exit path; direct heap
 resizing must not be mixed with libc allocation. Process-info records are 296

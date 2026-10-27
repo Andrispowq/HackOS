@@ -94,3 +94,19 @@ translated key input. IRQ handlers only enqueue; idle routes events to windows
 or the terminal and updates focus/capture. Mouse packets are processed when
 their final byte arrives, and the cursor is drawn by the compositor rather than
 the IRQ. See [window events](userspace.md#window-interaction-and-events).
+
+## Userspace inventory
+
+Root can run `sysinfo` for a full report, or select `cpu`, `memory`, `memory-map`,
+`disk`, `pci`, `usb`, `ps2`, `display`, `acpi` or `system`. `ps/2` and `pc/2` alias
+`ps2`. Reports use ordinary stdout, including pipes and file redirection.
+See [utility commands and ABI](utilities.md).
+
+PCI discovery retains up to 512 pointer-free function records with segment,
+bus/device/function, vendor/device IDs, class/subclass/interface, revision and
+header type. It checks the vendor absence sentinel, includes the MCFG end bus,
+and scans all device slots even if slot zero is absent. Excess records are counted
+and reported as omitted; hardware reports do not rescan or write PCI registers.
+No MCFG means the PCI/USB inventory is reported unavailable. USB reports describe
+controllers and current driver limitations; they do not claim attached-device
+support. PS/2 reports distinguish keyboard IRQ registration from mouse enable ACK.

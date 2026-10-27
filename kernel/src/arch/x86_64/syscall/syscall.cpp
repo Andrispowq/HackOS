@@ -8,6 +8,7 @@
 #include "proc/tasking/process.h"
 #include "proc/user/user.h"
 #include "proc/user/streams.h"
+#include "proc/user/hardware.h"
 #include "proc/user/accounts.h"
 #include "proc/user/account_store.h"
 #include "security/crypto.h"
@@ -110,16 +111,19 @@ static uint64_t UserConsole(uint64_t operation)
 
 static uint64_t UserClock(HackosClock* destination)
 {
-    struct tm time;
-    GetTimeRTC(&time);
+    struct tm time = {};
+    if (!TryGetTimeRTC(&time))
+    {
+        return HACKOS_ERROR;
+    }
     HackosClock value = {tick,
                          (uint8_t)time.second,
                          (uint8_t)time.minute,
                          (uint8_t)time.hour,
                          (uint8_t)time.day,
-                         (uint8_t)time.month,
-                         (uint8_t)time.year,
-                         {0, 0}};
+                         (uint8_t)(time.month + 1),
+                         0,
+                         (uint16_t)(time.year + 1900)};
     return Output(destination, &value, sizeof(value)) ? 0 : HACKOS_ERROR;
 }
 
@@ -1316,6 +1320,22 @@ static void syscall_handler(Registers* r)
     case HACKOS_SYS_clock:
         r->rax = UserClock((HackosClock*)r->rdi);
         break;
+    case HACKOS_SYS_hardware:
+    {
+        if (!IsRoot())
+        {
+            r->rax = HACKOS_DENIED;
+            break;
+        }
+
+        HackosHardwareInfo info = {};
+        r->rax = ReadHardware(r->rdi, r->rsi, info);
+        if (r->rax == 1 && !Output((void*)r->rdx, &info, sizeof(info)))
+        {
+            r->rax = HACKOS_ERROR;
+        }
+        break;
+    }
     case HACKOS_SYS_process_info:
         r->rax = UserProcessInfo(r->rdi, (HackosProcessInfo*)r->rsi);
         break;

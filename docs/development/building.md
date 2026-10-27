@@ -18,7 +18,7 @@ Open [the console](http://localhost:6080/vnc.html?autoconnect=true&resize=scale)
 It shows initialization output followed by the login/restart/shutdown menu. Select `1` or `login` for
 first-boot setup. Choose an administrator
 name and confirm an 8–128 character password, then log in to the ring-3 shell. Click inside it
-and try `help`, `ls`, `ps` or `print tick`. Input uses the US keyboard layout.
+and try `help`, `ls`, `ps` or `time --ticks`. Input uses the US keyboard layout.
 Use `test alpha "two words"` to see argument passing and read a file
 from ring 3, or `user USR/BIN/RING3` for
 the print/preemption/exit demo. `shutdown` requests kernel ACPI power-off. The
@@ -29,7 +29,7 @@ completion before showing the prompt; a separate trailing `&` launches in the
 background. Try `input` for interactive text input; Ctrl-C returns to
 the shell. Up/Down browses the fixed 256-command history, and `history` lists it.
 Bare commands resolve in `/usr/bin`; directory/history/session and job controls stay in the shell.
-Try `print hello | cat > /tmp/message`, `cat < /tmp/message`, `print again >> /tmp/message`
+Try `echo hello | cat > /tmp/message`, `cat < /tmp/message`, `echo again >> /tmp/message`
 and `cat /missing 2> /tmp/errors`. Pipelines support up to four stages, with
 ordered redirections and quoted paths. `cat` preserves exact bytes.
 Tab completes commands and paths. Ctrl+Z stops a foreground job; `jobs`, `fg`,

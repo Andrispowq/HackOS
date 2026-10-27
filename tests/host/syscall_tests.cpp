@@ -1,5 +1,6 @@
 #include "support.hpp"
 #include "hackos/abi.h"
+#include "hackos/hardware.h"
 #include "hackos/syscall_numbers.h"
 static_assert(HACKOS_SYS_exit == 0 && HACKOS_SYS_user_write == 14 && HACKOS_SYS_input == 15 && HACKOS_SYS_power == 26 &&
                   HACKOS_SYS_yield == 27 && HACKOS_SYS_spawn_args == 28 && HACKOS_SYS_wait == 29 &&
@@ -14,13 +15,14 @@ static_assert(HACKOS_SYS_exit == 0 && HACKOS_SYS_user_write == 14 && HACKOS_SYS_
                   HACKOS_SYS_open_mode == 55 && HACKOS_SYS_chown == 60 && HACKOS_SYS_terminal_read == 61 &&
                   HACKOS_SYS_job_wait == 62 && HACKOS_SYS_job_control == 63 && HACKOS_SYS_heap_resize == 64 &&
                   HACKOS_SYS_spawn_job == 65 && HACKOS_SYS_fd_open == 66 && HACKOS_SYS_spawn_io == 76 &&
-                  HACKOS_SYS_fd_flush == 78 && HACKOS_SYSCALL_COUNT == 79,
+                  HACKOS_SYS_fd_flush == 78 && HACKOS_SYS_hardware == 79 && HACKOS_SYSCALL_COUNT == 80,
               "User syscall ABI changed");
 
 TEST(syscall_record_layout)
 {
     CHECK(sizeof(HackosPollFd) == 16 && sizeof(HackosSpawnIo) == 32);
-    CHECK(sizeof(HackosClock) == 16);
+    CHECK(sizeof(HackosClock) == 16 && __builtin_offsetof(HackosClock, year) == 14);
+    CHECK(sizeof(HackosHardwareInfo) == 128);
     CHECK(sizeof(HackosWindowSpec) == 48);
     CHECK(sizeof(HackosWindowRect) == 16);
     CHECK(sizeof(HackosWindowState) == 32);

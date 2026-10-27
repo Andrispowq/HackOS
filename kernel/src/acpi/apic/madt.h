@@ -8,6 +8,8 @@
 
 namespace ACPI
 {
+uint32_t DiscoveredCPUCount();
+
 struct MADTEntryRecordHeader
 {
     uint8_t EntryType;

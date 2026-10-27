@@ -54,9 +54,17 @@ void KeyboardOverflow()
     WakeTerminalReaders();
 }
 
+static bool keyboardRegistered;
+
+bool KeyboardRegistered()
+{
+    return keyboardRegistered;
+}
+
 void InitKeyboard()
 {
     RegisterInterruptHandler(IRQ1, keyboard_callback);
+    keyboardRegistered = true;
 }
 
 KeyboardRead ReadKeyboard(char& ch)

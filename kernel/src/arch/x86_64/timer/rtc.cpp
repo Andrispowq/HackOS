@@ -1,60 +1,35 @@
 #include "rtc.h"
-
+#include "rtc_sample.h"
 #include "arch/x86_64/ports.h"
+#include "arch/x86_64/interrupts/guard.h"
 
-uint8_t GetYearRTC()
+static uint8_t centuryRegister;
+
+void SetRTCCenturyRegister(uint8_t index)
 {
-    __outb(0x70, 0x09);
-    return __inb(0x71);
+    centuryRegister = index >= 0x0e && index < 0x80 ? index : 0;
 }
 
-uint8_t GetMonthRTC()
+bool TryGetTimeRTC(tm* value)
 {
-    __outb(0x70, 0x08);
-    return __inb(0x71);
+    return SampleRTC(
+        [](uint8_t index)
+        {
+            InterruptGuard guard;
+            __outb(0x70, index);
+            return __inb(0x71);
+        },
+        centuryRegister, *value);
 }
 
-uint8_t GetDayRTC()
+void GetTimeRTC(tm* value)
 {
-    __outb(0x70, 0x07);
-    return __inb(0x71);
+    // FAT has no error channel for timestamps. Use its epoch if the RTC fails.
+    *value = {80, 0, 1, 0, 0, 0};
+    TryGetTimeRTC(value);
 }
 
-uint8_t GetWeekdayRTC()
+void InitRTC(tm* value)
 {
-    __outb(0x70, 0x06);
-    return __inb(0x71);
-}
-
-uint8_t GetHourRTC()
-{
-    __outb(0x70, 0x04);
-    return __inb(0x71);
-}
-
-uint8_t GetMinuteRTC()
-{
-    __outb(0x70, 0x02);
-    return __inb(0x71);
-}
-
-uint8_t GetSecondRTC()
-{
-    __outb(0x70, 0x00);
-    return __inb(0x71);
-}
-
-void InitRTC(struct tm* kernel_time)
-{
-    GetTimeRTC(kernel_time);
-}
-
-void GetTimeRTC(struct tm* tm)
-{
-    tm->year = GetYearRTC();
-    tm->month = GetMonthRTC();
-    tm->day = GetDayRTC();
-    tm->hour = GetHourRTC();
-    tm->minute = GetMinuteRTC();
-    tm->second = GetSecondRTC();
+    GetTimeRTC(value);
 }

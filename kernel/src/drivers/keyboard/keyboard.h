@@ -4,6 +4,7 @@
 #include "lib/stdint.h"
 
 void InitKeyboard();
+bool KeyboardRegistered();
 void ClearKeyboard(bool queued = true);
 void DeliverKeyboard(uint32_t key);
 void KeyboardOverflow();
