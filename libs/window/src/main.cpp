@@ -47,7 +47,10 @@ static bool Paint(uint64_t window, uint32_t accent, int32_t mouseX, int32_t mous
         }
     }
 
-    return true;
+    HackosWindowState current;
+    if (syscall_window_state(window, &current) != 0) return false;
+
+    return current.width == state.width && current.height == state.height;
 }
 
 static void Log(const char* label, int64_t first, uint64_t second)
@@ -107,6 +110,8 @@ int main(int argc, char** argv)
     int32_t mouseX = -10, mouseY = -10;
     bool repaint = !Paint(window, accent, mouseX, mouseY);
     User::Print("Window demo ready. Drag title, resize bottom-right, click to focus. Wheel to recolour; M minimizes, F maximizes/restores, R restores, Q closes.\n");
+
+    unsigned pending = 0;
 
     while (syscall_window_poll(window) == 0)
     {
@@ -189,7 +194,13 @@ int main(int argc, char** argv)
                 repaint = true;
             }
         }
-        else if (repaint && !(syscall_window_mode(window, HACKOS_WINDOW_QUERY) & HACKOS_WINDOW_MINIMIZED))
+
+        // Coalesce a bounded batch, but never let continuous pointer input
+        // starve painting after resize has cleared the client buffer.
+        if (result == 1 && ++pending < 16) continue;
+
+        pending = 0;
+        if (repaint && !(syscall_window_mode(window, HACKOS_WINDOW_QUERY) & HACKOS_WINDOW_MINIMIZED))
         {
             repaint = !Paint(window, accent, mouseX, mouseY);
             if (!repaint)

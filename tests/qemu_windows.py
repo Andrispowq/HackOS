@@ -9,6 +9,7 @@ import subprocess
 import sys
 import tempfile
 import time
+import threading
 from common import ROOT, OUT, Report, command, require_success
 from qemu_shell import QMP, build_probe
 
@@ -101,6 +102,12 @@ bp = gdb.Breakpoint("ReapExitedProcesses()", type=gdb.BP_HARDWARE_BREAKPOINT)
 gdb.execute("continue")
 gdb.execute("continue")
 gdb.execute("continue")
+# Composition is paced; wait for the final dirty frame, not just input dispatch.
+for refresh in range(128):
+    if not int(gdb.parse_and_eval("display.dirty")):
+        break
+    gdb.execute("continue")
+assert not int(gdb.parse_and_eval("display.dirty")), "Display did not flush its final frame"
 bp.delete()
 display = gdb.parse_and_eval("display")
 fb = display["framebuffer"]
@@ -230,9 +237,32 @@ assert int(gdb.parse_and_eval("KernelWindowManager->capture")) == 0
 assert int(gdb.parse_and_eval("mouseDevice")) == 3
 """)
                     mode_offset = len(output())
+                    paint_started = time.monotonic()
                     click(481, 265)
-                    wait_text("WINDOW_MODE 2 0", mode_offset)
-                    wait_text("WINDOW_PAINT 1918 1020", output().index("WINDOW_MODE 2 0", mode_offset), allowance=max(timeout, 300))
+                    moving = threading.Event()
+                    moving.set()
+                    motion_errors = []
+
+                    def keep_moving():
+                        try:
+                            while moving.is_set():
+                                for dx in (1, -1):
+                                    qmp.call("input-send-event", {"events": [
+                                        {"type": "rel", "data": {"axis": "x", "value": dx}}]})
+                                    time.sleep(0.005)
+                        except Exception as error:
+                            motion_errors.append(error)
+
+                    motion = threading.Thread(target=keep_moving)
+                    motion.start()
+                    try:
+                        wait_text("WINDOW_MODE 2 0", mode_offset)
+                        wait_text("WINDOW_PAINT 1918 1020", output().index("WINDOW_MODE 2 0", mode_offset))
+                    finally:
+                        moving.clear()
+                        motion.join(timeout=5)
+                    assert not motion.is_alive() and not motion_errors, motion_errors
+                    (directory/"maximized-seconds.txt").write_text(str(time.monotonic() - paint_started) + "\n")
                     inspect("maximized", """
 w = gdb.parse_and_eval("KernelWindowManager->focused")
 assert int(w["maximised"]) and not int(w["minimised"])
@@ -257,7 +287,7 @@ assert int(fb["address"][931 * int(fb["pitch"]) + 1501]) == int(back["address"][
                     click(60, 1066)
                     wait_text("WINDOW_MODE 2 0", wheel_offset)
                     assert "WINDOW_WHEEL" not in output()[wheel_offset:]
-                    wait_text("WINDOW_PAINT 1918 1020", output().index("WINDOW_MODE 2 0", wheel_offset), allowance=max(timeout, 300))
+                    wait_text("WINDOW_PAINT 1918 1020", output().index("WINDOW_MODE 2 0", wheel_offset))
                     mode_offset = len(output())
                     qmp.type("r")
                     wait_text("WINDOW_MODE 0 0", mode_offset)
@@ -275,6 +305,11 @@ assert int(w["sizeX"]) == 240 and int(w["sizeY"]) == 230
                     move(900, 800)
                     button(False)
                     wait_text("WINDOW_RESIZE 320 240", offset)
+                    wait_text("WINDOW_PAINT 320 240", offset)
+                    inspect("large-client-paint", """
+w = gdb.parse_and_eval("KernelWindowManager->focused")
+assert int(w["drawArea"]["address"][220 * 320 + 300]) == (0xff000060 | (300 * 255 // 320) << 16 | (220 * 255 // 240) << 8)
+""")
                     move(596, 516)
                     button(True)
                     move(290, 290)

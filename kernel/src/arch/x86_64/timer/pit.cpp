@@ -16,10 +16,15 @@ void InitTimer(uint32_t freq)
     __outb(0x40, (uint8_t)(divisor >> 8));
 }
 
+uint64_t TimerTicksForMilliseconds(uint32_t milliseconds)
+{
+    return ((uint64_t)milliseconds * frequency + 999) / 1000;
+}
+
 void SleepFor(uint32_t milliseconds)
 {
     uint64_t start = tick;
-    uint64_t duration = ((uint64_t)milliseconds * frequency + 999) / 1000;
+    uint64_t duration = TimerTicksForMilliseconds(milliseconds);
     while (tick - start < duration) asm volatile("hlt" ::: "memory");
 }
 void SleepForSeconds(double seconds)

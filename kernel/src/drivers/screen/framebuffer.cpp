@@ -99,3 +99,33 @@ void Framebuffer::ClearMouseCursor(uint8_t* cursor, uint32_t x, uint32_t y)
         }
     }
 }
+
+void Framebuffer::CopyFrom(const Framebuffer& source, uint32_t x, uint32_t y)
+{
+    if (x >= width || y >= height) return;
+
+    uint32_t columns = source.width;
+    uint32_t rows = source.height;
+    if (columns > width - x) columns = width - x;
+    if (rows > height - y) rows = height - y;
+
+    for (uint32_t row = 0; row < rows; row++)
+    {
+        uint32_t* destination = address + (uint64_t)(y + row) * pitch + x;
+        const uint32_t* pixels = source.address + (uint64_t)row * source.pitch;
+#if defined(__x86_64__)
+        // Copy whole pixels, including to uncached video memory. Byte-sized
+        // copies and per-pixel function calls are particularly costly in TCG.
+        uint64_t count = columns;
+        asm volatile(
+            "cld\n\t"
+            "rep movsl"
+            : "+D"(destination), "+S"(pixels), "+c"(count)
+            :
+            : "memory", "cc"
+        );
+#else
+        memcpy(destination, pixels, (uint64_t)columns * sizeof(uint32_t));
+#endif
+    }
+}

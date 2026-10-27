@@ -2,6 +2,7 @@
 #include "window_manager.h"
 #include "drivers/mouse/mouse.h"
 #include "arch/x86_64/interrupts/guard.h"
+#include "arch/x86_64/timer/pit.h"
 
 #include "arch/x86_64/ports.h"
 #include "arch/x86_64/paging/paging.h"
@@ -73,17 +74,29 @@ void printf_backspace()
     display.put_backspace();
 }
 
+void Display::Refresh()
+{
+    // Coalesce small user uploads and cursor events between frames. Keep dirty
+    // set until the final update is displayed, even when input has stopped.
+    if (dirty && tick - lastFrameTick >= TimerTicksForMilliseconds(16))
+    {
+        DrawBackbuffer();
+    }
+}
+
 void Display::DrawBackbuffer()
 {
     PreemptionGuard guard;
     dirty = false;
-    memcpy(framebuffer.address, backbuffer.address, (uint64_t)framebuffer.pitch * framebuffer.height * 4);
+    framebuffer.CopyFrom(backbuffer, 0, 0);
 
     if (KernelWindowManager)
     {
         KernelWindowManager->Draw();
         DrawMouse();
     }
+
+    lastFrameTick = tick;
 }
 
 void Display::clear()

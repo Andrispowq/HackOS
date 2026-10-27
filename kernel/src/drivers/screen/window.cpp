@@ -103,7 +103,11 @@ void Window::Draw(Framebuffer* framebuffer)
     uint32_t x = startX + 10;
     uint32_t y = startY + 8;
 
-    framebuffer->DrawRect(startX - 1, startY - 1, sizeX + 2, sizeY + 2, borderColour);
+    // Only paint the border. Filling the whole client first would overwrite
+    // millions of pixels that CopyFrom immediately replaces again.
+    framebuffer->DrawRect(startX - 1, startY - 1, 1, sizeY + 2, borderColour);
+    framebuffer->DrawRect(startX + sizeX, startY - 1, 1, sizeY + 2, borderColour);
+    framebuffer->DrawRect(startX, startY + sizeY, sizeX, 1, borderColour);
     framebuffer->DrawRect(startX - 1, startY - 1, sizeX + 2, navbar_height + 1, borderColour);
     framebuffer->DrawRect(startX, startY, sizeX, navbar_height - 1, colour);
     framebuffer->DrawRect((startX + sizeX) - 25, startY + 5, 20, 20, 0xFFFF0000);
@@ -121,14 +125,7 @@ void Window::Draw(Framebuffer* framebuffer)
         index++;
     }
 
-    //Copy window data
-    for(size_t y = 0; y < (sizeY - navbar_height); y++)
-    {
-        for(size_t x = 0; x < sizeX; x++)
-        {
-            framebuffer->PutPixel(x + startX, y + startY + navbar_height, drawArea->GetPixel(x, y));
-        }
-    }
+    framebuffer->CopyFrom(*drawArea, startX, startY + navbar_height);
 
     if (!maximised)
     {

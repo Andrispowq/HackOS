@@ -27,6 +27,7 @@ public:
     void clear();
 
     void DrawBackbuffer();
+    void Refresh();
 
     static Display* SharedDisplay();
 
@@ -38,6 +39,9 @@ public:
     Framebuffer backbuffer;
     PSF1_FONT* font;
     bool dirty;
+
+private:
+    uint64_t lastFrameTick = 0;
 };
 
 /* Public kernel API */

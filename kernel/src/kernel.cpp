@@ -34,7 +34,7 @@ extern "C" int kernel_main(KernelInfo* info)
             KernelWindowManager->Update();
 
             auto display = Display::SharedDisplay();
-            if (display->dirty) display->DrawBackbuffer();
+            display->Refresh();
         }
         asm volatile("hlt" ::: "memory");
     }

@@ -298,7 +298,16 @@ check the far side of the maximized client; guest probes reject invalid/foreign/
 stale mode calls and exercise minimized-owner exit, fault and kill cleanup.
 Host tests exercise the three-byte fallback and four-byte wheel decoder.
 
-Full-screen demo repaint milestones allow at least 300 seconds under TCG; other
-milestones retain the normal timeout. The current compositor can take over a
-minute to finish a maximized repaint. This is recorded as deferred performance
-work in TODO, not treated as a rendering speed guarantee.
+Full-screen demo repaints now use the ordinary 60-second milestone timeout.
+The suite keeps sending mouse motion while waiting for the maximized repaint,
+checks its far-side pixels and the large normal-size gradient, and records the
+maximized transition/repaint time in `maximized-seconds.txt`. This is an end-to-end
+TCG measurement including event dispatch, not a hardware frame-rate guarantee.
+Host tests cover clipped row copies with different source/destination pitches
+and padding/guard preservation.
+
+The step-9 q35/TCG runs measured about 1.5 seconds (BIOS) and 1.6 seconds
+(UEFI) for maximize plus full repaint while mouse motion continued. The step-8
+path exceeded 60 seconds before completion. Host load affects these timings;
+pixel correctness, input progress and eventual final-frame flush are asserted
+separately.

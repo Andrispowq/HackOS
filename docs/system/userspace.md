@@ -334,4 +334,17 @@ semantics. Keyboard typeahead is cleared on focus/terminal ownership changes.
 For two independent owners, launch `./USR/BIN/WINDOW &`, click the desktop,
 then launch `./USR/BIN/WINDOW second &`. Switch focus by clicking their clients;
 only the focused demo reacts to typed keys. Each demo paints small bounded
-strips, logs events, handles resize races, and recovers queue overflow.
+tiles, logs events, handles resize races, and recovers queue overflow. It processes
+at most 16 events before giving repainting a turn, so pointer traffic cannot
+keep a resized client black by preventing the queue from becoming empty. A
+completed upload checks current dimensions and retries if geometry changed.
+
+Composition and validated pixel uploads use clipped row copies with independent
+source/destination pitches. On x86-64 these copy whole 32-bit pixels, avoiding
+per-pixel function calls and byte-at-a-time video-memory copies. Window borders
+paint only their edges; the client is copied once instead of first being filled
+with border colour. Idle coalesces dirty updates until at least 16 milliseconds after the previous
+frame, using the configured PIT frequency. A pending final frame stays dirty
+until displayed, even after uploads/input stop. Boot, fault and power-off paths
+can still force an immediate draw. Composition still redraws the full display;
+damage tracking and a frame-presentation API are not introduced by this change.

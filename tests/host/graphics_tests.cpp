@@ -44,3 +44,30 @@ TEST(framebuffer_cursor_preserves_new_drawing) {
     f.DrawMouseCursor(cursor,6,4,99); f.PutPixel(6,4,42); f.ClearMouseCursor(cursor,6,4);
     CHECK(f.GetPixel(6,4)==42); return 0;
 }
+
+TEST(framebuffer_copy_clips_and_preserves_pitch_padding)
+{
+    uint32_t source[12] = {1, 2, 3, 99, 4, 5, 6, 99, 7, 8, 9, 99};
+    uint32_t destination[22] = {};
+    auto from = make_fb(source, 3, 3);
+    from.pitch = 4;
+    auto to = make_fb(destination + 1, 4, 3);
+    to.pitch = 6;
+    to.CopyFrom(from, 2, 1);
+
+    for (unsigned i = 0; i < 22; i++)
+    {
+        uint32_t expected = 0;
+        if (i == 9) expected = 1;
+        if (i == 10) expected = 2;
+        if (i == 15) expected = 4;
+        if (i == 16) expected = 5;
+
+        CHECK(destination[i] == expected);
+    }
+
+    to.CopyFrom(from, 0xffffffff, 0);
+    to.CopyFrom(from, 0, 0xffffffff);
+    CHECK(destination[0] == 0 && destination[21] == 0);
+    return 0;
+}

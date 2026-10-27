@@ -90,13 +90,8 @@ uint64_t UserWindowBlit(uint64_t handle, const HackosWindowRect* source, const u
         return HACKOS_ERROR;
     }
 
-    for (uint32_t y = 0; y < rect.height; y++)
-    {
-        for (uint32_t x = 0; x < rect.width; x++)
-        {
-            buffer->PutPixel(rect.x + x, rect.y + y, copy[y * rect.width + x]);
-        }
-    }
+    Framebuffer upload = {copy, rect.width, rect.height, 32, rect.width};
+    buffer->CopyFrom(upload, rect.x, rect.y);
 
     Display::SharedDisplay()->dirty = true;
     return 0;

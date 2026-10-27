@@ -6,19 +6,20 @@ The build and regression tests provide a base for the next changes. Memory
 ownership, storage failures and the userspace boundary take priority over adding
 more devices.
 
-## Follow-up plan recorded during step 8 (not implemented in this iteration)
+## Follow-up plan from step 8
 
-These are queued work, separate from step 8's minimise/maximise/restore and
-wheel support. Preserve this order for investigation; authentication and setup
-also depend on persistent user storage and credential handling.
+Items 1 and 2 are addressed in step 9. Items 3–5 remain deferred; authentication
+and setup depend on persistent user storage and credential handling.
 
-1. **Slow drawing:** measure repaint/upload/composition time and frame copies,
-   compare BIOS/UEFI under the same emulator settings, and distinguish guest
-   rendering cost from TCG/emulator cost before choosing optimizations.
-2. **Black client at larger sizes:** reproduce the reported loss of colours;
-   capture dimensions, resize notifications and blit results, then trace client
-   repaint and backing-buffer lifetime. Keep this as an unresolved report;
-   adding maximize support is not a claim that this existing bug is fixed.
+1. **Slow drawing — addressed in step 9:** replace per-pixel compositor calls
+   and byte framebuffer copies with clipped, pitch-aware pixel row copies.
+   Paint only border edges instead of filling the entire client underneath each
+   composition, and coalesce uploads between paced refreshes. Keep BIOS/UEFI full-screen repaint timing in the window tests.
+2. **Black client at larger sizes — addressed in step 9:** the demo waited for
+   an empty event queue before repainting a cleared resize buffer. Continuous
+   input could postpone drawing indefinitely. Drain bounded event batches and
+   repaint even while input continues; retry if geometry changed during upload.
+   Verify large normal and maximized client pixels, including under mouse input.
 3. **Shell command/argument separation:** first tokenize built-ins into a command
    name plus arguments, preserving quotes/escapes. Dispatch `ps aux` to `ps` with
    `aux`, so `ps` validates/responds to its arguments rather than the shell
