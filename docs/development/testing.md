@@ -317,3 +317,11 @@ command names/paths, whitespace, empty/escaped arguments, print joining, malform
 syntax and count limits. Invalid power/file/process arguments must produce usage
 without performing their operation. It also checks the full 16-argument program
 limit through `user` and preserves the existing launch, history and wait checks.
+
+Step 11 packages and checks eleven command executables in both images. Shell
+regressions verify external PS execution, directory inheritance, command lookup
+from another directory, absolute/relative paths, file-reader cleanup and error
+statuses. The ABI probe checks getcwd/chdir pointer validation, child-directory
+isolation and denied power calls (including an unprivileged child launching
+SHUTDOWN). Cleanup compares reaped tasks with all successful launches. Window
+regressions launch `window` by name, including background owners.

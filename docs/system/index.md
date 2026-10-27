@@ -60,7 +60,9 @@ into two phases:
 `kernel_main` remains idle, refreshes the dirty console and reaps exited tasks.
 The standalone `~/USR/BIN/SHELL` owns command parsing and PS/2 line editing in
 ring 3. Its checked syscall interface supplies terminal, file, process and power
-services. Both `./` and `user` launch isolated programs; no interactive command
+services, plus inherited working directories. Only `cd` and `history` remain
+built-ins; bare names resolve to standalone programs in `/usr/bin`. Explicit
+paths and the `user` compatibility prefix also launch isolated programs; no interactive command
 executes a ring-0 ELF. The binary-only `USERTEST.ELF` input remains packaged but
 is no longer called at boot.
 

@@ -1,5 +1,6 @@
 #include "syscall.h"
 #include "hackos/syscall.h"
+#include "hackos/runtime/path.h"
 #include "arch/x86_64/interrupts/guard.h"
 #include "arch/x86_64/timer/rtc.h"
 #include "arch/x86_64/timer/pit.h"
@@ -22,8 +23,9 @@ static uint64_t nextHandle;
 static Process* Caller() { return GetRunningProcess(); }
 static bool Path(const char* address, char (&path)[256])
 {
-    return Caller()->userSpace->CopyString(path, (uint64_t)address, sizeof(path)) &&
-           path[0] == '~' && (!path[1] || path[1] == '/') && filesystems[0];
+    char input[256];
+    return Caller()->userSpace->CopyString(input, (uint64_t)address, sizeof(input)) &&
+        filesystems[0] && NormalizePath(input, Caller()->working_dir, path);
 }
 static bool Output(void* destination, const void* source, uint64_t length)
 {
@@ -50,7 +52,7 @@ static uint64_t UserInput()
 }
 static uint64_t UserConsole(uint64_t operation)
 {
-    if (!OwnsTerminal(Caller()->pid) || (operation != 0 && !Caller()->systemShell)) return HACKOS_DENIED;
+    if (!OwnsTerminal(Caller()->pid) || (operation != 0 && !Caller()->systemShell && !Caller()->commandClear)) return HACKOS_DENIED;
     if (operation == 0) kprintf_backspace();
     else if (operation == 1) clrscr();
     else return HACKOS_ERROR;
@@ -74,7 +76,7 @@ static uint64_t UserProcessInfo(uint64_t index, HackosProcessInfo* destination)
 }
 static uint64_t UserKill(uint64_t pid)
 {
-    if (!Caller()->systemShell) return HACKOS_DENIED;
+    if (!Caller()->systemShell && (!Caller()->commandKill || !OwnsTerminal(Caller()->pid))) return HACKOS_DENIED;
     for (auto p = ready_queue; p; p = p->next) if (p->pid == pid)
     {
         if (!p->userSpace || p->systemShell || p == Caller()) return HACKOS_DENIED;
@@ -199,9 +201,39 @@ static uint64_t UserReadDir(const char* name, uint64_t index, HackosFileInfo* de
     HackosFileInfo info = {}; Info(info, file); filesystems[0]->CloseFile(file);
     return Output(destination, &info, sizeof(info)) ? 1 : HACKOS_ERROR;
 }
+static uint64_t UserGetCwd(char* destination, uint64_t capacity)
+{
+    uint64_t length = 0;
+    while (Caller()->working_dir[length])
+    {
+        length++;
+    }
+    if (capacity <= length) return HACKOS_ERROR;
+
+    return Output(destination, Caller()->working_dir, length + 1) ? 0 : HACKOS_ERROR;
+}
+
+static uint64_t UserChdir(const char* name)
+{
+    char path[256];
+    if (!Path(name, path)) return HACKOS_ERROR;
+    if (path[1])
+    {
+        auto file = filesystems[0]->OpenFile(path);
+        if (!file) return HACKOS_ERROR;
+
+        bool directory = file->GetAttributes() & DIRECTORY;
+        filesystems[0]->CloseFile(file);
+        if (!directory) return HACKOS_ERROR;
+    }
+
+    Name(Caller()->working_dir, path);
+    return 0;
+}
+
 static uint64_t UserPower(uint64_t operation)
 {
-    if (!Caller()->systemShell) return HACKOS_DENIED;
+    if (!Caller()->systemShell && (!Caller()->commandPower || !OwnsTerminal(Caller()->pid))) return HACKOS_DENIED;
     if (operation == 0)
     {
         auto fadt = kInfo->rsdp ? (ACPI::FADT*)kInfo->rsdp->GetSystemTable("FACP") : nullptr;
@@ -243,6 +275,12 @@ static void syscall_handler(Registers* r)
     case HACKOS_SYS_stat: r->rax = UserStat((const char*)r->rdi, (HackosFileInfo*)r->rsi); break;
     case HACKOS_SYS_readdir: r->rax = UserReadDir((const char*)r->rdi, r->rsi, (HackosFileInfo*)r->rdx); break;
     case HACKOS_SYS_power: r->rax = UserPower(r->rdi); break;
+    case HACKOS_SYS_getcwd:
+        r->rax = UserGetCwd((char*)r->rdi, r->rsi);
+        break;
+    case HACKOS_SYS_chdir:
+        r->rax = UserChdir((const char*)r->rdi);
+        break;
     case HACKOS_SYS_window_mode:
         r->rax = UserWindowMode(r->rdi, r->rsi);
         break;

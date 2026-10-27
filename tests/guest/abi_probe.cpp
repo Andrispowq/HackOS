@@ -20,6 +20,21 @@ int main()
     ok = syscall_spawn((const char*)0x4000001fffff) == HACKOS_ERROR && ok;
     char unterminated[256]; for (char& c : unterminated) c = 'x';
     ok = syscall_open(unterminated) == HACKOS_ERROR && ok;
+    char cwd[256];
+    HackosFileInfo infoForCwd;
+    ok = syscall_getcwd((char*)0x100000, 256) == HACKOS_ERROR && ok;
+    ok = syscall_getcwd(cwd, 1) == HACKOS_ERROR && ok;
+    ok = syscall_chdir((const char*)0x100000) == HACKOS_ERROR && ok;
+    ok = syscall_getcwd(cwd, sizeof(cwd)) == 0 && User::Equal(cwd, "~") && ok;
+    const char* powerArgs[] = {"~/USR/BIN/SHUTDOWN"};
+    uint64_t powerChild = syscall_spawn_args("/usr/bin/shutdown", 1, powerArgs);
+    int64_t powerStatus = 0;
+    ok = powerChild != HACKOS_ERROR && ok;
+    ok = syscall_wait(powerChild, &powerStatus, 0) == powerChild && powerStatus == 1 && ok;
+    ok = syscall_chdir("/usr") == 0 && ok;
+    ok = syscall_getcwd(cwd, sizeof(cwd)) == 0 && User::Equal(cwd, "~/USR") && ok;
+    ok = syscall_chdir("hello.txt") == HACKOS_ERROR && ok;
+    ok = syscall_stat("HELLO.TXT", &infoForCwd) == 0 && ok;
     const char path[] = "~/USR/HELLO.TXT";
     HackosFileInfo info;
     ok = syscall_stat(path,&info) == 0 && info.size > 20 && info.size < 512 && ok;
@@ -41,8 +56,7 @@ int main()
     ok = replacement != h && replacement != HACKOS_ERROR && ok;
     ok = syscall_read(h,buffer,1) == HACKOS_ERROR && ok;
     syscall_close(replacement);
-    // The shell deliberately owns one open handle. Guessing another process's
-    // token must never work, even with a valid destination.
+    // Closed tokens from earlier command programs must not become valid again.
     ok = syscall_read(1,buffer,1) == HACKOS_ERROR && ok;
     ok = syscall_read(2,buffer,1) == HACKOS_ERROR && ok;
     ok = syscall_close(2) == HACKOS_ERROR && ok;

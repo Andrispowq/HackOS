@@ -99,6 +99,21 @@ uint64_t LoadUserProgramTask(const char* path, bool systemShell, uint64_t argc, 
     space->CopyToUser(cursor, userArgv, (argc + 1) * sizeof(uint64_t));
     auto process = new Process(path, (void*)header->e_entry);
     process->systemShell = systemShell;
+    if (parent && parent->userSpace)
+    {
+        strcpy(process->working_dir, parent->working_dir);
+        // Temporary boot-session authority: only direct children of the boot
+        // shell loading these packaged, read-only executables receive it.
+        // Never inherit authority or trust argv[0]. Replace with credentials
+        // when the user/login work is implemented.
+        if (parent->systemShell)
+        {
+            process->commandPower = strcmp((char*)path, "~/USR/BIN/SHUTDOWN") == 0 ||
+                strcmp((char*)path, "~/USR/BIN/RESTART") == 0;
+            process->commandKill = strcmp((char*)path, "~/USR/BIN/KILL") == 0;
+            process->commandClear = strcmp((char*)path, "~/USR/BIN/CLEAR") == 0;
+        }
+    }
     if (systemShell) SetTerminalOwner(process->pid);
     if (result) { process->parentPid = parent->pid; result->pid = process->pid; }
     process->userSpace = space;

@@ -29,6 +29,9 @@ public:
     UserAddressSpace* userSpace = nullptr;
     uint64_t userPreemptions = 0;
     bool systemShell = false;
+    bool commandPower = false;
+    bool commandKill = false;
+    bool commandClear = false;
     uint64_t parentPid = 0, waitingFor = 0;
     int64_t exitStatus = 0;
     ChildResult children[16] = {};

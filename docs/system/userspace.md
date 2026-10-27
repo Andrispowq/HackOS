@@ -76,9 +76,9 @@ Console rendering and hardware operations remain kernel services.
 | `print <text>` | Print literal text, including percent signs |
 | `print tick`, `print time`, `print date` | Show monotonic ticks or RTC values |
 | `ps [aux]`, `kill <pid>` | List tasks or stop a user program; idle and boot shell are protected |
-| `ls`, `wd`, `cd <path>` | Browse the first filesystem; `~` denotes its root |
-| `open <path>`, `read`, `close` | Open a read-only handle, read up to 512 bytes, close it |
-| `./<program> [args]`, `user <path> [args]` | Launch an isolated foreground program and wait; append a separate `&` for background execution |
+| `ls [path]`, `wd`, `cd <path>` | Browse the first filesystem; `~` denotes its root |
+| `cat <path>`, `read <path>` | Read a complete file in bounded chunks; close its owned handle on completion |
+| `<name> [args]`, `./<program> [args]`, `user <path> [args]` | Launch an isolated foreground program and wait; append a separate `&` for background execution |
 | `shutdown`, `restart` | Request kernel ACPI power-off or platform restart |
 
 Input supports the US layout, Shift, Caps Lock, Backspace and Up/Down arrows.
@@ -90,16 +90,28 @@ All commands are parsed once into a command name and arguments. The parser
 splits on spaces/tabs (the interactive line editor accepts printable characters). Single or double quotes group
 words (including empty strings); a backslash escapes the next character, also
 inside quotes. Unmatched quotes, a trailing backslash or excessive arguments
-reject the command before execution. Built-ins dispatch on the first word and
-validate their remaining arguments. Unsupported counts/options print usage;
+reject the command before execution. Each command program validates its arguments. Unsupported counts/options print usage;
 `ps aux` lists the same all-task name/PID/state information as `ps`, without
 claiming Unix user/CPU/memory columns. `print` joins decoded arguments with single
 spaces; quote text to preserve internal spaces. Clock shortcuts apply only to
 one argument (`tick`, `time`, or `date`). Quoted/escaped paths work for `cd` and
-`open`; empty paths are rejected. Built-ins reject background `&`.
+`cat`/`read`; empty paths are rejected. The `cd` and `history` built-ins reject
+background `&`. The old shell-owned `open`/`read`/`close` session is retired;
+file handles remain process-owned and commands read/close their own files.
 
-Built-ins remain in the shell; there is no `/usr/bin` command search/migration
-in this step. The shell resolves program `argv[0]` to the executable path.
+Only `cd` and `history` execute inside the shell. Other names resolve in
+`/usr/bin` (the FAT image's `USR/BIN` directory), without searching the current
+directory or an environment PATH. Paths containing `/`, or beginning with `~`,
+are explicit; `user <path>` remains an explicit-launch compatibility spelling.
+Paths accept `/` and `~` as root, collapse repeated separators and `.`/`..`, clamp
+parent traversal at root, and canonicalize FAT case. `window`, `ps aux`,
+`/usr/bin/ps aux` and `./USR/BIN/PS aux` can all be launched as programs.
+
+Processes inherit a copy of their parent's working directory. `chdir` updates
+only the caller; `cd` must stay in the shell to affect later launches. The kernel
+resolves relative file/program syscall paths against this directory. `wd` and
+`ls` therefore work from any directory without hidden command arguments. The
+shell keeps no open file handles and resolves program `argv[0]` to its path.
 The program limit remains 16 arguments including `argv[0]`; the optional `user`
 prefix does not consume a program argument. History retains the original line. For example:
 
@@ -145,15 +157,21 @@ the unfinished draft present before navigation. Backspace/typing edits the recal
 copy; stored entries change only when a new command is submitted. `history` lists
 the retained commands from oldest to newest (including that `history` invocation).
 
-The kernel-designated boot shell controls foreground launches, task-kill and
-power privileges. Terminal input belongs to the shell or its current foreground
-child. That child can also request console backspace; clear remains shell-only.
-Spawning another copy of SHELL does not inherit those privileges. Ordinary programs can print, inspect processes, read
-files, spawn, yield and exit. Background processes cannot read terminal input or
-edit the console. This is a minimal single-user permission model,
-not a hardened multi-user security system. Power returns zero when the hardware request is issued, or an error when it
-cannot be issued. Actual completion is confirmed by guest shutdown, not just a
-return value or printed message.
+The kernel-designated boot shell controls foreground launches. Its direct
+children loading the packaged canonical `/usr/bin/kill`, `/usr/bin/clear`,
+`/usr/bin/shutdown` or `/usr/bin/restart` receive only their specific command
+permission. This checks the loaded executable path, not `argv[0]`; permissions
+are not inherited by grandchildren and do not make commands system shells.
+These commands must own the foreground terminal to exercise their permission.
+Other foreground programs can request backspace but cannot clear, kill or power
+off. Boot-shell/idle protection remains. The image exposes no userspace file
+write API, so these trusted program paths cannot be replaced by user programs.
+
+This is a temporary boot-session policy, not users/groups or a hardened multi-user
+security system. Account credentials and login remain deferred. Ordinary programs
+can print, inspect processes, read files, change their own directory, spawn, yield
+and exit. Power returns an error if rejected; actual completion is confirmed by
+guest shutdown, not merely a return value or message.
 
 ## Syscall ABI
 
@@ -169,17 +187,17 @@ return an error rather than being reinterpreted as new operations.
 | 0 | `exit(status)` | Does not return; libc uses it when `main` returns |
 | 14 | `user_write(buffer, length)` | Literal console bytes, maximum 1024; returns count |
 | 15 | `input()` | Character/event, 0 if empty, 256 for queue overflow; terminal owner only |
-| 16 | `console(operation)` | 0 backspace for terminal owner, 1 clear for boot shell |
+| 16 | `console(operation)` | 0 backspace for terminal owner, 1 clear for boot shell or authorized foreground CLEAR |
 | 17 | `clock(out)` | Copies ticks and RTC fields; RTC retains existing BCD representation |
 | 18 | `process_info(index, out)` | Copies one process record; 1 found, 0 end |
-| 19 | `kill(pid)` | Stops another user task; boot shell only |
+| 19 | `kill(pid)` | Stops another user task; boot shell or its authorized foreground command |
 | 20 | `spawn(path)` | Copies a bounded path and loads an isolated ELF; returns PID |
 | 21 | `open(path)` | Returns an opaque read-only file handle |
 | 22 | `read(handle, out, length)` | At most 512 bytes; returns bytes read, 0 at EOF |
 | 23 | `close(handle)` | Closes a handle owned by the caller |
 | 24 | `stat(path, out)` | Copies file size, attributes and name |
 | 25 | `readdir(path, index, out)` | Copies one directory entry; 1 found, 0 end |
-| 26 | `power(operation)` | 0 ACPI shutdown, 1 restart; boot shell only |
+| 26 | `power(operation)` | 0 ACPI shutdown, 1 restart; boot shell or its authorized foreground command |
 | 27 | `yield()` | Gives another runnable task a scheduling opportunity |
 | 28 | `spawn_args(path, argc, argv)` | Copies a bounded user pointer vector and strings; returns child PID |
 | 29 | `wait(pid, status, flags)` | Collects a direct child; flags 0 block, `HACKOS_WAIT_NOHANG` polls |
@@ -191,6 +209,8 @@ return an error rather than being reinterpreted as new operations.
 | 35 | `window_state(handle, out)` | Copy geometry, focus and latest client-relative pointer state; return 0 |
 | 36 | `window_event(handle, out)` | Copy one event; 1 delivered, 0 empty, error for invalid pointers/handles |
 | 37 | `window_mode(handle, operation)` | Query/minimize/maximize/restore an owned window; return mode flags |
+| 38 | `getcwd(out, capacity)` | Copy the caller's NUL-terminated canonical directory; 0 or error |
+| 39 | `chdir(path)` | Validate a directory and update only the caller; 0 or error |
 
 Calls use `int 0x80`: RAX is the number, RDI/RSI/RDX/RCX/R8 hold arguments,
 and saved RAX receives the result. Successful operations without another result

@@ -99,6 +99,7 @@ def test(firmware, timeout):
                     def enter(text, expected):
                         offset = len(output()); qmp.type(text+"\n")
                         wait(lambda: expected in output()[offset:], expected)
+                        wait(lambda: "root@root:~$ " in output()[offset:], "shell prompt after command")
                     def inspect(name, body):
                         qmp.call("stop")
                         script = directory/(name+".gdb")
@@ -163,14 +164,16 @@ for p in users:
                     for name in ("BADWX", "BADADDR", "BADSIZE"):
                         offset = len(output()); qmp.type("user USR/BIN/"+name+"\n")
                         wait(lambda: "Rejected user program:" in output()[offset:] or "Cannot load user program:" in output()[offset:], "reject "+name)
+                        wait(lambda: "root@root:~$ " in output()[offset:], "shell prompt after rejected image")
                     enter("print ring3_survived", "\nring3_survived\n")
+                    assert "\nring3_survived\n" in output()
                     time.sleep(0.1)
                     inspect("reclamation", '''
 bp = gdb.Breakpoint("ReapExitedProcesses()", type=gdb.BP_HARDWARE_BREAKPOINT)
 gdb.execute("continue")
 assert int(gdb.parse_and_eval("$pc")) in [l.address for l in bp.locations]
 bp.delete()
-assert int(gdb.parse_and_eval("tasks_reaped")) == 12, "User task stacks not reclaimed"
+assert int(gdb.parse_and_eval("tasks_reaped")) == 13, "User task stacks not reclaimed"
 
 p = gdb.parse_and_eval("ready_queue")
 labels = []

@@ -17,15 +17,19 @@ docker compose up --build bios
 Open [the console](http://localhost:6080/vnc.html?autoconnect=true&resize=scale).
 It shows initialization output followed by the standalone ring-3 shell. Click inside it
 and try `help`, `ls`, `ps` or `print tick`. Input uses the US keyboard layout.
-Use `./USR/BIN/TEST alpha "two words"` to see argument passing and read a file
+Use `test alpha "two words"` to see argument passing and read a file
 from ring 3, or `user USR/BIN/RING3` for
 the print/preemption/exit demo. `shutdown` requests kernel ACPI power-off. The
-raw-pointer libc ABI is retired. Launch `./USR/BIN/WINDOW` for the ported
+raw-pointer libc ABI is retired. Launch `window` for the ported
 window demo; drag its title, resize the bottom-right grip, click to focus,
 and type/click in the client. Close X, press Q, or use Ctrl-C. Program commands wait for
 completion before showing the prompt; a separate trailing `&` launches in the
-background. Try `./USR/BIN/INPUT` for interactive text input; Ctrl-C returns to
+background. Try `input` for interactive text input; Ctrl-C returns to
 the shell. Up/Down browses the fixed 256-command history, and `history` lists it.
+Bare commands resolve in `/usr/bin`; only `cd` and `history` stay in the shell.
+The command suite is built from `libs/commands` and packaged as separate ELF
+programs. Use `cat /usr/hello.txt` (or `read /usr/hello.txt`) instead of the old
+shell-owned open/read/close session. Explicit paths still work.
 The first image build compiles
 GCC and Binutils from source and takes considerably longer than later cached
 builds. Source changes are picked up when the service starts again.

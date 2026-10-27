@@ -9,7 +9,7 @@ more devices.
 ## Follow-up plan from step 8
 
 Items 1 and 2 are addressed in step 9; built-in parsing in item 3 is addressed
-in step 10. Command-program migration and items 4–5 remain deferred; authentication
+in step 10, and command-program migration in step 11. Items 4–5 remain deferred; authentication
 and setup depend on persistent user storage and credential handling.
 
 1. **Slow drawing — addressed in step 9:** replace per-pixel compositor calls
@@ -21,11 +21,11 @@ and setup depend on persistent user storage and credential handling.
    input could postpone drawing indefinitely. Drain bounded event batches and
    repaint even while input continues; retry if geometry changed during upload.
    Verify large normal and maximized client pixels, including under mouse input.
-3. **Shell command/argument separation — built-ins addressed in step 10:**
+3. **Shell commands — parsing addressed in step 10, programs in step 11:**
    parse command names and arguments once, with quotes/escapes and empty-argument
    preservation. `ps aux` reaches `ps`; built-ins validate arguments and report
-   usage. History preserves original text. The later migration into programs
-   launched from `/usr/bin` remains deferred.
+   usage. History preserves original text. Commands now run as separate programs
+   resolved in `/usr/bin`; `cd` and `history` remain in the shell.
 4. **Users, groups, permissions and login:** define stable user/group IDs,
    process credential ownership/inheritance, and kernel-side privilege checks
    (including root-only shutdown/restart). Add persistent account/group storage,
@@ -41,6 +41,15 @@ and setup depend on persistent user storage and credential handling.
    Subsequent boots must enter login, not repeat setup or start an anonymous
    shell. Define recovery for interrupted setup or corrupt account storage, and
    verify first boot, reboot, failed login and successful login on BIOS/UEFI.
+
+## Next iteration: step 12 — code style cleanup
+
+- [ ] Audit remaining code for the requested bracing and spacing style: braces
+  on loops and else/else-if branches, one execution per line, and blank lines
+  between functions and logical blocks. Only a whole single-line if without
+  else/else-if may omit braces. Keep this a behavior-preserving cleanup, avoid
+  vendored GNU-EFI sources, and rerun host plus BIOS/UEFI regressions.
+- [ ] Do not combine this cleanup with users, login or the setup wizard.
 
 ## Boot and memory
 

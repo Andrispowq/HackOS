@@ -102,13 +102,15 @@ bp = gdb.Breakpoint("ReapExitedProcesses()", type=gdb.BP_HARDWARE_BREAKPOINT)
 gdb.execute("continue")
 gdb.execute("continue")
 gdb.execute("continue")
-# Composition is paced; wait for the final dirty frame, not just input dispatch.
-for refresh in range(128):
-    if not int(gdb.parse_and_eval("display.dirty")):
-        break
-    gdb.execute("continue")
-assert not int(gdb.parse_and_eval("display.dirty")), "Display did not flush its final frame"
+# Inspect a completed composition, not a transient dirty flag between user
+# uploads. An overflow recovery can start a second repaint after the first log.
 bp.delete()
+if int(gdb.parse_and_eval("display.dirty")):
+    flush = gdb.Breakpoint("Display::DrawBackbuffer()", type=gdb.BP_HARDWARE_BREAKPOINT)
+    gdb.execute("continue")
+    flush.delete()
+    gdb.execute("finish")
+assert not int(gdb.parse_and_eval("display.dirty")), "Display did not flush its frame"
 display = gdb.parse_and_eval("display")
 fb = display["framebuffer"]
 back = display["backbuffer"]
@@ -158,7 +160,7 @@ back = display["backbuffer"]
 
                     def launch():
                         offset = len(output())
-                        qmp.type("./USR/BIN/WINDOW\n")
+                        qmp.type("window\n")
                         wait_text("Window demo ready.", offset)
                         return offset
 
@@ -346,12 +348,12 @@ assert int(fb["address"][245 * int(fb["pitch"]) + 215]) == int(back["address"][2
 
                     # Two independent owners: focus raises a window and routes keys
                     # without leaking them to the shell or the unfocused owner.
-                    enter("./USR/BIN/WINDOW &", "Window demo ready.")
+                    enter("window &", "Window demo ready.")
                     click(20, 900)
                     inspect("desktop-focus", """
 assert int(gdb.parse_and_eval("KernelWindowManager->focused")) == 0
 """)
-                    enter("./USR/BIN/WINDOW second &", "Window demo ready.")
+                    enter("window second &", "Window demo ready.")
                     click(250, 300)
                     inspect("focus-first", """
 manager = gdb.parse_and_eval("KernelWindowManager")
@@ -446,7 +448,7 @@ gdb.selected_inferior().write_memory(physical, struct.pack("<Q", 1))
                     inspect("cleanup", """
 assert int(gdb.parse_and_eval("user_windows_live")) == 0
 assert int(gdb.parse_and_eval("KernelWindowManager->windows._size")) == 0
-assert int(gdb.parse_and_eval("tasks_reaped")) == 11
+assert int(gdb.parse_and_eval("tasks_reaped")) == 14
 p = gdb.parse_and_eval("ready_queue")
 labels = []
 while int(p):

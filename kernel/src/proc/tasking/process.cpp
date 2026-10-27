@@ -65,7 +65,7 @@ Process::Process(const char* label, void* entry, void* parameter)
     name = new char[strlen((char*)label) + 1];
     strcpy(name, label);
     memset(working_dir, 0, sizeof(working_dir));
-    strcpy(working_dir, "~/");
+    strcpy(working_dir, "~");
     // The bootstrap/idle thread keeps the boot stack. Its first IRQ saves rsp.
     if (!entry) return;
     stack = (uint64_t*)kmalloc(STACK_SIZE);
