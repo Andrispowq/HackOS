@@ -3,6 +3,7 @@
 import argparse
 from contextlib import contextmanager
 import hashlib
+import json
 import os
 from pathlib import Path
 import shutil
@@ -45,12 +46,19 @@ class Guest:
         self.enter(password, 'Confirm password: ')
         offset = len(self.output())
         self.enter(password, expected)
+        if expected == 'Setup failed.':
+            self.wait('Action: ', offset)
         if expected == 'Password saved.':
             self.wait('$ ', offset)
 
+    def setup(self):
+        self.wait('Action: ')
+        self.enter('1', 'Username: ')
+
     def login(self, user, password, success=True):
+        self.enter('login', 'Login: ')
         self.enter(user, 'Password: ')
-        self.enter(password, user + '@root:~$ ' if success else 'Login failed.\nLogin: ')
+        self.enter(password, user + '@root:~$ ' if success else 'Action: ')
         assert 'First-boot setup.' not in self.output()[self.output().rfind('HackOS login'):] or self.fresh
 
     def shell(self, text, expected):
@@ -59,14 +67,15 @@ class Guest:
         self.wait('$ ', offset)
 
     def logout(self):
-        self.enter('logout', 'Logged out.\nLogin: ')
+        self.enter('logout', 'Action: ')
 
     def screen(self, name):
+        time.sleep(0.25) # allow idle to present the console after debug output
         self.qmp.call('screendump', {'filename': str(self.directory / (name + '.ppm'))})
 
 
 @contextmanager
-def boot(directory, image, firmware, name, timeout, *, write_error=False, entropy=True):
+def boot(directory, image, firmware, name, timeout, *, write_error=False, entropy=True, reboot=False):
     with tempfile.TemporaryDirectory(prefix='hackos-accounts-') as temporary:
         temporary = Path(temporary)
         g = Guest()
@@ -82,12 +91,14 @@ def boot(directory, image, firmware, name, timeout, *, write_error=False, entrop
         args = ['qemu-system-x86_64', '-machine', 'q35', '-accel', 'tcg',
                 '-cpu', 'qemu64,+rdrand' if entropy else 'qemu64,-rdrand', '-m', '1G',
                 '-smp', 'cores=4,threads=1,sockets=1', '-display', 'none', '-monitor', 'none',
-                '-serial', 'none', '-net', 'none', '-no-reboot',
+                '-serial', 'none', '-net', 'none',
                 '-drive', f'file={drive},format=raw,werror=report',
                 '-usb', '-device', 'usb-ehci,id=ehci', '-device', 'qemu-xhci,id=xhci',
                 '-qmp', f'unix:{qmp_path},server=on,wait=off',
                 '-gdb', f'unix:{g.gdb},server=on,wait=off',
                 '-debugcon', f'file:{g.console}', '-global', 'isa-debugcon.iobase=0xe9']
+        if not reboot:
+            args += ['-no-reboot']
         if firmware == 'uefi':
             ovmf = ROOT / 'boot/UEFI/OVMFbin'
             variables = temporary / 'OVMF_VARS.fd'
@@ -154,20 +165,22 @@ def test(firmware, timeout):
             require_success(command(['mcopy', '-i', filesystem(image), program, '::/USR/BIN/' + name]), 'install probe')
         with boot(directory, image, firmware, 'setup', timeout) as g:
             g.fresh = True
-            g.wait('Username: ')
+            g.setup()
             assert 'Started user process 3' not in g.output()
             g.screen('first-boot')
             g.enter('admin', 'New password: ')
             g.enter('short', 'Confirm password: ')
-            g.enter('short', 'Passwords must match')
-            g.wait('Username: ')
+            g.enter('short', 'Action: ')
+            g.setup()
             g.enter('admin', 'New password: ')
             g.enter(ADMIN_PASSWORD, 'Confirm password: ')
-            g.enter('Mismatch123', 'Passwords must match')
+            g.enter('Mismatch123', 'Action: ')
+            g.setup()
             g.enter('BadName', 'New password: ')
             g.password(ADMIN_PASSWORD, 'Setup failed.')
+            g.setup()
             g.enter('admin', 'New password: ')
-            g.password(ADMIN_PASSWORD, 'Setup complete. Please log in.\nLogin: ')
+            g.password(ADMIN_PASSWORD, 'Action: ')
             g.login('admin', 'WrongPass123', False)
             g.login('guest', ADMIN_PASSWORD, False)
             g.login('unknown', ADMIN_PASSWORD, False)
@@ -225,7 +238,7 @@ print('LOGOUT_RECLAIMED_OK')
         inspect_slots(image, ADMIN_PASSWORD)
         # Stop/restart QEMU on exactly the same writable disk, without an overlay.
         with boot(directory, image, firmware, 'reboot', timeout) as g:
-            g.wait('Login: ')
+            g.wait('Action: ')
             assert 'First-boot setup.' not in g.output()
             g.login('alice', ALICE_PASSWORD)
             g.shell('id', 'uid=1001(alice) gid=1001 groups=1001,1000')
@@ -238,7 +251,8 @@ print('LOGOUT_RECLAIMED_OK')
             g.login('admin', ADMIN_PASSWORD, False)
             g.login('admin', CHANGED_PASSWORD)
             g.shell('groupadd persisted', 'Group created.')
-            g.qmp.type('shutdown\n')
+            g.logout()
+            g.qmp.type('3\n')
             g.process.wait(timeout=timeout)
             assert g.process.returncode == 0 and 'Stopping the CPU. Bye!' in g.output()
         saved.extend(inspect_slots(image, CHANGED_PASSWORD))
@@ -247,7 +261,7 @@ print('LOGOUT_RECLAIMED_OK')
         write_accounts(repackaged, saved)
         assert read_accounts(repackaged) == saved
         with boot(directory, repackaged, firmware, 'repackaged', timeout) as g:
-            g.wait('Login: ')
+            g.wait('Action: ')
             assert 'First-boot setup.' not in g.output()
             g.login('admin', CHANGED_PASSWORD)
             g.shell('groups', 'persisted')
@@ -263,7 +277,7 @@ print('LOGOUT_RECLAIMED_OK')
         recovery = fresh('recover')
         write_accounts(recovery, slots)
         with boot(directory, recovery, firmware, 'recover', timeout) as g:
-            g.wait('Login: ')
+            g.wait('Action: ')
             assert 'First-boot setup.' not in g.output()
             g.login('admin', CHANGED_PASSWORD)
             g.shell('groups', 'staff')
@@ -275,6 +289,10 @@ print('LOGOUT_RECLAIMED_OK')
             with boot(directory, damaged, firmware, label, timeout) as g:
                 g.wait('Login is disabled')
                 assert 'First-boot setup.' not in g.output() and '@root:' not in g.output()
+                g.wait('Action: ')
+                g.qmp.type('shutdown\n')
+                g.process.wait(timeout=timeout)
+                assert g.process.returncode == 0 and 'Stopping the CPU.' in g.output()
         return 'One damaged generation recovers; both damaged and interrupted first setup fail closed.'
 
     def missing_store():
@@ -290,7 +308,7 @@ print('LOGOUT_RECLAIMED_OK')
     def unavailable_entropy():
         empty = fresh('no-entropy')
         with boot(directory, empty, firmware, 'no-entropy', timeout, entropy=False) as g:
-            g.wait('Username: ')
+            g.setup()
             g.enter('admin', 'New password: ')
             g.password(ADMIN_PASSWORD, 'Secure randomness unavailable; setup was not saved.')
             assert 'Setup complete.' not in g.output()
@@ -300,7 +318,7 @@ print('LOGOUT_RECLAIMED_OK')
     def failed_write():
         empty = fresh('write-error')
         with boot(directory, empty, firmware, 'write-error', timeout, write_error=True) as g:
-            g.wait('Username: ')
+            g.setup()
             g.enter('admin', 'New password: ')
             g.password(ADMIN_PASSWORD, 'Setup failed.')
             g.wait('Login is disabled')
@@ -308,7 +326,38 @@ print('LOGOUT_RECLAIMED_OK')
         assert read_accounts(empty) == [bytes(8192), bytes(8192)]
         return 'Disk write failure is reported and freezes authentication.'
 
-    for name, check in (('persistent_accounts_and_sessions', persistence), ('damaged_store_recovery', damaged_store),
+    def power_menu():
+        for action, message, reason in (('2', 'Restarting the CPU.', 'guest-reset'),
+                                         ('restart', 'Restarting the CPU.', 'guest-reset'),
+                                         ('3', 'Stopping the CPU.', 'guest-shutdown'),
+                                         ('shutdown', 'Stopping the CPU.', 'guest-shutdown')):
+            empty = fresh('menu-' + action)
+            with boot(directory, empty, firmware, 'menu-' + action, timeout, reboot=True) as g:
+                g.wait('Action: ')
+                assert '1) login\n2) restart\n3) shutdown' in g.output()
+                if action == '3':
+                    g.screen('logged-out-menu')
+                g.enter('invalid', 'Action: ')
+                assert 'Choose 1-3' in g.output() and 'Username:' not in g.output()
+                offset = len(g.output())
+                g.qmp.type(action + '\n')
+                if reason == 'guest-reset':
+                    g.wait('HackOS login', offset)
+                    g.wait('Action: ', offset)
+                    g.qmp.type('shutdown\n')
+                g.process.wait(timeout=timeout)
+                assert g.process.returncode == 0 and message in g.output()
+                for raw in g.qmp.stream:
+                    event = json.loads(raw)
+                    if 'event' in event:
+                        g.qmp.events.append(event)
+                event_type = 'RESET' if reason == 'guest-reset' else 'SHUTDOWN'
+                assert any(e.get('event') == event_type and e['data'].get('guest') and
+                           e['data'].get('reason') == reason for e in g.qmp.events), g.qmp.events
+            assert read_accounts(empty) == [bytes(8192), bytes(8192)]
+        return 'Numeric and named logged-out restart/shutdown execute real guest power operations without creating an account.'
+
+    for name, check in (('logged_out_power_menu', power_menu), ('persistent_accounts_and_sessions', persistence), ('damaged_store_recovery', damaged_store),
                         ('missing_store_fails_closed', missing_store), ('entropy_required', unavailable_entropy),
                         ('write_failure_fails_closed', failed_write)):
         report.check(name, check)

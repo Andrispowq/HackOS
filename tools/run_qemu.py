@@ -18,7 +18,7 @@ def run(firmware, image, web=False, debug=False, snapshot=False):
                 '-m', '1G', '-smp', 'cores=4,threads=1,sockets=1', '-net', 'none',
                 '-drive', f'file={image.resolve()},format=raw',
                 '-usb', '-device', 'usb-ehci,id=ehci', '-device', 'qemu-xhci,id=xhci',
-                '-monitor', 'none', '-serial', 'none', '-no-reboot']
+                '-monitor', 'none', '-serial', 'none']
         if snapshot: args += ['-snapshot']
         if firmware == 'uefi':
             ovmf = ROOT / 'boot/UEFI/OVMFbin'

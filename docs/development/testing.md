@@ -405,3 +405,9 @@ account/login, shell, isolated-process and window suites. The stripped kernel is
 161,352 bytes in the 393,216-byte BIOS reservation. A real preserving rebuild
 retained both account slots byte for byte; a missing store aborted without
 replacing the original image. Formatting and Compose configuration checks passed.
+
+The account suite also checks numeric and named logged-out restart/shutdown
+actions using QMP guest power events and a second boot into the menu after
+restart, rejects unknown menu actions, and shuts
+down after logout. These controls work before setup without modifying the empty
+store; ordinary non-root power calls remain denied by AUTHPROBE.

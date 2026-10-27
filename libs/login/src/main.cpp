@@ -10,19 +10,49 @@ int main()
     for (;;)
     {
         uint64_t state = syscall_auth_state();
-        if (state == HACKOS_AUTH_BROKEN)
-        {
-            Print("Account storage unavailable or corrupt. Login is disabled; restore the account store offline.\n");
-            for (;;)
-            {
-                syscall_yield();
-            }
-        }
-
-        if (state != HACKOS_AUTH_SETUP && state != HACKOS_AUTH_LOGIN)
+        if (state != HACKOS_AUTH_BROKEN && state != HACKOS_AUTH_SETUP && state != HACKOS_AUTH_LOGIN)
         {
             Print("This program is not the boot login agent.\n");
             return 1;
+        }
+
+        if (state == HACKOS_AUTH_BROKEN)
+        {
+            Print("Account storage unavailable or corrupt. Login is disabled; restore the account store offline.\n");
+        }
+
+        Print("\n1) login\n2) restart\n3) shutdown\nAction: ");
+        char action[16] = {};
+        if (!ReadLine(action, sizeof(action), false))
+        {
+            continue;
+        }
+
+        for (auto& ch : action)
+        {
+            if (ch >= 'A' && ch <= 'Z')
+            {
+                ch += 'a' - 'A';
+            }
+        }
+
+        if (Equal(action, "2") || Equal(action, "restart") || Equal(action, "3") || Equal(action, "shutdown"))
+        {
+            uint64_t operation = Equal(action, "2") || Equal(action, "restart") ? 1 : 0;
+            syscall_power(operation);
+            Print("Power request failed.\n");
+            continue;
+        }
+
+        if (!Equal(action, "1") && !Equal(action, "login"))
+        {
+            Print("Choose 1-3 or login, restart, shutdown.\n");
+            continue;
+        }
+
+        if (state == HACKOS_AUTH_BROKEN)
+        {
+            continue;
         }
 
         if (state == HACKOS_AUTH_SETUP)

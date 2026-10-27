@@ -15,7 +15,8 @@ docker compose up --build bios
 ```
 
 Open [the console](http://localhost:6080/vnc.html?autoconnect=true&resize=scale).
-It shows initialization output followed by first-boot setup. Choose an administrator
+It shows initialization output followed by the login/restart/shutdown menu. Select `1` or `login` for
+first-boot setup. Choose an administrator
 name and confirm an 8–128 character password, then log in to the ring-3 shell. Click inside it
 and try `help`, `ls`, `ps` or `print tick`. Input uses the US keyboard layout.
 Use `test alpha "two words"` to see argument passing and read a file

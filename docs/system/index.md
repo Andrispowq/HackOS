@@ -61,8 +61,10 @@ into two phases:
 The standalone `~/USR/BIN/SHELL` owns command parsing and PS/2 line editing in
 ring 3. Its checked syscall interface supplies terminal, file, process and power
 services, plus inherited working directories and UID/GID/group credentials.
-The shell starts after authentication; account administration and power require
-UID 0, while kill permits the same UID or root. Accounts persist in two FAT32
+The shell starts after authentication; account administration requires UID 0.
+Power also requires UID 0, except for the boot login agent while it owns the
+logged-out terminal and displays login/restart/shutdown actions. Kill permits the
+same UID or root. Accounts persist in two FAT32
 slots, and first-boot setup creates the administrator. See [accounts](accounts.md).
 Only `cd`, `history` and `logout` remain
 built-ins; bare names resolve to standalone programs in `/usr/bin`. Explicit

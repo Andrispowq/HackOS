@@ -739,7 +739,9 @@ static uint64_t UserChdir(const char* name)
 
 static uint64_t UserPower(uint64_t operation)
 {
-    if (!IsRoot())
+    // Only the boot login agent may offer physical-console power controls
+    // without root credentials, and only while it owns the logged-out terminal.
+    if (!IsRoot() && !(Caller()->authenticationAgent && OwnsTerminal(Caller()->pid)))
     {
         return HACKOS_DENIED;
     }

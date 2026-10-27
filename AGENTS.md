@@ -22,8 +22,9 @@ foreground waits by default; a separate trailing `&` requests background mode.
 Exit results belong to the parent independently of idle resource reclamation.
 All active syscalls are user interfaces; kernel code calls internal functions
 directly. Terminal owners can delegate foreground input and receive it back on child exit.
-Processes inherit UID/GID/group credentials; UID 0 alone grants power and account
-administration, and kill requires the same owner UID or root. Persistent accounts use two preallocated FAT32 slots; first boot creates the chosen
+Processes inherit UID/GID/group credentials; UID 0 grants power and account
+administration (the boot login agent may also restart/shut down while owning the
+logged-out terminal), and kill requires the same owner UID or root. Persistent accounts use two preallocated FAT32 slots; first boot creates the chosen
 UID-0 administrator. Passwords use PBKDF2-HMAC-SHA256 and RDRAND salts.
 `logout` terminates the session and its descendants before returning to login. Ctrl-C is deferred from
 IRQ context to a safe scheduler point. Shell history is a static 256-command ring.

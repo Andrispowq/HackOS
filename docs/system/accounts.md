@@ -10,6 +10,12 @@ There is no automatic root shell or default password.
 
 ## Setup and daily use
 
+At boot and after logout, the console offers `1) login`, `2) restart` and
+`3) shutdown`. Enter a number or action name (case-insensitive). Invalid input
+returns to the menu. Restart boots the same image again in the normal runner.
+Login starts setup on a new installation; restart and
+shutdown also work before setup or when account storage is damaged.
+
 Two completely zeroed account files identify a new installation. Setup asks for
 a username matching `[a-z][a-z0-9_-]*` (1–31 characters) and a confirmed password
 of 8–128 printable ASCII characters. The chosen account receives UID/GID 0;
@@ -33,9 +39,12 @@ Successful authentication loads a fresh shell with a copied credential snapshot.
 The shell's PID identifies its session, inherited by all descendants, including
 `runas` children. `logout`, shell exit or shell fault terminates the entire session;
 idle reclaims private pages, stacks, file handles and windows. The login agent
-waits for the shell, clears the console and asks for credentials again. Neither
+waits for the shell, clears the console and returns to the action menu. Neither
 the agent nor the authenticated shell can be killed through the user kill API.
-Only UID 0 grants power/account administration; membership in group 0 does not.
+Account administration requires UID 0; membership in group 0 does not grant it.
+Power operations require UID 0, except for the kernel-designated boot login
+agent while it owns the logged-out terminal. Ordinary non-root processes,
+including manually launched copies of LOGIN, retain no power rights.
 
 ## Password representation
 

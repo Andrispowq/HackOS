@@ -5,6 +5,8 @@ TEST_PASSWORD = "HarnessPass123"
 def setup_and_login(qmp, output, wait_for):
     def wait_text(text, offset=0):
         wait_for(lambda: text in output()[offset:], repr(text))
+    wait_text("Action: ")
+    qmp.type("1\n")
     wait_text("First-boot setup.")
     qmp.type("root\n")
     wait_text("New password: ")
@@ -12,7 +14,10 @@ def setup_and_login(qmp, output, wait_for):
     wait_text("Confirm password: ")
     qmp.type(TEST_PASSWORD + "\n")
     wait_text("Setup complete. Please log in.")
+    wait_text("Action: ", output().index("Setup complete."))
     offset = len(output())
+    qmp.type("login\n")
+    wait_text("Login: ", offset)
     qmp.type("root\n")
     wait_text("Password: ", offset)
     qmp.type(TEST_PASSWORD + "\n")

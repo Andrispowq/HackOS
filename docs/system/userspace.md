@@ -188,7 +188,8 @@ ordinary children retain their credentials. There are no effective/saved IDs,
 setuid executables, or user-writable credential pointers. Membership in GID 0
 does **not** grant root privilege: privileged checks compare UID to zero.
 
-The kernel requires UID 0 for power operations, creating users/groups, adding
+The kernel requires UID 0 for power operations (except the boot login agent
+while it owns the logged-out terminal), creating users/groups, adding
 group membership, password changes, and `spawn_as`. Root may launch any registered identity with
 `runas`; this command is an administrative launcher, not authentication or
 `sudo`. A non-root process cannot select any identity, including its own, through
@@ -244,7 +245,7 @@ return an error rather than being reinterpreted as new operations.
 | 23 | `close(handle)` | Closes a handle owned by the caller |
 | 24 | `stat(path, out)` | Copies file size, attributes and name |
 | 25 | `readdir(path, index, out)` | Copies one directory entry; 1 found, 0 end |
-| 26 | `power(operation)` | 0 ACPI shutdown, 1 restart; UID 0 only |
+| 26 | `power(operation)` | 0 ACPI shutdown, 1 restart; UID 0 or boot login agent owning the logged-out terminal |
 | 27 | `yield()` | Gives another runnable task a scheduling opportunity |
 | 28 | `spawn_args(path, argc, argv)` | Copies a bounded user pointer vector and strings; returns child PID |
 | 29 | `wait(pid, status, flags)` | Collects a direct child; flags 0 block, `HACKOS_WAIT_NOHANG` polls |
