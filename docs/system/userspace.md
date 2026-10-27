@@ -85,6 +85,7 @@ Console rendering and hardware operations remain kernel services.
 | `ps [aux]`, `kill <pid>` | List tasks or stop a user program; idle, login and session shell are protected |
 | `ls [-la] [path]`, `wd`, `cd <path>` | Browse the first filesystem; `~` denotes its root |
 | `cat [path]`, `read [path]` | Copy a file or stdin to stdout in bounded chunks, preserving exact bytes |
+| `grep`, `wc`, `head`, `tail`, `tee`, `more` | Normal-user stream filters and pager; see [options and limits](utilities.md#text-filters-and-pager) |
 | `xxd <file>` | Load at most 32 KiB and print offsets, hex, binary and ASCII columns |
 | `mkdir <path>` | Create one directory with an existing parent |
 | `rm <file>` | Remove one regular file; no directories or recursion |
@@ -158,12 +159,16 @@ Any current terminal owner can delegate foreground input to a child. Ownership
 returns to that launcher automatically on exit, fault, kill or Ctrl-C. If a
 launcher exits first, return links are redirected to its own launcher (ultimately
 the session shell, then login), before the dead task is reclaimed. The keyboard
-queue is cleared at each handoff so child input cannot accidentally execute as
-shell commands. `input()` remains a compatible nonblocking poll.
+queue is cleared at handoff so child input cannot accidentally execute as shell
+commands. Foreground pipeline stages created by `spawn_io` share terminal input,
+including a pager whose stdin is a pipe; handoff between those peers preserves
+queued keys. Ordinary descendants do not inherit this access. Explicit foreground
+delegation retains exclusive input for that child. Console control/delegation
+still require the individual terminal owner. `input()` remains a compatible nonblocking poll.
 `terminal_read(0)` atomically checks the queue and sleeps; flag
 `HACKOS_INPUT_NONBLOCK` polls instead. Both return decoded key/control events or
 overflow, and deny a background reader immediately. Enqueue, overflow and terminal
-handoff wake blocked readers; they recheck ownership before consuming anything.
+handoff wake blocked readers; they recheck foreground input access before consuming anything.
 Shell, login/password entry, input demo and editor use blocking reads. Echo and
 line editing are program responsibilities. Try
 `./USR/BIN/INPUT` for the packaged interactive example: it echoes edited lines,
@@ -176,7 +181,7 @@ preemption guards end. Deferred cleanup closes files/windows and frees user
 memory. With window focus the target is that window's owner, including background
 processes. The shell is protected; at its prompt Ctrl-C cancels the current line
 and history navigation. Ordinary children inherit the group, including `runas`
-descendants. A live owner delegates input explicitly. If it exits with surviving
+descendants. A live owner delegates console ownership explicitly. If it exits with surviving
 group members, ownership returns to a surviving launcher or another member of
 that foreground group. The shell continues waiting until the whole group ends;
 terminal return links survive leader reclamation.
@@ -220,7 +225,7 @@ no path is supplied. The shell supports `|`, `<`, `>`, `>>`, `2>` and ordered
 `2>&1`, including quoted paths and background/stopped pipelines. Four stages
 share one controller-owned job; its last stage supplies completion status.
 See [streams, deadlines and serial diagnostics](streams.md) for descriptor
-ownership, pipe lifecycle, poll, timed waits, bounds and syscall slots 66–78.
+ownership, pipe lifecycle, poll, timed waits, bounds and syscall slots 66–78 and 80.
 
 ## Private heap and runtime helpers
 
@@ -332,7 +337,7 @@ return an error rather than being reinterpreted as new operations.
 | ---: | --- | --- |
 | 0 | `exit(status)` | Does not return; libc uses it when `main` returns |
 | 14 | `user_write(buffer, length)` | Literal console bytes, maximum 1024; returns count |
-| 15 | `input()` | Character/event, 0 if empty, 256 for queue overflow; terminal owner only |
+| 15 | `input()` | Character/event, 0 if empty, 256 for queue overflow; owner or foreground pipeline peer only |
 | 16 | `console(operation)` | 0 backspace, 1 clear, 2 query ownership without consuming input; terminal owner only |
 | 17 | `clock(out)` | Copies ticks and binary calendar fields (full year, month 1–12); 0 or error |
 | 18 | `process_info(index, out)` | Copies one process record; 1 found, 0 end |
@@ -378,13 +383,14 @@ return an error rather than being reinterpreted as new operations.
 | 58 | `flush(handle)` | Flush filesystem for a valid owned handle; zero or error |
 | 59 | `chmod(path, mode)` | Owner/root only, nine permission bits (0000–0777); zero or error |
 | 60 | `chown(path, uid, gid)` | Root only, registered user/group IDs; zero or error |
-| 61 | `terminal_read(flags)` | Blocking decoded input; flag 1 polls; terminal owner only |
+| 61 | `terminal_read(flags)` | Blocking decoded input; flag 1 polls; owner or foreground pipeline peer only |
 | 62 | `job_wait(group, status, flags)` | Owned group completion/stop; flag 1 polls; validates optional status before blocking |
 | 63 | `job_control(group, operation)` | Owned job: 0 foreground, 1 background, 2 terminate, 3 query |
 | 64 | `heap_resize(bytes)` | Commit/release a private page-rounded heap prefix up to 512 KiB; return heap base |
 | 65 | `spawn_job(path, argc, argv, flags)` | Create a controlled process group; flag 1 requests atomic foreground handoff |
 | 66–78 | Stream descriptors, pipe, poll, timed waits, sleep and mapped spawn | See the [complete stream ABI](streams.md#descriptor-abi) |
 | 79 | `hardware(section, index, out)` | UID 0 only; copy a zero-initialized 128-byte `HackosHardwareInfo`; 1 record, 0 end, error otherwise |
+| 80 | `terminal_info(fd, out)` | Copy 16-byte geometry and foreground flags; no root requirement; see [streams](streams.md#descriptor-abi) |
 
 Calls use `int 0x80`: RAX is the number, RDI/RSI/RDX/RCX/R8 hold arguments,
 and saved RAX receives the result. Successful operations without another result

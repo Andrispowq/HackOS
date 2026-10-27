@@ -1,11 +1,11 @@
-# Output, clock and hardware utilities
+# Command utilities
 
 [System index](index.md) · [Userspace](userspace.md) · [Devices](devices.md)
 
 These standalone ring-3 programs use inherited stdout/stderr. They work in
 pipelines, in the background and with file redirection. Exit status is 0 on
 success, 1 for an unavailable service/denied operation/output failure, and 2 for
-invalid usage. New images package `ECHO`, `TIME` and `SYSINFO`; `PRINT` is retired.
+invalid usage, except for the grep statuses described below. New images package `ECHO`, `TIME` and `SYSINFO`; `PRINT` is retired.
 
 ## Literal output
 
@@ -22,6 +22,69 @@ interpretation (`-e`) is not provided. The shell's own quote/backslash decoding
 happens before execution. This follows the basic Unix
 [echo convention](https://www.gnu.org/software/coreutils/manual/html_node/echo-invocation.html)
 with a deliberately small option set.
+
+## Text filters and pager
+
+`grep`, `wc`, `head`, `tail`, `tee` and `more` are standalone programs available
+to ordinary users. File access uses the caller's existing permissions. All use
+stdin/stdout/stderr, support `--help` and `--`, and put diagnostics on stderr.
+Options precede operands; unknown options fail instead of being ignored.
+Except for `tee`, omitted files or a `-` operand select stdin; several files are
+processed in order. `tee` always reads stdin and treats `-` as a literal filename.
+
+```sh
+cat /usr/hello.txt | grep -in hello | tee /tmp/matches | wc -l
+grep '^row[0-9]*$' /tmp/log | head -n 20
+tail -n 10 < /tmp/log
+head -c 32 /tmp/data > /tmp/prefix
+cat /tmp/log | more
+echo another line | tee -a /tmp/log
+```
+
+| Command | Supported options and behavior |
+| --- | --- |
+| `grep [options] pattern [file ...]` | Basic pattern matching; `-F` literal, `-i` ASCII case-insensitive, `-n` line numbers, `-v` inverse, `-c` selected-line counts, `-l` matching filenames, `-q` quiet/early success, `-H` always prefix filename, `-h` suppress filename, one `-e pattern` for patterns starting with `-` |
+| `wc [-lwc] [file ...]` | Newlines, words, bytes, in that order; defaults to all three, totals for multiple operands. ASCII whitespace separates words. A final partial line contributes words/bytes but no newline |
+| `head [-n N] [-c N] [-qv] [file ...]` | First N lines or bytes; default ten lines. `-q` suppresses multi-file headers, `-v` always adds headers. Zero emits nothing and does not consume stdin |
+| `tail [-n [+]N] [-c [+]N] [-qv] [file ...]` | Last N lines/bytes; default ten lines. `+N` starts at the one-based line/byte N (0 also means the beginning). Header flags as for head. Zero without `+` drains input and emits nothing |
+| `tee [-a] [file ...]` | Copy stdin to stdout and every file; create/truncate by default, `-a` appends. Reports open/write/close/flush failures and continues surviving outputs. A broken stdout pipe ends the command |
+| `more [-n lines] [file ...]` | Page foreground terminal output; default one screen minus one row. Space advances a page, Enter one row, q quits; Ctrl-Z/C use normal job control. `-n` accepts 1–10000 rows |
+
+Counts accept decimal integers; `-n2` and `-c32` also work for head/tail, and
+more accepts `-n2`. The last head/tail count option selects the unit and count.
+These are intentionally small Unix-style subsets: no size suffixes, negative
+head counts, tail follow mode, locale/Unicode word handling, recursive grep,
+extended regular expressions or multiple grep patterns. Long option aliases
+other than `--help` are not implemented.
+
+The grep pattern subset includes literals, `.`, leading `^`, trailing `$`, `*`,
+bracket sets/ranges/negation (`[abc]`, `[a-z]`, `[^abc]`), and backslash-escaped
+metacharacters. Quote patterns to protect them from shell parsing. Groups,
+backreferences, interval expressions, POSIX character classes and collation
+expressions are rejected. Matching uses a bounded state set with no recursive
+backtracking. A pattern allows 128 atoms; an input line allows 64 KiB excluding
+its newline. An oversized line or unsupported pattern is an explicit error.
+NUL and high bytes are treated as data; there is no binary-file suppression.
+Selected lines receive a terminating newline, including a final partial line.
+Grep exits **0** when a line is selected, **1** for no matches and **2** for errors;
+`-q` succeeds immediately on a match, even if an earlier operand failed.
+
+Head/tail preserve exact bytes and final partial lines. Tail consumes the full
+stream into a 128 KiB suffix ring; input length is unbounded, but an end-relative
+suffix that does not fit fails explicitly. `tail -n +N` and `tail -c +N` stream forward without
+that suffix limit. Wc and tee use fixed-size chunks. Filesystem writes retain
+the system's 32 KiB file-size bound and exclusive writable handles; tee reports
+those failures. Filters terminate on a broken pipe without noisy diagnostics.
+
+More reads paging keys through `terminal_read`, independently of its stdin.
+`terminal_info` identifies redirected stdout, which receives an exact byte copy
+without prompts or keyboard reads. Background output to a terminal is rejected;
+background redirection works. Terminal stdin is copied until Ctrl-D without
+paging, because data and commands share the keyboard. On screen, tabs expand to
+four-column stops, control bytes use caret notation, and high bytes display as
+`?`; wrapped rows count toward a page. Redirected output is never sanitized.
+A final full page at EOF needs no extra key. Early quit closes the input pipe so
+upstream writers can finish with a broken-pipe result.
 
 ## Clock
 

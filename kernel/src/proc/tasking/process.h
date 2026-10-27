@@ -49,6 +49,7 @@ class Process
     uint64_t terminalReturnPid = 0;
     uint64_t processGroup = 0, jobOwnerPid = 0, waitingGroup = 0;
     bool stoppedTerminalOwner = false;
+    bool pipelineMember = false;
     bool jobWaitInterrupted = false;
     uint64_t parentPid = 0, waitingFor = 0;
     int64_t exitStatus = 0;
@@ -87,6 +88,7 @@ void InitialiseTasking();
 uint64_t WaitForChild(uint64_t pid, int64_t* status, uint64_t flags);
 void SetTerminalOwner(uint64_t pid);
 bool OwnsTerminal(uint64_t pid);
+bool CanReadTerminal(uint64_t pid);
 void RequestTerminalInterrupt();
 void RequestUserInterrupt(uint64_t pid);
 void RequestTerminalStop();

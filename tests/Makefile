@@ -50,3 +50,9 @@ test-streams:
 .PHONY: test-utilities
 test-utilities:
 	$(PYTHON) qemu_utilities.py --firmware $(FIRMWARE)
+
+.PHONY: test-filters test-filter-commands
+test-filters:
+	$(PYTHON) qemu_filters.py --firmware $(FIRMWARE)
+test-filter-commands:
+	$(PYTHON) filter_commands.py

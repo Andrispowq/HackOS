@@ -55,6 +55,30 @@ static Stream* Descriptor(uint64_t fd)
     return fd < HACKOS_FD_LIMIT ? GetRunningProcess()->descriptors[fd] : nullptr;
 }
 
+uint64_t UserTerminalInfo(uint64_t fd, HackosTerminalInfo* destination)
+{
+    auto stream = Descriptor(fd);
+    if (!stream)
+    {
+        return HACKOS_ERROR;
+    }
+
+    HackosTerminalInfo info = {};
+    if (stream->kind == StreamKind::TerminalRead || stream->kind == StreamKind::TerminalWrite)
+    {
+        const auto& console = Display::SharedDisplay()->console;
+        info.columns = console.con_width;
+        info.rows = console.con_height;
+        info.flags = HACKOS_TERMINAL;
+        if (CanReadTerminal(GetRunningProcess()->pid))
+        {
+            info.flags |= HACKOS_TERMINAL_FOREGROUND;
+        }
+    }
+
+    return GetRunningProcess()->userSpace->CopyToUser((uint64_t)destination, &info, sizeof(info)) ? 0 : HACKOS_ERROR;
+}
+
 static uint64_t Release(Stream* stream)
 {
     if (!stream || --stream->references)
@@ -314,7 +338,7 @@ uint64_t UserFdRead(uint64_t fd, void* destination, uint64_t length, uint64_t ti
     {
         if (stream->kind == StreamKind::TerminalRead)
         {
-            if (!OwnsTerminal(process->pid))
+            if (!CanReadTerminal(process->pid))
             {
                 return HACKOS_DENIED;
             }
@@ -472,7 +496,7 @@ static uint32_t Readiness(Stream* stream, uint32_t events)
 
     if (stream->kind == StreamKind::TerminalRead)
     {
-        if (!OwnsTerminal(GetRunningProcess()->pid))
+        if (!CanReadTerminal(GetRunningProcess()->pid))
         {
             return HACKOS_POLL_ERROR;
         }

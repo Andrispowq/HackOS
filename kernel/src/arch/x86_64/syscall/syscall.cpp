@@ -841,6 +841,7 @@ static uint64_t UserSpawnIo(const char* name, uint64_t argc, const char* const* 
         if (process->pid == pid)
         {
             SelectStreams(process, Caller(), specification);
+            process->pipelineMember = true;
             process->processGroup = group;
             process->jobOwnerPid = Caller()->pid;
             process->state = PROCESS_STATE_STARTING;
@@ -1297,6 +1298,9 @@ static void syscall_handler(Registers* r)
         break;
     case HACKOS_SYS_fd_flush:
         r->rax = UserFdFlush(r->rdi);
+        break;
+    case HACKOS_SYS_terminal_info:
+        r->rax = UserTerminalInfo(r->rdi, (HackosTerminalInfo*)r->rsi);
         break;
     case HACKOS_SYS_spawn_io:
         r->rax = UserSpawnIo((const char*)r->rdi, r->rsi, (const char* const*)r->rdx, (const HackosSpawnIo*)r->rcx);

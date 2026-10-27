@@ -117,7 +117,7 @@ uint64_t ReadTerminal(uint64_t flags)
 
     for (;;)
     {
-        if (!OwnsTerminal(current_process->pid))
+        if (!CanReadTerminal(current_process->pid))
         {
             return HACKOS_DENIED;
         }
@@ -159,7 +159,10 @@ void SetTerminalOwner(uint64_t pid)
         pendingInterrupt = 0;
     }
 
+    auto previous = FindProcess(terminalOwner);
     auto owner = FindProcess(pid);
+    bool samePipeline = previous && owner && previous->pipelineMember && owner->pipelineMember &&
+                        previous->processGroup && previous->processGroup == owner->processGroup;
     if (owner)
     {
         for (auto p = ready_queue; p; p = p->next)
@@ -173,12 +176,30 @@ void SetTerminalOwner(uint64_t pid)
 
     WakeTerminalReaders();
     terminalOwner = pid;
-    ClearKeyboard(); // typeahead must never cross an ownership boundary
+    if (!samePipeline)
+    {
+        ClearKeyboard(); // preserve keys only across handoff between pipeline peers
+    }
 }
 
 bool OwnsTerminal(uint64_t pid)
 {
     return pid && pid == terminalOwner;
+}
+
+bool CanReadTerminal(uint64_t pid)
+{
+    if (OwnsTerminal(pid))
+    {
+        return true;
+    }
+    auto process = FindProcess(pid);
+    auto owner = FindProcess(terminalOwner);
+    // Foreground pipeline peers share input, so a pager can read keys while an
+    // upstream stage still produces data. This capability is not inherited by
+    // ordinary children: explicit foreground delegation retains its contract.
+    return process && owner && process->pipelineMember && owner->pipelineMember && process->processGroup &&
+           process->processGroup == owner->processGroup;
 }
 
 static bool ProtectedTerminal(uint64_t pid)

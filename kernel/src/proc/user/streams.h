@@ -37,4 +37,5 @@ uint64_t UserPipe(uint64_t* destination);
 uint64_t UserPoll(HackosPollFd* destination, uint64_t count, uint64_t timeout);
 uint64_t UserFdSeek(uint64_t fd, uint64_t offset);
 uint64_t UserFdFlush(uint64_t fd);
+uint64_t UserTerminalInfo(uint64_t fd, HackosTerminalInfo* destination);
 void SelectStreams(Process* child, Process* parent, const HackosSpawnIo& specification);

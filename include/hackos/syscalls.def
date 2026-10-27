@@ -68,3 +68,4 @@ HACKOS_SYSCALL(76, spawn_io, UserSpawnIo, 4, const char*, uint64_t, const char* 
 HACKOS_SYSCALL(77, fd_seek, UserFdSeek, 2, uint64_t, uint64_t)
 HACKOS_SYSCALL(78, fd_flush, UserFdFlush, 1, uint64_t)
 HACKOS_SYSCALL(79, hardware, UserHardware, 3, uint64_t, uint64_t, HackosHardwareInfo*)
+HACKOS_SYSCALL(80, terminal_info, UserTerminalInfo, 2, uint64_t, HackosTerminalInfo*)

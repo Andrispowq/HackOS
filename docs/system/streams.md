@@ -77,6 +77,14 @@ are defined in [abi.h](../../include/hackos/abi.h); wrappers come from
 | 76 | `spawn_io(path, argc, argv, HackosSpawnIo*)` | Creates a held member; group 0 starts a new group owned by the caller |
 | 77 | `fd_seek(fd, absolute_offset)` | File position; pipes and terminal streams reject seeks |
 | 78 | `fd_flush(fd)` | Zero for a successfully flushed file; other kinds reject it |
+| 80 | `terminal_info(fd, HackosTerminalInfo*)` | Zero after copying terminal geometry/flags; valid files/pipes return an all-zero record; invalid descriptor or destination returns `HACKOS_ERROR` |
+
+`HackosTerminalInfo` is 16 bytes: uint32 columns, rows, flags and a zero reserved
+field. Flag 1 identifies a terminal; flag 2 reports that the caller may read
+foreground input at the time of the query. Reading always rechecks permission.
+The query consumes no input, exposes no pointers and requires no root privilege.
+It lets pagers read keys separately from pipe/file stdin and avoid prompts in
+redirected output. See [filter utilities](utilities.md#text-filters-and-pager).
 
 `HackosSpawnIo` is 32 bytes: three uint64 descriptor indices followed by a uint64
 group. `HACKOS_ERROR` in a stream slot requests a closed descriptor. A nonzero
@@ -103,7 +111,13 @@ reclaims the process. Stopped processes retain their endpoints and buffers.
 Files and other remaining resources are reclaimed by idle.
 
 Terminal stream reads return decoded bytes without echo or line buffering.
-Only the terminal owner can read; background reads return `HACKOS_DENIED`.
+The terminal owner and its foreground pipeline peers may read; background
+reads return `HACKOS_DENIED`. Only stages created by `spawn_io` share this access;
+ordinary children do not inherit it, even within the same process group. Explicit
+foreground delegation to an ordinary child gives that child exclusive input.
+Console clear/backspace and delegation still require the single terminal owner.
+Keyboard typeahead is preserved when ownership passes between pipeline peers,
+and cleared at other handoffs.
 Ctrl-D returns EOF for that read. Queue overflow returns `HACKOS_RETRY` after
 resetting the queue. The existing `terminal_read` API still reports decoded
 key events and overflow separately; the interactive shell/editor use that API.

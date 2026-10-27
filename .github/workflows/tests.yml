@@ -52,6 +52,13 @@ jobs:
             --mount "type=bind,source=$PWD,target=/work,readonly" \
             --mount "type=bind,source=$PWD/tests/out,target=/work/tests/out" \
             hackos-tests:host python3 tests/qemu_boot.py --self-test
+      - name: Exercise filter programs with sanitized syscall adapters
+        if: ${{ !cancelled() && matrix.suite == 'host' }}
+        run: |
+          docker run --rm --network none --user "$(id -u):$(id -g)" \
+            --mount "type=bind,source=$PWD,target=/work,readonly" \
+            --mount "type=bind,source=$PWD/tests/out,target=/work/tests/out" \
+            hackos-tests:host python3 tests/filter_commands.py
       - name: Summarize results
         if: always()
         run: python3 tests/summarize.py >> "$GITHUB_STEP_SUMMARY"
@@ -64,6 +71,7 @@ jobs:
           path: |
             tests/out/${{ matrix.suite }}/
             tests/out/qemu-harness/
+            tests/out/filter-commands/
             !tests/out/**/*.o
 
   firmware:
@@ -163,6 +171,15 @@ jobs:
             --mount "type=bind,source=$PWD,target=/work,readonly" \
             --mount "type=bind,source=$PWD/tests/out,target=/work/tests/out" \
             hackos-tests:toolchain python3 tests/qemu_utilities.py --firmware "$FIRMWARE"
+      - name: Exercise normal-user filters and pipeline paging
+        if: ${{ !cancelled() && steps.build.outcome == 'success' }}
+        env:
+          FIRMWARE: ${{ matrix.firmware }}
+        run: |
+          docker run --rm --network none --user "$(id -u):$(id -g)" \
+            --mount "type=bind,source=$PWD,target=/work,readonly" \
+            --mount "type=bind,source=$PWD/tests/out,target=/work/tests/out" \
+            hackos-tests:toolchain python3 tests/qemu_filters.py --firmware "$FIRMWARE"
       - name: Exercise file utilities, editor and reboot persistence
         if: ${{ !cancelled() && steps.build.outcome == 'success' }}
         env:
@@ -223,6 +240,7 @@ jobs:
             tests/out/qemu-usability-${{ matrix.firmware }}/
             tests/out/qemu-streams-${{ matrix.firmware }}/
             tests/out/qemu-utilities-${{ matrix.firmware }}/
+            tests/out/qemu-filters-${{ matrix.firmware }}/
             tests/out/qemu-files-${{ matrix.firmware }}/
             tests/out/qemu-storage-${{ matrix.firmware }}/
             tests/out/qemu-user-${{ matrix.firmware }}/

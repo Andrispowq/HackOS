@@ -30,7 +30,10 @@ background. Try `input` for interactive text input; Ctrl-C returns to
 the shell. Up/Down browses the fixed 256-command history, and `history` lists it.
 Bare commands resolve in `/usr/bin`; directory/history/session and job controls stay in the shell.
 Try `echo hello | cat > /tmp/message`, `cat < /tmp/message`, `echo again >> /tmp/message`
-and `cat /missing 2> /tmp/errors`. Pipelines support up to four stages, with
+and `cat /missing 2> /tmp/errors`.
+Normal users can run `grep -in hello /usr/hello.txt`, `wc /usr/hello.txt`,
+`head -n 5 /usr/hello.txt`, `tail -c 32 /usr/hello.txt`, and
+`cat /usr/hello.txt | tee /tmp/copy | more`. Pipelines support up to four stages, with
 ordered redirections and quoted paths. `cat` preserves exact bytes.
 Tab completes commands and paths. Ctrl+Z stops a foreground job; `jobs`, `fg`,
 `bg`, `wait` and `kill %job` manage its process group.
@@ -132,7 +135,11 @@ make TARGET_BIOS=false run
 builds. `CC`, `CXX`, `LD`, `AR`, and `OBJCOPY` can also be overridden explicitly.
 C++ uses GNU++17; BIOS C uses GNU11. Kernel and BIOS code disable the red zone,
 PIE and stack protection; C++ code is freestanding without RTTI or exceptions.
-Frame pointers remain enabled for the experimental scheduler.
+Frame pointers remain enabled for the experimental scheduler. The userspace
+linker includes large-model `.lrodata`, `.ldata` and `.lbss` sections in their
+respective page-aligned segments; leaving them as orphans can share a read-only
+page with writable data and cause the kernel to reject the program. The image
+validation checks every command ELF for segment page overlap and page limits.
 
 | Target | Behavior |
 | --- | --- |

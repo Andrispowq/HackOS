@@ -169,6 +169,17 @@ struct HackosPollFd
     uint32_t events, revents;
 };
 
+// A valid non-terminal descriptor returns a zeroed record. No root privilege
+// is needed; input is available to the owner and its foreground pipeline peers.
+constexpr uint32_t HACKOS_TERMINAL = 1, HACKOS_TERMINAL_FOREGROUND = 2;
+
+struct HackosTerminalInfo
+{
+    uint32_t columns, rows, flags, reserved;
+};
+
+static_assert(sizeof(HackosTerminalInfo) == 16, "terminal info ABI");
+
 // spawn_io creates a held job member. group=0 starts a new owned group;
 // job_control starts the completed group. Only these three descriptors transfer.
 struct HackosSpawnIo

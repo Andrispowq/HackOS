@@ -577,3 +577,41 @@ slot. ELF load segments/BSS and utility framebuffer captures were checked.
 Formatting (clang-format 18.1.8) and workflow lint passed. Final results, sample
 hardware reports and source hashes are under `tests/out/utilities-verified/`.
 Full ASan+UBSan validation remains a native x86-64 CI requirement.
+
+## Stream filter and pager regressions
+
+`python3 tests/filter_commands.py` compiles the real grep/wc/head/tail/tee/more
+sources and libc output/string routines, substituting only hosted syscall
+transport. It runs with ASan+UBSan in CI (`--sanitizers undefined` is the explicit
+local fallback). It compares hundreds of deterministic binary streams and
+patterns against independent byte/regex expectations, exercises EOF and partial
+lines, 64/128 KiB boundaries, invalid options, short reads/writes, broken pipes,
+open/read/write/close failures, tee append/multiple outputs, and paging keys and
+wrapping. `make -C tests test-filter-commands` is the equivalent entry point.
+
+`python3 tests/qemu_filters.py --firmware bios` (and `uefi`), or
+`make -C tests test-filters FIRMWARE=...`, boots a disposable image, provisions a
+normal guest login, and runs all six tools under that identity. It verifies
+four-stage pipes, saved output with mtools, permission denials, early consumer
+exit, redirected/background more, Space/Enter/q, Ctrl-Z/fg, and paging while the
+upstream producer remains blocked on a full pipe. FILTERPROBE validates copied
+terminal-info records, bad descriptors/destinations, background read denial and
+non-inheritance of input access by an ordinary child of a pipeline stage.
+GDB synchronizes pager resume with its blocked-input state and verifies that
+quitting leaves no live pipe, stream or file handles.
+Both firmware jobs run this alongside the existing stream/job-control suites.
+Reports and screenshots are in `tests/out/qemu-filters-*`; hosted results are in
+`tests/out/filter-commands*`.
+
+Filter validation passed all eight hosted command groups with ASan+UBSan on the
+native Linux runtime, 194 existing UBSan host checks, five boot-asset checks,
+the BIOS loader-chain probe, fresh BIOS/UEFI image builds and all eleven QEMU
+suites on each firmware path. The stripped kernel is 220,432 bytes within the
+unchanged 393,216-byte BIOS slot. The image checks validate every command's ELF
+page layout; pager screenshots were inspected. Formatting and workflow lint
+passed. After the final pager prompt-clearing adjustment, rebuilt images passed
+the focused filter suites again on both paths; the kernel and 34 other command
+binaries were verified identical to the full-regression run. Results and source
+hashes are saved in `tests/out/filters-verified/`.
+The existing x86-64 host suite still requires ASan+UBSan in native x86-64 CI;
+its local UBSan fallback is separate from the sanitized command checks.

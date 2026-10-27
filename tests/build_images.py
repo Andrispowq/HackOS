@@ -77,6 +77,24 @@ def build(firmware):
     def package():
         kernel = (work/"bin/kernel.elf").read_bytes()
         validate_elf(kernel)
+        # Large-model .lbss/.ldata must remain in their aligned load segments.
+        # The kernel rejects shared pages rather than merging R/W/X permissions.
+        for path in (work / "libs/commands/bin").iterdir():
+            data = path.read_bytes()
+            validate_elf(data)
+            phoff = struct.unpack_from('<Q', data, 32)[0]
+            phnum = struct.unpack_from('<H', data, 56)[0]
+            pages = set()
+            for i in range(phnum):
+                kind, flags, _, address, _, _, size, _ = struct.unpack_from('<IIQQQQQQ', data, phoff + i * 56)
+                if kind != 1 or not size:
+                    continue
+                assert 0x400000000000 <= address < address + size <= 0x400000100000, path
+                assert flags & 4 and not flags & ~7 and flags & 3 != 3, path
+                segment = set(range(address // 4096, (address + size + 4095) // 4096))
+                assert not pages & segment, f'{path.name}: load segments share a page'
+                pages |= segment
+            assert len(pages) + 4 <= 64, f'{path.name}: exceeds private image/stack page limit'
         if firmware == "bios":
             for name, limit in [("mbr.bin",512),("bootloader.bin",512),
                                 ("second_stage.bin",32768),("kernel.elf",393216)]:
@@ -104,7 +122,7 @@ def build(firmware):
             assert efi[pe:pe+4] == b"PE\0\0" and struct.unpack_from("<H",efi,pe+4)[0] == 0x8664
             for name in ("/kernel.elf", "/EFI/BOOT/BOOTX64.EFI", "/startup.nsh"):
                 require_success(command(["mdir","-a","-i",fs_image,"::"+name]), "image file " + name)
-        for name in ("/UTIL/FONTS/zap-light16.psf", "/USR/BIN/usertest.elf", "/USR/BIN/test", "/USR/BIN/shell", "/USR/BIN/login", "/SYSTEM/ACCT0.DAT", "/SYSTEM/ACCT1.DAT", "/USR/BIN/ring3", "/USR/BIN/input", "/USR/BIN/window", *["/USR/BIN/" + name for name in ("help", "clear", "echo", "time", "sysinfo", "ps", "kill", "ls", "wd", "cat", "read", "shutdown", "restart", "id", "whoami", "users", "groups", "useradd", "groupadd", "usermod", "runas", "passwd", "xxd", "mkdir", "rm", "mv", "edit", "chmod", "chown")]):
+        for name in ("/UTIL/FONTS/zap-light16.psf", "/USR/BIN/usertest.elf", "/USR/BIN/test", "/USR/BIN/shell", "/USR/BIN/login", "/SYSTEM/ACCT0.DAT", "/SYSTEM/ACCT1.DAT", "/USR/BIN/ring3", "/USR/BIN/input", "/USR/BIN/window", *["/USR/BIN/" + name for name in ("help", "clear", "echo", "time", "sysinfo", "ps", "kill", "ls", "wd", "cat", "read", "grep", "wc", "head", "tail", "tee", "more", "shutdown", "restart", "id", "whoami", "users", "groups", "useradd", "groupadd", "usermod", "runas", "passwd", "xxd", "mkdir", "rm", "mv", "edit", "chmod", "chown")]):
             require_success(command(["mdir","-a","-i",fs_image,"::"+name]), "image file " + name)
         shutil.copy2(image, directory/"HackOS.img")
         shutil.copy2(work/"kernel/bin/kernel.elf", directory/"kernel.elf")

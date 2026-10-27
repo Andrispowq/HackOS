@@ -31,6 +31,8 @@ administrator; successful login starts the standalone PS/2 shell. Accounts persi
 across boots, and `logout` ends the session. See [accounts and recovery](docs/system/accounts.md).
 Try `help`, `ls`, `ps` or `time --ticks`. `echo` prints literal text; root can run
 `sysinfo` for a hardware report or select a section such as `sysinfo memory`.
+Normal users can filter streams with `grep`, `wc`, `head`, `tail` and `tee`,
+or page them with `more`: `cat /usr/hello.txt | grep -i hello | wc -l`.
 See [system utilities](docs/system/utilities.md). Run `user USR/BIN/RING3` for the minimal
 isolated ring-3 print/preemption/exit demo. Both `./` and `user` accept arguments and wait for isolated programs to exit
 (append `&` for background execution); `shutdown` requests kernel ACPI

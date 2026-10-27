@@ -48,9 +48,10 @@ class QMP:
 
     def type(self, text):
         punctuation = {">": "dot", "<": "comma", "|": "backslash", " ": "spc", ".": "dot", "/": "slash", "-": "minus",
-                       "\n": "ret", "\b": "backspace", "_": "minus", "%": "5", "~": "grave_accent", "&": "7", '"': "apostrophe", "'": "apostrophe", "\\": "backslash"}
+                       "\n": "ret", "\b": "backspace", "_": "minus", "%": "5", "~": "grave_accent", "&": "7", '"': "apostrophe", "'": "apostrophe", "\\": "backslash",
+                       "^": "6", "$": "4", "*": "8", "[": "bracket_left", "]": "bracket_right", "+": "equal"}
         for ch in text:
-            self.key(punctuation.get(ch, ch.lower()), ch.isupper() or ch in "_%~&<>|\"")
+            self.key(punctuation.get(ch, ch.lower()), ch.isupper() or ch in "_%~&<>|\"^$*+")
 
     def close(self):
         self.stream.close()
