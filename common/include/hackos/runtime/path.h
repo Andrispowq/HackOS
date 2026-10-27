@@ -2,7 +2,7 @@
 
 // Canonical FAT/VFS paths use ~ as root and uppercase components. Input and
 // output must not alias. No heap allocation, traversal above root, or truncation.
-inline bool NormalizePath(const char* input, const char* cwd, char (&output)[256])
+inline bool NormalizePath(const char* input, const char* cwd, char (&output)[256], bool allowTilde = false)
 {
     if (!input || !*input)
     {
@@ -52,7 +52,7 @@ inline bool NormalizePath(const char* input, const char* cwd, char (&output)[256
         while (*input && *input != '/')
         {
             unsigned char ch = *input++;
-            if (ch < 32 || ch >= 127 || ch == '\\' || ch == '~')
+            if (ch < 32 || ch >= 127 || ch == '\\' || (ch == '~' && !allowTilde))
             {
                 return false;
             }

@@ -31,6 +31,8 @@ def test(firmware, timeout):
         fs_image = str(image) + ("@@"+str(846*512) if firmware == "bios" else "")
         for program in programs:
             require_success(command(["mcopy", "-o", "-i", fs_image, program, "::/USR/BIN/"+program.name]), "install test program in disposable image")
+        from session import provision_imports
+        provision_imports(image, firmware)
         with tempfile.TemporaryDirectory(prefix="hackos-windows-") as temporary:
             temporary = Path(temporary)
             qmp_path, gdb_path = temporary/"qmp", temporary/"gdb"

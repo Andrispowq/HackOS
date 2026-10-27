@@ -6,9 +6,8 @@
 class ATADevice : public Device
 {
   public:
-    ATADevice()
-    {
-    }
+    ATADevice();
+    uint64_t SectorCount() const override;
 
     virtual ~ATADevice()
     {
@@ -22,6 +21,9 @@ class ATADevice : public Device
     bool Read(uint64_t LBA, void* buffer, uint64_t size);
     bool Write(uint64_t LBA, void* buffer, uint64_t size);
     bool Flush() override;
+
+  private:
+    uint64_t sectors = 0;
 };
 
 #endif

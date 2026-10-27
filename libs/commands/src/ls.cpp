@@ -52,10 +52,9 @@ int main(int argc, char** argv)
         }
     }
 
-    // FAT attributes, not invented Unix ownership or permission metadata.
     if (longFormat)
     {
-        Print("TYPE ATTR       BYTES NAME\n");
+        Print("MODE       UID GID ATTR       BYTES NAME\n");
     }
 
     HackosFileInfo info;
@@ -67,7 +66,7 @@ int main(int argc, char** argv)
             break;
         }
 
-        if (result == HACKOS_ERROR)
+        if (result == HACKOS_ERROR || result == HACKOS_DENIED)
         {
             Print("Cannot list directory.\n");
             return 1;
@@ -81,7 +80,22 @@ int main(int argc, char** argv)
         bool directory = info.attributes & HACKOS_DIRECTORY;
         if (longFormat)
         {
-            Print(directory ? "d    " : "-    ");
+            char mode[] = "---------- ";
+            mode[0] = directory ? 'd' : '-';
+            const char* bits = "rwxrwxrwx";
+            for (unsigned bit = 0; bit < 9; ++bit)
+            {
+                if (info.mode & (1 << (8 - bit)))
+                {
+                    mode[bit + 1] = bits[bit];
+                }
+            }
+
+            Print(mode);
+            Number(info.uid);
+            Print(" ");
+            Number(info.gid);
+            Print(" ");
             char attributes[] = "---- ";
             if (info.attributes & 1)
             {

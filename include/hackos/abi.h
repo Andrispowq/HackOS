@@ -8,6 +8,7 @@ struct HackosFileInfo
     uint32_t attributes;
     uint32_t reserved;
     char name[256];
+    uint32_t uid, gid, mode, metadataVersion;
 };
 
 struct HackosProcessInfo
@@ -54,7 +55,7 @@ struct HackosClock
     uint8_t reserved[2];
 };
 
-static_assert(sizeof(HackosFileInfo) == 272, "file ABI");
+static_assert(sizeof(HackosFileInfo) == 288, "file ABI");
 static_assert(sizeof(HackosProcessInfo) == 288, "process ABI");
 static_assert(sizeof(HackosClock) == 16, "clock ABI");
 constexpr uint64_t HACKOS_ERROR = ~0ULL;
@@ -64,6 +65,9 @@ constexpr uint64_t HACKOS_NO_ENTROPY = ~3ULL;
 constexpr uint64_t HACKOS_NOT_FOUND = ~4ULL;
 constexpr uint64_t HACKOS_FILE_LIMIT = 32768;
 constexpr uint64_t HACKOS_SAVE_CREATE = 1;
+constexpr uint64_t HACKOS_OPEN_READ = 1;
+constexpr uint64_t HACKOS_OPEN_WRITE = 2;
+constexpr uint64_t HACKOS_OPEN_CREATE = 4;
 constexpr uint32_t HACKOS_NO_UID = 0xffffffff;
 constexpr uint64_t HACKOS_AUTH_BROKEN = 0;
 constexpr uint64_t HACKOS_AUTH_SETUP = 1;

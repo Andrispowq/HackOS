@@ -31,6 +31,8 @@ def test(firmware, timeout):
             fixture.write_bytes(data)
             require_success(command(['mcopy', '-i', filesystem(image), fixture, '::/' + name]), 'install fixture')
         require_success(command(['mattrib', '-i', filesystem(image), '+r', '::/READONLY.TXT']), 'readonly fixture')
+        from session import provision_imports
+        provision_imports(image, firmware)
         with boot(directory, image, firmware, 'files', timeout) as g:
             g.fresh = True
             g.setup()
@@ -114,8 +116,8 @@ def test(firmware, timeout):
             g.qmp.key('x', control=True)
             g.wait('$ ', offset)
             g.shell('xxd /files/empty.txt', 'OFFSET')
-            g.shell('runas guest mkdir /unpriv', '$ ')
-            g.enter('runas guest edit /unpriv/note.txt', 'New file.')
+            g.shell('runas guest mkdir /tmp/unpriv', '$ ')
+            g.enter('runas guest edit /tmp/unpriv/note.txt', 'New file.')
             g.qmp.type('user text')
             offset = len(g.output())
             g.qmp.key('s', control=True)
@@ -142,7 +144,7 @@ def test(firmware, timeout):
             g.qmp.call('cont')
         assert read('/FILES/long saved name.txt') == 'short\n'
         assert read('/FILES/EMPTY.TXT') == ''
-        assert read('/UNPRIV/NOTE.TXT') == 'user text'
+        assert read('/TMP/UNPRIV/NOTE.TXT') == 'user text'
         assert read('/READONLY.TXT') == 'locked\n'
         assert read('/FILES/A.TXT') == 'original'
         assert read('/FILES/LIMIT.TXT') == ''.join(chr(97 + i % 26) for i in range(32768))

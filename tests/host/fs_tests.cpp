@@ -7,7 +7,7 @@ TEST(vfs_selects_volume_and_translates_path)
     FakeFS fs;
     InitialiseFilesystems();
     filesystems[0] = &fs;
-    CHECK(fopen("fs0:/FILE", O_READ) == &fs.file);
+    CHECK(fopen("fs0:/FILE", O_READ) != nullptr);
     CHECK(test_name_equal(fs.path, "~/FILE"));
     CHECK(fs.file.fs_index == 0);
     return 0;
@@ -18,7 +18,7 @@ TEST(vfs_two_digit_index)
     FakeFS fs;
     InitialiseFilesystems();
     filesystems[12] = &fs;
-    CHECK(fopen("fs12:/FILE", O_READ) == &fs.file);
+    CHECK(fopen("fs12:/FILE", O_READ) != nullptr);
     CHECK(fs.file.fs_index == 12);
     return 0;
 }
@@ -53,7 +53,7 @@ TEST(vfs_create)
     fs.missing = true;
     InitialiseFilesystems();
     filesystems[0] = &fs;
-    CHECK(fopen("fs0:/NEW", O_CREAT) == &fs.file);
+    CHECK(fopen("fs0:/NEW", O_CREAT | O_WRITE) != nullptr);
     CHECK(fs.created);
     CHECK(test_name_equal(fs.path, "~"));
     CHECK(test_name_equal(fs.name, "NEW"));
@@ -65,7 +65,7 @@ TEST(vfs_io_dispatch_and_close)
     FakeFS fs;
     InitialiseFilesystems();
     filesystems[0] = &fs;
-    auto file = fopen("fs0:/FILE", O_READ);
+    auto file = fopen("fs0:/FILE", O_READ | O_WRITE);
     unsigned char b[8] = {1, 2, 3, 4, 5, 6, 7, 8};
     CHECK(fwrite(b, 2, 4, file) == 0);
     CHECK(fs.transferred == 8);
@@ -144,10 +144,18 @@ TEST(filesystem_registration_reuses_empty_slot)
 class MemoryDisk : public Device
 {
   public:
+    uint64_t SectorCount() const override
+    {
+        return size / 512;
+    }
+
     unsigned char* bytes;
     size_t size;
     bool readError = false, writeError = false, flushError = false;
     unsigned writes = 0, failWrite = 0;
+    unsigned flushes = 0, failFlush = 0;
+    int cutSectors = -1;
+    bool powerLost = false;
 
     MemoryDisk()
     {
@@ -166,7 +174,7 @@ class MemoryDisk : public Device
 
     bool Read(uint64_t lba, void* p, uint64_t count) override
     {
-        if (readError)
+        if (readError || powerLost)
         {
             return false;
         }
@@ -179,19 +187,33 @@ class MemoryDisk : public Device
     bool Write(uint64_t lba, void* p, uint64_t count) override
     {
         ++writes;
-        if (writeError || (failWrite && writes == failWrite))
+        if (writeError || powerLost || (failWrite && writes == failWrite))
         {
             return false;
         }
 
         bounds(lba, count);
-        test_copy(bytes + lba * 512, p, count * 512);
+        for (uint64_t i = 0; i < count; ++i)
+        {
+            if (cutSectors == 0)
+            {
+                powerLost = true;
+                return false;
+            }
+
+            test_copy(bytes + (lba + i) * 512, (uint8_t*)p + i * 512, 512);
+            if (cutSectors > 0)
+            {
+                --cutSectors;
+            }
+        }
         return true;
     }
 
     bool Flush() override
     {
-        return !flushError;
+        ++flushes;
+        return !flushError && !powerLost && (!failFlush || flushes != failFlush);
     }
 
     void bounds(uint64_t lba, uint64_t count)
@@ -801,6 +823,22 @@ TEST(fat_full_directory_save_returns_staged_clusters)
     auto& boot = *(FAT32_BootSector*)disk.bytes;
     uint32_t dataSector = boot.ReservedSectors + boot.NumberOfFATs * boot.SectorsPerFAT32;
     uint32_t clusterCount = (boot.LargeTotalSectors - dataSector) / boot.SectorsPerCluster;
+    // Fill the root through production creation so every occupied slot has
+    // permission metadata. This must fail for capacity, not missing records.
+    {
+        FAT32 fs(&disk, 0);
+        unsigned slots = boot.SectorsPerCluster * 512 / 32;
+        for (unsigned index = 2; index < slots; ++index)
+        {
+            char name[] = "FULL00";
+            name[4] = '0' + index / 10;
+            name[5] = '0' + index % 10;
+            auto file = fs.CreateFile("~", name, ARCHIVE);
+            CHECK(file);
+            fs.CloseFile(file);
+        }
+    }
+
     uint32_t remaining = 0;
     // Leave exactly one free cluster for the payload, so a full directory
     // cannot grow after staging it. Mark other free clusters allocated.
@@ -824,20 +862,6 @@ TEST(fat_full_directory_save_returns_staged_clusters)
     }
 
     CHECK(remaining);
-    uint8_t* root = disk.bytes + (dataSector + (boot.RootDirStart - 2) * boot.SectorsPerCluster) * 512;
-    unsigned slots = boot.SectorsPerCluster * 512 / 32;
-    for (unsigned slot = 0; slot < slots; ++slot)
-    {
-        auto& entry = ((DirectoryEntry*)root)[slot];
-        if (!entry.name[0] || (uint8_t)entry.name[0] == ENTRY_FREE)
-        {
-            test_fill(&entry, 0, sizeof(entry));
-            test_fill(&entry, ' ', 11);
-            entry.name[0] = 'A' + slot % 26;
-            entry.attributes = FILE_ARCHIVE;
-        }
-    }
-
     {
         FAT32 fs(&disk, 0);
         for (unsigned attempt = 0; attempt < 3; ++attempt)
@@ -850,5 +874,271 @@ TEST(fat_full_directory_save_returns_staged_clusters)
 
     FAT32 fs(&disk, 0);
     CHECK(fs.OpenFile("~/NO_ROOM.TXT") == nullptr);
+    return 0;
+}
+
+TEST(storage_mount)
+{
+    MemoryDisk disk;
+    JournalDevice journal(&disk, 0, disk.size / 512);
+    CHECK(journal.Healthy());
+    FAT32Driver driver(&journal, 0);
+    CHECK(driver.IsValid());
+    DirEntry entry;
+    CHECK(driver.OpenFile("~", &entry) == 0);
+    CHECK(driver.OpenFile("~/TESTS", &entry) == 0);
+    return 0;
+}
+
+TEST(vfs_modes_and_stale_tokens)
+{
+    FakeFS fs;
+    InitialiseFilesystems();
+    filesystems[0] = &fs;
+    CHECK(!fopen("fs0:/FILE", 0));
+    CHECK(!fopen("fs0:/FILE", O_CREAT));
+    CHECK(!fopen("fs0:/FILE", 0x80 | O_READ));
+    auto read = fopen("fs0:/FILE", O_READ);
+    CHECK(read);
+    char byte = 0;
+    CHECK(fwrite(&byte, 1, 1, read) < 0);
+    CHECK(fclose(read) == 0);
+    auto write = fopen("fs0:/FILE", O_WRITE);
+    CHECK(write && write != read);
+    CHECK(fread(&byte, 1, 1, write) < 0);
+    CHECK(fread(&byte, 1, 1, read) < 0);
+    CHECK(fread(&byte, 1, 1, (void*)0xdeadbeef) < 0);
+    CHECK(fclose(read) < 0);
+    fclose(write);
+    return 0;
+}
+
+TEST(storage_permission_identity_and_lifetime)
+{
+    MemoryDisk disk;
+    FilePermissions owner = {1001, 1002, 0640};
+    {
+        FAT32 fs(&disk, 0);
+        CHECK(fs.SaveFile("~/OWNED", "secret", 6, true, &owner) == 0);
+        CHECK(fs.MoveFile("~/OWNED", "~/TESTS/RENAMED") == 0);
+        CHECK(fs.SaveFile("~/TESTS/RENAMED", "replacement", 11, false) == 0);
+    }
+
+    FAT32 fs(&disk, 0);
+    auto file = fs.OpenFile("~/TESTS/RENAMED");
+    CHECK(file);
+    auto permissions = file->GetPermissions();
+    CHECK(permissions.uid == owner.uid && permissions.gid == owner.gid && permissions.mode == owner.mode);
+    fs.CloseFile(file);
+    CHECK(fs.RemoveFile("~/TESTS/RENAMED") == 0);
+    CHECK(fs.SaveFile("~/TESTS/RENAMED", nullptr, 0, true) == 0);
+    file = fs.OpenFile("~/TESTS/RENAMED");
+    CHECK(file && file->GetPermissions().uid == 0 && file->GetPermissions().mode == 0644);
+    fs.CloseFile(file);
+    return 0;
+}
+
+TEST(storage_access_owner_group_other_and_traversal)
+{
+    MemoryDisk disk;
+    FAT32 fs(&disk, 0);
+    InitialiseFilesystems();
+    filesystems[0] = &fs;
+    FilePermissions permissions = {1001, 1002, 0640};
+    CHECK(fs.SaveFile("~/PRIVATE", "x", 1, true, &permissions) == 0);
+    HackosCredentials owner = {1001, 1000};
+    HackosCredentials group = {1003, 1002};
+    HackosCredentials other = {1004, 1000};
+    CHECK(PathAccess("~/PRIVATE", owner, 6));
+    CHECK(PathAccess("~/PRIVATE", group, 4));
+    CHECK(!PathAccess("~/PRIVATE", group, 2));
+    CHECK(!PathAccess("~/PRIVATE", other, 4));
+    other.groups[0] = 1002;
+    other.groupCount = 1;
+    CHECK(PathAccess("~/PRIVATE", other, 4));
+    CHECK(!PathAccess("~/PRIVATE", HackosCredentials{}, 1));
+    permissions.mode = 0700;
+    CHECK(fs.MakeDirectory("~/LOCKED", &permissions) == 0);
+    permissions.mode = 0666;
+    CHECK(fs.SaveFile("~/LOCKED/PUBLIC", "x", 1, true, &permissions) == 0);
+    CHECK(!PathAccess("~/LOCKED/PUBLIC", group, 4));
+    CHECK(PathAccess("~/LOCKED/PUBLIC", owner, 6));
+    CHECK(!PathAccess("~/LOCKED/NEW", group, 3, true));
+    return 0;
+}
+
+TEST(storage_sector_interruptions_replay_complete_transactions)
+{
+    // Cut every sector boundary, including journal payload, publication,
+    // home-sector replay and clean marker. An interrupted rename never exposes
+    // two owners for one data chain after remount.
+    for (unsigned operation = 0; operation < 3; ++operation)
+    {
+        for (int cut = 0; cut < 36; ++cut)
+        {
+            MemoryDisk disk;
+            {
+                FAT32 fs(&disk, 0);
+                disk.cutSectors = cut;
+                if (operation == 0)
+                {
+                    fs.SaveFile("~/TESTS/HELLO.TXT", "replacement", 11, false);
+                }
+                else if (operation == 1)
+                {
+                    fs.MoveFile("~/TESTS/HELLO.TXT", "~/MOVED");
+                }
+                else
+                {
+                    FilePermissions permissions = {1001, 1002, 0600};
+                    fs.SaveFile("~/CREATED", "complete", 8, true, &permissions);
+                }
+            }
+
+            disk.cutSectors = -1;
+            disk.powerLost = false;
+            FAT32 reopened(&disk, 0);
+            auto old = reopened.OpenFile("~/TESTS/HELLO.TXT");
+            if (operation == 0)
+            {
+                char bytes[16] = {};
+                CHECK(old && reopened.Read(old, bytes, sizeof(bytes)) == 0);
+                CHECK((old->GetSize() == 13 && test_equal(bytes, "Hello HackOS\n", 13)) ||
+                      (old->GetSize() == 11 && test_equal(bytes, "replacement", 11)));
+            }
+            else if (operation == 1)
+            {
+                auto moved = reopened.OpenFile("~/MOVED");
+                CHECK((old != nullptr) != (moved != nullptr));
+                if (moved)
+                {
+                    char bytes[13];
+                    CHECK(reopened.Read(moved, bytes, sizeof(bytes)) == 0);
+                    CHECK(test_equal(bytes, "Hello HackOS\n", 13));
+                    reopened.CloseFile(moved);
+                }
+            }
+            else
+            {
+                CHECK(old);
+                auto created = reopened.OpenFile("~/CREATED");
+                if (created)
+                {
+                    char bytes[8];
+                    CHECK(created->GetSize() == 8 && reopened.Read(created, bytes, 8) == 0);
+                    CHECK(test_equal(bytes, "complete", 8));
+                    auto permissions = created->GetPermissions();
+                    CHECK(permissions.uid == 1001 && permissions.gid == 1002 && permissions.mode == 0600);
+                    reopened.CloseFile(created);
+                }
+            }
+
+            if (old)
+            {
+                reopened.CloseFile(old);
+            }
+
+            CHECK(reopened.SaveFile("~/AFTER", "ok", 2, true) == 0);
+        }
+    }
+
+    return 0;
+}
+
+TEST(storage_corrupt_journal_and_permissions_fail_closed)
+{
+    for (unsigned fault = 0; fault < 3; ++fault)
+    {
+        MemoryDisk disk;
+        unsigned position = fault == 0 ? 8 * 512 : fault == 1 ? PERMISSION_START * 512 + 12 : 8 * 512 + 12;
+        disk.bytes[position] ^= 1;
+        FAT32 fs(&disk, 0);
+        CHECK(!fs.OpenFile("~/TESTS/HELLO.TXT"));
+        CHECK(fs.SaveFile("~/NEW", "x", 1, true) != 0);
+        CHECK(disk.writes == 0);
+    }
+
+    return 0;
+}
+
+TEST(storage_capacity_and_transaction_limit)
+{
+    MemoryDisk disk;
+    auto* boot = (FAT32_BootSector*)disk.bytes;
+    boot->LargeTotalSectors = disk.size / 512 + 1;
+    {
+        FAT32 fs(&disk, 0);
+        CHECK(!fs.OpenFile("~/TESTS/HELLO.TXT"));
+        CHECK(disk.writes == 0);
+    }
+
+    boot->LargeTotalSectors = disk.size / 512;
+    JournalDevice journal(&disk, 0, disk.size / 512);
+    CHECK(journal.Begin());
+    uint8_t sector[512] = {};
+    sector[0] = 42;
+    for (unsigned i = 0; i < JOURNAL_LIMIT; ++i)
+    {
+        CHECK(journal.Write(5000 + i, sector, 1));
+    }
+
+    CHECK(!journal.Write(5000 + JOURNAL_LIMIT, sector, 1));
+    CHECK(!journal.Finish(false));
+    CHECK(disk.writes == 0);
+    CHECK(journal.Begin());
+    CHECK(journal.Write(5000, sector, 1));
+    CHECK(journal.Finish(true));
+    CHECK(disk.bytes[5000 * 512] == 42);
+    return 0;
+}
+
+TEST(storage_flush_failures_freeze_and_recover)
+{
+    for (unsigned failure = 1; failure <= 4; ++failure)
+    {
+        MemoryDisk disk;
+        {
+            FAT32 fs(&disk, 0);
+            disk.failFlush = failure;
+            CHECK(fs.SaveFile("~/TESTS/HELLO.TXT", "replacement", 11, false) != 0);
+            unsigned writes = disk.writes;
+            CHECK(fs.SaveFile("~/AFTER", "bad", 3, true) != 0);
+            CHECK(disk.writes == writes);
+        }
+
+        disk.failFlush = 0;
+        FAT32 reopened(&disk, 0);
+        auto file = reopened.OpenFile("~/TESTS/HELLO.TXT");
+        char buffer[16] = {};
+        CHECK(file && reopened.Read(file, buffer, sizeof(buffer)) == 0);
+        CHECK(test_equal(buffer, "Hello HackOS\n", 13) || test_equal(buffer, "replacement", 11));
+        reopened.CloseFile(file);
+        CHECK(reopened.SaveFile("~/AFTER", "ok", 2, true) == 0);
+    }
+
+    return 0;
+}
+
+TEST(storage_directory_aliases_keep_names_and_permissions)
+{
+    MemoryDisk disk;
+    FAT32 fs(&disk, 0);
+    FilePermissions owner = {1001, 1002, 0700};
+    CHECK(fs.MakeDirectory("~/PRIVATE", &owner) == 0);
+    auto dot = fs.GetFile("~/PRIVATE", 0);
+    auto parent = fs.GetFile("~/PRIVATE", 1);
+    CHECK(dot && parent);
+    CHECK(test_name_equal(dot->GetName(), ".") && dot->GetPermissions().uid == 1001 &&
+          dot->GetPermissions().mode == 0700);
+    CHECK(test_name_equal(parent->GetName(), "..") && parent->GetPermissions().uid == 0 &&
+          parent->GetPermissions().mode == 0755);
+    fs.CloseFile(dot);
+    fs.CloseFile(parent);
+    auto alias = fs.CreateFile("~/PRIVATE", "SHORT~1", ARCHIVE);
+    CHECK(alias);
+    fs.CloseFile(alias);
+    alias = fs.OpenFile("~/PRIVATE/SHORT~1");
+    CHECK(alias);
+    fs.CloseFile(alias);
     return 0;
 }

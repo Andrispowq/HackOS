@@ -2,6 +2,7 @@
 #define FAT32_DEFS_H
 
 #include "lib/stdint.h"
+#include "fs/permissions.h"
 
 #define END_CLUSTER 0x0FFFFFF8
 #define BAD_CLUSTER 0x0FFFFFF7
@@ -122,6 +123,7 @@ struct DirEntry
     uint32_t size = 0;
     uint8_t attributes = 0;
 
+    FilePermissions permissions;
     uint32_t parentCluster = 0;
     uint32_t offsetInParentCluster = 0;
     // Locations of the validated on-disk records; these fields are not serialized.

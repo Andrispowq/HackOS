@@ -34,3 +34,7 @@ test-accounts:
 .PHONY: test-files
 test-files:
 	$(PYTHON) qemu_files.py --firmware $(FIRMWARE)
+
+.PHONY: test-storage
+test-storage:
+	$(PYTHON) qemu_storage.py --firmware $(FIRMWARE)

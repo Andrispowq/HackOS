@@ -8,6 +8,8 @@
 void* fopen(const char* path, int flags);
 int fread(void* buffer, int size, int n, void* file);
 int fwrite(void* buffer, int size, int n, void* file);
-void fclose(void* file);
+int fclose(void* file);
 
 #endif
+
+int fflush(void* file);

@@ -2,6 +2,7 @@
 #define FILESYSTEM_H
 
 #include "drivers/device/device.h"
+#include "permissions.h"
 
 #define MAX_FILESYSTEMS MAX_DEVICE_COUNT * 4
 
@@ -46,8 +47,14 @@ class ActiveFile
     virtual uint32_t GetAttributes() const = 0;
 
   public:
+    virtual FilePermissions GetPermissions() const
+    {
+        return {0, 0, 0};
+    }
+
     size_t seek_position = 0;
     size_t fs_index = -1;
+    uint32_t accessMode = 0;
 };
 
 class Filesystem
@@ -72,7 +79,7 @@ class Filesystem
         return file ? 0 : -1;
     }
 
-    virtual int MakeDirectory(const char* path)
+    virtual int MakeDirectory(const char* path, const FilePermissions* permissions = nullptr)
     {
         return -1;
     }
@@ -87,14 +94,15 @@ class Filesystem
         return -1;
     }
 
-    virtual int SaveFile(const char* path, const void* data, uint32_t size, bool create)
+    virtual int SaveFile(const char* path, const void* data, uint32_t size, bool create,
+                         const FilePermissions* permissions = nullptr)
     {
         return -1;
     }
 
     virtual ActiveFile* CreateFile(const char* path, const char* name, permissions_t permissions) = 0;
-    virtual void ResizeFile(ActiveFile* file, size_t newSize) = 0;
-    virtual void DeleteFile(ActiveFile* file) = 0;
+    virtual int ResizeFile(ActiveFile* file, size_t newSize) = 0;
+    virtual int DeleteFile(ActiveFile* file) = 0;
 
     virtual uint64_t GetDirectoryEntryCount(const char* path) = 0;
     virtual ActiveFile* GetFile(const char* path, uint64_t index) = 0;
@@ -104,6 +112,21 @@ class Filesystem
     virtual bool AccountStorage(uint64_t (&sectors)[2][16], Device*& storage)
     {
         return false;
+    }
+
+    virtual int SetPermissions(const char* path, const FilePermissions& permissions)
+    {
+        return -1;
+    }
+
+    virtual int Flush()
+    {
+        return -1;
+    }
+
+    virtual int DirectoryCount(const char* path, uint64_t& count)
+    {
+        return -1;
     }
 
     virtual int Read(ActiveFile* file, void* buffer, uint64_t size) = 0;

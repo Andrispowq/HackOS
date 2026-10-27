@@ -104,7 +104,7 @@ def build(firmware):
             assert efi[pe:pe+4] == b"PE\0\0" and struct.unpack_from("<H",efi,pe+4)[0] == 0x8664
             for name in ("/kernel.elf", "/EFI/BOOT/BOOTX64.EFI", "/startup.nsh"):
                 require_success(command(["mdir","-a","-i",fs_image,"::"+name]), "image file " + name)
-        for name in ("/UTIL/FONTS/zap-light16.psf", "/USR/BIN/usertest.elf", "/USR/BIN/test", "/USR/BIN/shell", "/USR/BIN/login", "/SYSTEM/ACCT0.DAT", "/SYSTEM/ACCT1.DAT", "/USR/BIN/ring3", "/USR/BIN/input", "/USR/BIN/window", *["/USR/BIN/" + name for name in ("help", "clear", "print", "ps", "kill", "ls", "wd", "cat", "read", "shutdown", "restart", "id", "whoami", "users", "groups", "useradd", "groupadd", "usermod", "runas", "passwd", "xxd", "mkdir", "rm", "mv", "edit")]):
+        for name in ("/UTIL/FONTS/zap-light16.psf", "/USR/BIN/usertest.elf", "/USR/BIN/test", "/USR/BIN/shell", "/USR/BIN/login", "/SYSTEM/ACCT0.DAT", "/SYSTEM/ACCT1.DAT", "/USR/BIN/ring3", "/USR/BIN/input", "/USR/BIN/window", *["/USR/BIN/" + name for name in ("help", "clear", "print", "ps", "kill", "ls", "wd", "cat", "read", "shutdown", "restart", "id", "whoami", "users", "groups", "useradd", "groupadd", "usermod", "runas", "passwd", "xxd", "mkdir", "rm", "mv", "edit", "chmod", "chown")]):
             require_success(command(["mdir","-a","-i",fs_image,"::"+name]), "image file " + name)
         shutil.copy2(image, directory/"HackOS.img")
         shutil.copy2(work/"kernel/bin/kernel.elf", directory/"kernel.elf")

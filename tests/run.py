@@ -17,7 +17,7 @@ SOURCES = [
     "common/src/bitmap.cpp", "kernel/src/memory/memory_map.cpp",
     "kernel/src/drivers/screen/framebuffer.cpp", "kernel/src/fs/filesystem.cpp",
     "kernel/src/fs/vfs.cpp", "kernel/src/fs/fat32/fat32.cpp",
-    "kernel/src/fs/fat32/fat32driver.cpp",
+    "kernel/src/fs/fat32/fat32driver.cpp", "kernel/src/fs/storage/journal.cpp", "kernel/src/fs/permissions.cpp",
     "boot/BIOS/stage_2/src/libc/memory.c", "boot/BIOS/stage_2/src/libc/string.c",
     "libs/libc/src/string.cpp",
     "common/src/split.c", "kernel/src/proc/user/address_space.cpp", "kernel/src/proc/user/accounts.cpp", "kernel/src/proc/user/account_store.cpp", "kernel/src/security/crypto.cpp",
@@ -99,9 +99,9 @@ def compile_host(directory, sanitizers):
 
 def fat_fixture(directory):
     image = directory/"fat-fixture.img"
-    with image.open("wb") as f:
-        f.truncate(93750*512)
-    require_success(command(["mformat","-i",image,"-F","::"]), "format FAT fixture")
+    sys.path.insert(0, str(ROOT / "tools"))
+    from storage_image import format_volume
+    format_volume(image)
     require_success(command(["mmd","-i",image,"::/TESTS"]), "create fixture directory")
     for name, data in [("HELLO.TXT", b"Hello HackOS\n"), ("PATTERN.BIN",bytes((i*17+3)%256 for i in range(8193))),
                        ("Long file name.txt",b"Long name\n"),("EMPTY.TXT",b"")]:
@@ -113,6 +113,9 @@ def fat_fixture(directory):
     source.write_bytes(bytes(8192))
     for slot in (0, 1):
         require_success(command(["mcopy", "-i", image, source, f"::/SYSTEM/ACCT{slot}.DAT"]), "account fixture")
+    sys.path.insert(0, str(ROOT / "tools"))
+    from storage_image import provision
+    provision(image, initialize=True)
     return image
 
 

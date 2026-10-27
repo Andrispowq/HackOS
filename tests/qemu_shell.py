@@ -105,6 +105,8 @@ def test(firmware, timeout):
             require_success(command(["mcopy", "-i", fs_image, fixture, "::/LSCHECK/" + name]), "listing fixture")
         require_success(command(["mattrib", "-i", fs_image, "+h", "::/LSCHECK/SECRET.TXT"]), "hidden fixture")
         require_success(command(["mattrib", "-i", fs_image, "+r", "::/LSCHECK/VISIBLE.TXT"]), "readonly fixture")
+        from session import provision_imports
+        provision_imports(image, firmware)
         with tempfile.TemporaryDirectory(prefix="hackos-shell-") as temporary:
             temporary = Path(temporary)
             qmp_path, gdb_path = temporary/"qmp", temporary/"gdb"
@@ -227,9 +229,9 @@ bp.delete()
                         listing = output()[listing_offset:]
                         assert ".DOTFILE" in listing and "SUBDIR/" in listing
                         if "l" in flags:
-                            assert "TYPE ATTR       BYTES NAME" in listing
-                            assert re.search(r"^-[ ]+r--a[ ]+3 VISIBLE.TXT$", listing, re.M)
-                            assert re.search(r"^-[ ]+-h-a[ ]+3 SECRET.TXT$", listing, re.M)
+                            assert "MODE       UID GID ATTR       BYTES NAME" in listing
+                            assert re.search(r"^-rw-r--r-- 0 0 r--a[ ]+3 VISIBLE.TXT$", listing, re.M)
+                            assert re.search(r"^-rw-r--r-- 0 0 -h-a[ ]+3 SECRET.TXT$", listing, re.M)
                     listing_offset = len(output())
                     enter("ls -l /LSCHECK", "VISIBLE.TXT")
                     assert "SECRET.TXT" not in output()[listing_offset:]

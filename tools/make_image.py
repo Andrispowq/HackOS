@@ -4,6 +4,7 @@ import argparse
 from pathlib import Path
 import subprocess
 import tempfile
+from storage_image import provision, format_volume
 
 ROOT = Path(__file__).resolve().parents[1]
 
@@ -22,10 +23,8 @@ def package(firmware):
         subprocess.run([command, '-i', str(fat), *map(str, args)], check=True)
     with tempfile.TemporaryDirectory(prefix='image-', dir=output) as temporary:
         fat = Path(temporary) / 'fat.img'
-        with fat.open('wb') as f:
-            f.truncate(93750 * 512)
-        mtool('mformat', '-F', '::')
-        for name in ('SYSTEM', 'USR', 'USR/BIN', 'UTIL', 'UTIL/FONTS'):
+        format_volume(fat)
+        for name in ('TMP', 'SYSTEM', 'USR', 'USR/BIN', 'UTIL', 'UTIL/FONTS'):
             mtool('mmd', '::/' + name)
         for source, dest in [('util/fonts/zap-light16.psf', 'UTIL/FONTS/zap-light16.psf'),
                              ('util/usertest/usertest.elf', 'USR/BIN/usertest.elf'),
@@ -35,7 +34,7 @@ def package(firmware):
                              ('libs/ring3/bin/ring3', 'USR/BIN/ring3'),
                              ('libs/shell/bin/shell', 'USR/BIN/shell'), ('libs/login/bin/login', 'USR/BIN/login'), ('hello.txt', 'USR/hello.txt')]:
             mtool('mcopy', ROOT / source, '::/' + dest)
-        for name in ('help', 'clear', 'print', 'ps', 'kill', 'ls', 'wd', 'cat', 'read', 'shutdown', 'restart', 'id', 'whoami', 'users', 'groups', 'useradd', 'groupadd', 'usermod', 'runas', 'passwd', 'xxd', 'mkdir', 'rm', 'mv', 'edit'):
+        for name in ('help', 'clear', 'print', 'ps', 'kill', 'ls', 'wd', 'cat', 'read', 'shutdown', 'restart', 'id', 'whoami', 'users', 'groups', 'useradd', 'groupadd', 'usermod', 'runas', 'passwd', 'xxd', 'mkdir', 'rm', 'mv', 'edit', 'chmod', 'chown'):
             mtool('mcopy', ROOT / 'libs/commands/bin' / name, '::/USR/BIN/' + name)
         empty_accounts = Path(temporary) / 'accounts.dat'
         empty_accounts.write_bytes(bytes(8192))
@@ -60,6 +59,7 @@ def package(firmware):
                 with fat.open('rb') as source:
                     while data := source.read(1024 * 1024):
                         f.write(data)
+        provision(image, 846 * 512 if firmware == 'bios' else 0, initialize=True)
         image.replace(output / 'HackOS.img')
     print(f'Built {output / "HackOS.img"} ({firmware})')
 

@@ -23,3 +23,11 @@ def setup_and_login(qmp, output, wait_for):
     qmp.type(TEST_PASSWORD + "\n")
     wait_text("root@root:~$ ", offset)
     assert TEST_PASSWORD not in output(), "Password leaked to console/debug output"
+
+
+def provision_imports(image, firmware):
+    import sys
+    from common import ROOT
+    sys.path.insert(0, str(ROOT / 'tools'))
+    from storage_image import provision
+    provision(image, 846 * 512 if firmware == 'bios' else 0)

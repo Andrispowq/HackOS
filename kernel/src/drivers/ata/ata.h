@@ -9,3 +9,5 @@ bool WriteSectorsATA(uint32_t LBA, uint8_t sector_count, uint16_t* bytes);
 bool FlushATA();
 
 #endif
+
+uint64_t IdentifyATA();

@@ -1,110 +1,138 @@
 # Filesystems
 
-[System index](index.md) · [Storage devices](devices.md)
+[System index](index.md) · [Storage devices](devices.md) · [User ABI](userspace.md)
 
-File access passes through the VFS, the `Filesystem`/`ActiveFile` interfaces,
-the FAT32 adapter, and finally a block `Device`.
-
-```mermaid
-flowchart LR
-    Caller[Kernel or syscall caller] --> VFS[VFS functions]
-    VFS --> FS[Filesystem and ActiveFile]
-    FS --> FAT[FAT32 adapter]
-    FAT --> Driver[FAT32Driver]
-    Driver --> Device[Device: ATA or AHCI]
-```
+File access passes through the VFS or the process-owned syscall handles, the
+`Filesystem`/`ActiveFile` interfaces, the FAT32 driver, and a journal overlay over
+its block `Device`. The account store retains its separate two-slot protocol.
 
 ## Mounting and paths
 
-[LocateFilesystemsFAT32](../../kernel/src/fs/fat32/fat32.cpp) scans the relocated
-BIOS MBR for type `0x0B` partitions. UEFI assumes a FAT32 volume at LBA 0, matching
-the generated images. The driver honors the partition offset supplied by this
-discovery layer. Selecting a device/partition beyond these boot assumptions still
-needs work.
+BIOS discovery still reads the relocated boot MBR at `0x0600`; UEFI assumes a
+volume at LBA 0. Device/partition selection remains a separate backlog item.
+The BPB is checked against the device's reported 512-byte sector capacity before
+journal recovery or allocation. Sector size, FAT capacity, cluster size/count,
+root cluster, and active/mirrored FAT selection are validated.
 
-The VFS translates `fs12:/USR/FILE` to `~/USR/FILE` on filesystem 12. It checks
-the decimal volume index, path prefix, failed opens, null handles and registry
-bounds before dispatch. The shell and ELF loader also use `~/...` directly
-against `filesystems[0]`.
+Images require the version-1 HackOS storage extension in 512 FAT reserved
+sectors. Earlier images and ordinary FAT volumes fail closed; they are not
+silently assigned public ownership. Rebuild to create the new format. The
+existing account-preserving rebuild can copy accounts from an older image;
+other guest files and permission changes are not preserved by a rebuild.
+The BIOS partition start and boot payload reservations are unchanged.
 
-The returned `void*` is an `ActiveFile` object pointer. Null/index checks do not
-make arbitrary pointers safe; these handles are not a protected userspace API.
-Access-mode enforcement for `O_READ` and `O_WRITE` is also unfinished.
+Names are bounded ASCII, case-insensitive, and paths are canonicalized before
+userspace access checks. Long names have at most 127 bytes; invalid LFN order or
+checksum falls back to the short record. Chains are range/cycle checked. There
+are no links, recursive deletion, directory moves, or cross-volume user moves.
 
-## File I/O contract
+## Ownership and access
 
-`fread`/`fwrite` return a status code, not a stdio element count: zero means
-success and a negative result indicates failure. FAT32 reads clamp to EOF and
-advance the seek position only by the bytes actually read. A read starting past
-EOF succeeds without changing the buffer or position. Writes advance on success,
-grow the file when needed, and preserve bytes outside the written range.
+FAT attributes remain separate from permissions. Each ordinary directory entry
+has a mandatory record keyed by its physical short-entry cluster and slot;
+root has key `(0, 0)`. A record stores UID, GID and nine owner/group/other `rwx`
+bits. Missing, corrupt or duplicate matching metadata denies access. Creation,
+rename, deletion and ownership changes update these records in the same journal
+transaction as the FAT/directory changes. Replacing file contents preserves its
+ownership. Deletion clears the record before its slot can be reused.
 
-New regular files start empty. Resizing to zero releases the entire chain;
-growth zeroes newly exposed bytes, including gaps before a seeked write.
-Read-only FAT entries reject modification. File sizes remain limited to FAT32's
-32-bit size field. The common resize/delete API still returns `void`, so callers
-cannot observe every failed metadata operation through that interface.
+Packaged files belong to UID/GID 0. Directories and `/usr/bin` executables have
+mode 0755, other files 0644. `/tmp` is 0777. New files are 0644 and new directories
+0755, owned by the creating process's UID and primary GID. There is no umask,
+sticky bit, setuid/setgid, ACL or per-user home creation. In particular, `/tmp`
+is shared: its directory permissions allow users to remove each other's files.
 
-## FAT32 structures
+The kernel checks search (`x`) on ancestors, `r` to read files, `w` to replace or
+open for writing, and `r+x` to enumerate directories or load programs. `chdir`
+requires search. Create/unlink/rename require `w+x` on the relevant parent(s).
+`stat` requires ancestor search. The owner's class wins over group/other;
+primary and supplementary groups participate in group checks. Root bypasses
+access bits except that a program must have at least one execute bit. A file
+with the FAT read-only flag rejects content changes, resizing, removal and
+rename even for root; changing its mode does not clear that FAT flag.
 
-[FAT32Driver](../../kernel/src/fs/fat32/fat32driver.cpp) validates the BPB before
-allocating buffers: signatures, 512-byte sector size, power-of-two cluster size,
-FAT count/capacity, data extent, root cluster, and active FAT selection. The
-block-device API currently has no capacity query, so it cannot yet validate the
-claimed volume extent against the actual device size.
+`chmod <octal-mode> <path>` requires the owner or root; `chown <user> <group>
+<path>` requires root and registered IDs. Root mode is fixed at 0755 through the
+user interface. Account payloads remain inaccessible to all user programs and
+`/SYSTEM` mutations remain forbidden. Mode/ownership changes and path mutations
+reject live handles, so an open descriptor's metadata never changes underneath
+it. `ls -l` shows the actual mode, numeric UID/GID, FAT attributes and size.
 
-Cluster chains are range-checked and cyclic chains are rejected. Allocation
-zeroes new clusters and rolls back a partial allocation when space runs out.
-The directory walker processes records in disk order, including long names
-crossing cluster boundaries. Long-name order and checksum must agree with the
-following short record; invalid or unsupported names fall back to their 8.3
-alias. Lookup is case-insensitive for ASCII.
+## Handles and checked I/O
 
-The public name buffer supports up to 127 ASCII bytes. Creation validates names,
-generates unique 8.3 aliases when needed, and extends directory chains. Full
-Unicode/255-character FAT names remain unsupported. Each open entry records its
-actual directory locations so updates and deletion touch the right records.
-Directory deletion requires an empty directory; it does not recursively follow
-potentially corrupt directory graphs.
+Userspace gets eight process-owned, nontransferable handles. `open` remains
+read-only. `open_mode` adds read/write/create flags; readers can share, while a
+writer excludes every other opener. `file_write` accepts at most 512 bytes,
+`seek` is absolute and bounded to 32 KiB, and growth zero-fills gaps. Unknown
+flags, foreign/stale handles and invalid buffers fail before mutation. Handle
+creation reserves capacity before creating a file. Exit/kill/fault reap handles.
+Each write commits before success; `flush` is an explicit durability/error
+boundary. Closing a writer flushes and releases it even if flushing fails.
 
-## Persistence and limits
+The internal `fsN:/...` VFS also uses bounded opaque tokens, rejects unknown
+modes and stale/arbitrary tokens, enforces `O_READ`/`O_WRITE`, and requires write
+access for `O_CREAT`. It creates only on an explicit missing result, not after
+an I/O failure. `fread`/`fwrite`, checked resize/delete, `fflush` and `fclose`
+return status (zero success, negative failure), rather than stdio byte counts.
+Direct kernel `ActiveFile` users must still manage object lifetime; these
+internal interfaces are not exposed as pointers to userspace. DirectoryCount
+separates enumeration failure from an empty directory.
 
-Data and directory changes are written through the block interface. Allocation
-changes flush the cached FAT to the configured active/mirrored copies and mark
-FSInfo free-space hints unknown. The destructor flushes any remaining dirty FAT;
-read-only mounts do not rewrite boot sectors. Host mutation tests save the image
-and read it with mtools to check the persisted representation independently.
+## Journal and flush contract
 
-`Device::Read`/`Write` now return completion status, and `Flush` reports cache
-flush success. The account store checks every operation, validates separate
-preallocated FAT chains, and alternates two checksummed generations; see
-[accounts](accounts.md). BPB/FAT reads and account directory reads propagate
-failures. The step-15 `Lookup`, `SaveFile`, `MakeDirectory`, `RemoveFile` and
-`MoveFile` interfaces return checked status through the userspace ABI. Directory,
-data, FAT and FSInfo I/O failures are latched; subsequent filesystem operations
-fail until remount, preventing continued use of uncertain cached metadata.
-Successful mutations require a device flush. The older void resize/delete and
-raw VFS interfaces are still internal and require further hardening.
+Every FAT mutation, including the older resize/delete/descriptor paths, runs in
+one bounded sector overlay. Reads see staged sectors; unchanged FAT sectors do
+not consume journal capacity. Failed validation, full media, a full permission
+table, or exceeding 256 changed sectors discards the overlay and reloads the FAT.
+No staged changes reach home sectors. Whole-file saves remain bounded to 32 KiB.
 
-Whole-file saves allocate and populate a fresh chain, flush it, publish its
-metadata, flush again, and only then release the old chain. Allocation and
-payload-write failures do not truncate the existing file. A failure after
-publication can leave either complete version visible and can leak clusters;
-an error is never reported as a successful save. File deletion removes the
-short entry before its long-name records and flushes before freeing data.
-Rename publishes and flushes the new name before removing the old one and
-never overwrites a destination. It is not an atomic transaction: interruption
-or a metadata I/O failure can leave both names referencing the same chain.
-Such a volume needs offline checking/repair before further writes. Torn sectors,
-crash recovery, journaling and general rollback remain deferred to storage
-hardening.
+Commit writes the address table and full new sector contents, flushes, writes a
+checksummed prepared header, flushes, replays the home sectors, flushes, then
+writes a clean header and flushes again. Success therefore means both data and
+metadata reached the device's declared flush boundary. An I/O or flush failure
+freezes the mount. A reported failure after publication may still commit on
+reboot; callers must inspect the file after recovery rather than assume rollback.
 
-The syscall dispatcher serializes mutations and rejects paths held by any
-process-owned read handle, avoiding stale cluster/size snapshots. Kernel users
-of raw `ActiveFile` objects must still manage their own lifetime. No filesystem
-UID/GID permissions are introduced.
+Mount validates a prepared journal's header, payload hash, unique targets and
+volume bounds before replaying anything. Replay is idempotent and completes
+before loading the FAT or permissions. Interruption before publication leaves
+the old filesystem; interruption afterwards replays the complete new state.
+Rename cannot leave two names sharing a chain after successful recovery. This
+contract relies on honest device completion/flush results. A torn or corrupted
+journal header/payload fails closed and requires offline recovery; the system
+does not promise repair of arbitrary corruption or external filesystem edits.
 
-Use disposable images for write experiments. Normal Docker/QEMU runs save guest
-writes; pass `--snapshot` for an ephemeral overlay. Docker rebuilds preserve only
-the two account files, while direct packaging produces a fresh filesystem.
-See [testing](../development/testing.md) and [TODO](../TODO.md).
+### Version-1 layout
+
+All locations below are relative to the FAT volume and all integers are little
+endian. The 48,000,000-byte data partition remains the same size.
+
+| Sector(s) | Contents |
+| --- | --- |
+| 0–7 | Standard boot sector, FSInfo and backups |
+| 8 | 512-byte journal header |
+| 9–12 | 256 absolute 64-bit target LBAs; unused addresses zero |
+| 13–268 | Up to 256 complete replacement sectors |
+| 269–271 | Reserved |
+| 272–399 | 2048 fixed 32-byte permission records, including root |
+| 400–511 | Reserved |
+
+The header has magic `HKFSJ016`, uint32 version 1 and count, a 32-byte SHA-256
+of the entire address table plus `count` payload sectors, then a 32-byte SHA-256
+of the header with only its own checksum zeroed. Remaining header bytes are
+zero. Count zero denotes clean, with a zero payload digest. Targets may be
+FSInfo sectors 1/7, permission sectors, or FAT/data sectors; never the boot or
+journal sectors.
+
+Permission records contain eight uint32 fields: tag `0x36315048`, parent
+cluster, slot, UID, GID, mode, zero reserved, and FNV-1a over the first 28 bytes.
+An unused record is entirely zero. Checksums detect corruption, not malicious
+offline alteration; this is not encryption or authenticated storage.
+
+`tools/storage_image.py` provisions fresh images and controlled test imports.
+To support older mtools, it formats a smaller volume with 32 reserved sectors,
+inserts 480 sectors before the FATs and updates both BPBs without changing
+cluster indices. Ordinary mtools reads remain useful for independent checking.
+External writes can invalidate ownership keys or bypass recovery and are not a
+supported way to edit a used HackOS filesystem. Never clear a dirty journal or
+reinitialize metadata to hide corruption. Use disposable images for tests.

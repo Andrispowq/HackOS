@@ -83,7 +83,7 @@ accounts, authentication and setup are addressed in step 14.
 
 ## Proposed continuation after step 14
 
-Steps 1–15 are complete. The order below is a proposal for future iterations,
+Steps 1–16 are implemented. The order below is a proposal for future iterations,
 not authorization to implement them automatically. A fresh chat should read
 `AGENTS.md`, this file, `docs/system/userspace.md`, and the build/testing guides
 before starting. Preserve the root `.clang-format` style, leave vendored code
@@ -112,20 +112,23 @@ alone, and verify both BIOS and UEFI for each implementation step.
     remain process-owned. BIOS/UEFI disposable-image tests cover invalid paths,
     conflicts, editor input, exact bytes after reboot, disk errors and cleanup.
     See [userspace](system/userspace.md), [filesystems](system/filesystems.md) and
-    [testing](development/testing.md). Journaling, interrupted-update recovery,
-    general descriptor writes and filesystem permissions remain in step 16.
+    [testing](development/testing.md). Step 16 adds journaling, interrupted-update recovery, bounded descriptor
+    writes and persistent filesystem permissions.
 
-16. **Storage and filesystem permissions:** harden checked write/create APIs,
-    process-owned handles and access-mode enforcement. Propagate device, FAT32
-    and VFS errors and provide a flush contract. Test full disks, failed writes,
-    reboot persistence and interrupted updates on disposable images. Define
-    filesystem ownership/permission storage before claiming Unix-style file
-    permissions; FAT attributes alone are insufficient.
+16. **Storage and filesystem permissions — implemented:** checked device capacity,
+    VFS mode/token validation, process-owned exclusive writers, bounded writes,
+    seek and flush. A versioned reserved-sector permission table stores UID/GID
+    and mode separately from FAT attributes. Creation, rename, removal and mode
+    changes share the bounded redo journal with FAT/data changes. Kernel checks
+    traversal, read/write/execute and parent-directory access; `chmod`, `chown`
+    and `ls -l` expose the model. Host and BIOS/UEFI disposable-image tests cover
+    failure/full-volume behavior, persistence and interrupted journal recovery.
+    See [storage contracts and limits](system/filesystems.md).
 17. **Userspace usability:** blocking terminal input, job/process-group control,
     a user heap, remaining runtime helpers and shell completion. Split this into
     smaller iterations as needed.
 
-The remaining subsystem lists below are the broader hardening backlog. Step 16
+The remaining subsystem lists below are the broader hardening backlog. Step 17
 and later work require a new request.
 Step 14 host validation passed 163 checks under UBSan, plus boot-asset and
 BIOS-chain checks. The local translated ASan runtime fails its empty-program
@@ -169,18 +172,21 @@ future changes; prior results are not a substitute.
 
 ## Storage and filesystems
 
-- [ ] Add a `Device` capacity query and propagate its checked I/O/flush results
-  through all FAT32/VFS operations, including legacy resize/delete. Step 15
-  checks the bounded user mutation path; crash recovery, general rollback and
-  the older raw VFS interfaces remain incomplete.
+- [x] Add device capacity and checked I/O/flush propagation, including resize/delete,
+  bounded journal recovery and VFS mode/token checks (step 16).
 - [ ] Discover partitions from each selected device rather than relying on the
   boot MBR, a fixed device index or an unpartitioned UEFI volume.
-- [ ] Test media faults, full volumes, fragmented files, remounts and dirty
-  shutdowns. FAT writes are not atomic or journaled.
-- [ ] Define metadata lifetime and synchronization for multiple open handles.
+- [x] Test media faults, full volumes, remounts and interrupted journal updates
+  (step 16).
+- [ ] Expand fragmented/corrupt-media coverage and offline repair tooling beyond
+  the bounded journal and checked chain traversal.
+- [x] Define shared readers/exclusive writers and reject path/permission mutations
+  while process-owned handles are live. Trusted raw kernel objects still require
+  explicit lifetime management.
 - [ ] Add Unicode/longer filename support and more malformed LFN fixtures.
-- [ ] Audit AHCI DMA sizes/address translation and ATA sector-count narrowing.
-- [ ] Enforce VFS access modes and replace raw object pointers with owned handles.
+- [x] Bound AHCI DMA chunks, split ATA transfers and reject capacity/count overflow.
+- [ ] Expand real-hardware controller recovery and DMA setup audits.
+- [x] Enforce VFS modes with opaque tokens and extend process-owned handles to writes.
 
 ## Userspace and scheduling
 

@@ -154,6 +154,7 @@ class Port
     bool Read(uint64_t LBA, void* buffer, uint32_t sectorCount);
     bool Write(uint64_t LBA, void* buffer, uint32_t sectorCount);
     bool Flush();
+    uint64_t Identify();
 
   private:
     bool Transfer(uint8_t command, uint64_t lba, void* buffer, uint32_t sectors);
@@ -182,9 +183,11 @@ class AHCIDevice : public Device
     virtual bool Read(uint64_t LBA, void* buffer, uint64_t size) override;
     virtual bool Write(uint64_t LBA, void* buffer, uint64_t size) override;
     bool Flush() override;
+    uint64_t SectorCount() const override;
 
   private:
     Port* port;
+    uint64_t sectors = 0;
 };
 
 class AHCIDriver

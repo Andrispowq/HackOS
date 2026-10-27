@@ -31,8 +31,11 @@ IRQ context to a safe scheduler point. Shell history is a static 256-command rin
 Step-15 `xxd`, `mkdir`, `rm`, `mv` and `edit` are standalone programs. Whole-file
 reads/editor saves are bounded to 32 KiB; Ctrl+S saves and Ctrl+X exits without
 saving. Mutations use checked filesystem methods, reject open/read-only paths
-and protect `/SYSTEM`; `mv` never overwrites and handles files only. FAT updates
-are not journaled or crash-atomic; see `docs/system/filesystems.md`.
+and protect `/SYSTEM`; `mv` never overwrites and handles files only. Step 16 adds persistent UID/GID/mode metadata, owner/root `chmod`, root-only
+`chown`, exclusive writable handles, checked seek/write/flush and bounded redo
+journaling. `/tmp` is shared writable storage; new files/directories use
+0644/0755. Recovery replays prepared transactions before mounting; corrupt
+journals fail closed. See `docs/system/filesystems.md` for the format and limits.
 Userspace windows use process-owned handles and bounded pixel uploads; idle
 reclaims them on exit and composites them over the console. `USR/BIN/WINDOW`
 is the standalone demo. Idle dispatches ordered keyboard/mouse ingress, focus
@@ -143,9 +146,9 @@ in the kernel; command parsing and line editing run in the ring-3 shell.
 - For boot changes, test BIOS and UEFI separately in QEMU using the existing
   `q35` device topology. Check ELF class, machine, entry point, and load segments
   with target `readelf`, and compare BIOS payload sizes to the table above.
-  Run `tests/qemu_accounts.py`, `tests/qemu_shell.py`, `tests/qemu_user.py` and
-  `tests/qemu_windows.py` with `--firmware bios` and `--firmware uefi` after fresh
-  image builds for interactive input, ABI, register-state and task-lifecycle checks.
+  Run `tests/qemu_accounts.py`, `tests/qemu_shell.py`, `tests/qemu_user.py`,
+  `tests/qemu_windows.py`, `tests/qemu_files.py` and `tests/qemu_storage.py` with
+  `--firmware bios` and `--firmware uefi` after fresh image builds for interactive input, ABI, register-state and task-lifecycle checks.
   Use a disposable image for FAT32 write tests and a copied OVMF VARS file.
 - Screen output is graphical; `-nographic` alone does not expose the framebuffer
   as a text console. Use a graphical QEMU window or VNC for visual smoke checks.

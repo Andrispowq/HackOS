@@ -442,3 +442,40 @@ checks every byte of a 32 KiB file independently. Both editor framebuffer captur
 and ELF headers/load segments were inspected. The stripped BIOS kernel is
 171,528 bytes within the unchanged 393,216-byte reservation. Formatting and
 workflow lint checks passed. Full ASan remains a native x86-64 CI requirement.
+
+
+## Storage hardening and permission regressions
+
+`python3 tests/qemu_storage.py --firmware bios` (or `uefi`), also exposed as
+`make -C tests test-storage FIRMWARE=bios`, uses disposable disks and copied
+OVMF variables. STORPROBE checks owner/group/other access, directory traversal,
+execution rejection, mode/ownership changes, protected files, exclusive writers,
+stale/foreign handles, handle-table exhaustion, invalid buffers/flags, gap zeroing and
+rebooted bytes/metadata. The harness uses GDB to stop after a prepared rename
+journal is durable, kills QEMU, and boots again to verify replay and a single
+surviving name. A full-volume fixture checks editor failure with its buffer
+retained and existing data intact. Screenshots and independent mtools reads
+accompany both firmware reports under `tests/out/qemu-storage-{bios,uefi}`.
+
+Host checks cut every sector boundary of save/create/rename transactions, fail
+each flush barrier, reject corrupt metadata/journals and device extents, exhaust
+the journal overlay, check metadata ownership across rename/save/delete/reuse,
+and exercise VFS access modes and stale/arbitrary tokens. The full-directory
+fixture creates valid permission records before exhausting its allocation space.
+Malformed metadata must not be mistaken for an ordinary full-volume failure.
+Guest fixture import helpers add records only to clean disposable test images;
+production used volumes must not be edited by external tools.
+
+The step-16 file-info ABI is 288 bytes; all guest programs are rebuilt. The
+non-root editor test now writes under `/tmp`, since root-owned `/` is 0755.
+The shell listing tests check actual mode/UID/GID alongside FAT attributes.
+
+Step 16 local validation passed 180 UBSan host checks, five boot-asset checks,
+the BIOS loader-chain probe, fresh BIOS/UEFI builds and all seven QEMU suites
+(boot, storage, accounts, shell, isolated programs, windows and file/editor) on
+both firmware paths. The stripped kernel is 192,240 bytes in the unchanged
+393,216-byte BIOS slot. ELF headers/load segments and storage/editor framebuffer
+captures were inspected. Both account slots survived an old-format preserving
+rebuild byte for byte. Formatting (18.1.8), workflow lint and Compose checks
+passed. The final report set is `tests/out/step16-final/validation.json`; full
+ASan+UBSan remains required on native x86-64 CI.

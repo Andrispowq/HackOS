@@ -60,12 +60,21 @@ uint32_t FAT32_ActiveFile::GetAttributes() const
 
 FAT32::FAT32(Device* device, uint32_t part_start) : Filesystem(device, part_start)
 {
-    driver = new FAT32Driver(device, part_start);
+    backing = device;
+    start = part_start;
+    FAT32_BootSector boot = {};
+    uint32_t sectors =
+        device && device->Read(part_start, &boot, 1) && ValidateFAT32BootSector(boot, part_start, device->SectorCount())
+            ? (boot.TotalSectors ? boot.TotalSectors : boot.LargeTotalSectors)
+            : 0;
+    journal = new JournalDevice(device, part_start, sectors);
+    driver = new FAT32Driver(journal, part_start);
 }
 
 FAT32::~FAT32()
 {
     delete driver;
+    delete journal;
 }
 
 ActiveFile* FAT32::OpenFile(const char* path)
@@ -86,9 +95,19 @@ int FAT32::Lookup(const char* path, ActiveFile*& result)
     }
 
     char* ptr = new char[strlen((char*)path) + 1];
+    if (!ptr)
+    {
+        return -1;
+    }
+
     strcpy(ptr, (char*)path);
 
     FAT32_ActiveFile* file = new FAT32_ActiveFile();
+    if (!file)
+    {
+        delete[] ptr;
+        return -1;
+    }
     file->seek_position = 0;
     file->path = ptr;
     file->entry = entry;
@@ -97,24 +116,44 @@ int FAT32::Lookup(const char* path, ActiveFile*& result)
     return 0;
 }
 
-int FAT32::MakeDirectory(const char* path)
+int FAT32::MakeDirectory(const char* path, const FilePermissions* permissions)
 {
-    return driver->MakeDirectory(path);
+    if (!journal->Begin())
+    {
+        return -1;
+    }
+
+    return Finish(driver->MakeDirectory(path, permissions));
 }
 
 int FAT32::RemoveFile(const char* path)
 {
-    return driver->RemoveFile(path);
+    if (!journal->Begin())
+    {
+        return -1;
+    }
+
+    return Finish(driver->RemoveFile(path));
 }
 
 int FAT32::MoveFile(const char* source, const char* destination)
 {
-    return driver->MoveFile(source, destination);
+    if (!journal->Begin())
+    {
+        return -1;
+    }
+
+    return Finish(driver->MoveFile(source, destination));
 }
 
-int FAT32::SaveFile(const char* path, const void* data, uint32_t size, bool create)
+int FAT32::SaveFile(const char* path, const void* data, uint32_t size, bool create, const FilePermissions* permissions)
 {
-    return driver->SaveFile(path, data, size, create);
+    if (!journal->Begin())
+    {
+        return -1;
+    }
+
+    return Finish(driver->SaveFile(path, data, size, create, permissions));
 }
 
 void FAT32::CloseFile(ActiveFile* file)
@@ -144,7 +183,13 @@ ActiveFile* FAT32::CreateFile(const char* path, const char* name, permissions_t 
     entry.cluster = 0;
     entry.attributes = attributes;
     entry.size = size;
-    int ret = driver->CreateFile(path, &entry);
+    entry.permissions.mode = attributes & DIRECTORY ? 0755 : 0644;
+    if (!journal->Begin())
+    {
+        return nullptr;
+    }
+
+    int ret = Finish(driver->CreateFile(path, &entry));
 
     if (ret != 0)
     {
@@ -155,35 +200,61 @@ ActiveFile* FAT32::CreateFile(const char* path, const char* name, permissions_t 
     size_t fnameLen = strlen((char*)name);
     size_t total = pathLen + fnameLen + 2;
     char* ptr = new char[total];
+    if (!ptr)
+    {
+        return nullptr;
+    }
+
     memcpy(ptr, path, pathLen);
     ptr[pathLen] = '/';
     memcpy(&ptr[pathLen + 1], name, fnameLen);
     ptr[pathLen + 1 + fnameLen] = 0;
 
     FAT32_ActiveFile* file = new FAT32_ActiveFile();
+    if (!file)
+    {
+        delete[] ptr;
+        return nullptr;
+    }
+
     file->path = ptr;
     file->entry = entry;
 
     return (ActiveFile*)file;
 }
 
-void FAT32::ResizeFile(ActiveFile* file, uint64_t new_size)
+int FAT32::ResizeFile(ActiveFile* file, uint64_t new_size)
 {
-    if (!file || new_size > 0xffffffff)
+    if (!file || new_size > 0xffffffff || !journal->Begin())
     {
-        return;
+        return -1;
     }
 
-    if (driver->ResizeFile(((FAT32_ActiveFile*)file)->entry, new_size) == 0)
+    auto& entry = ((FAT32_ActiveFile*)file)->entry;
+    auto original = entry;
+    int status = Finish(driver->ResizeFile(entry, new_size));
+    if (!status)
     {
         file->seek_position = 0;
     }
+    else
+    {
+        entry = original;
+    }
+
+    return status;
 }
 
-void FAT32::DeleteFile(ActiveFile* file)
+int FAT32::DeleteFile(ActiveFile* file)
 {
-    driver->DeleteFile(((FAT32_ActiveFile*)file)->entry);
+    if (!file || !journal->Begin())
+    {
+        return -1;
+    }
+
+    int status = Finish(driver->DeleteFile(((FAT32_ActiveFile*)file)->entry));
     CloseFile(file);
+    return status;
 }
 
 uint64_t FAT32::GetDirectoryEntryCount(const char* path)
@@ -218,12 +289,24 @@ ActiveFile* FAT32::GetFile(const char* path, uint64_t index)
         size_t totalLen = pathlen + namelen + 1;
 
         char* totalPath = new char[totalLen + 1];
+        if (!totalPath)
+        {
+            return nullptr;
+        }
+
         memcpy(totalPath, path, pathlen);
         totalPath[pathlen] = '/';
         memcpy(&totalPath[pathlen + 1], file.name, namelen);
         totalPath[pathlen + namelen + 1] = 0;
 
         ActiveFile* opened = OpenFile(totalPath);
+        if (opened)
+        {
+            // Keep the enumerated name (including . and ..), while lookup
+            // supplies the canonical object's ownership and attributes.
+            strcpy(((FAT32_ActiveFile*)opened)->entry.name, file.name);
+        }
+
         delete[] totalPath;
         return opened;
     }
@@ -261,7 +344,18 @@ int FAT32::Write(ActiveFile* file, void* buffer, uint64_t nBytes)
         return -1;
     }
 
-    int result = driver->WriteFile(((FAT32_ActiveFile*)file)->entry, file->seek_position, buffer, nBytes);
+    if (!journal->Begin())
+    {
+        return -1;
+    }
+
+    auto& entry = ((FAT32_ActiveFile*)file)->entry;
+    auto original = entry;
+    int result = Finish(driver->WriteFile(entry, file->seek_position, buffer, nBytes));
+    if (result)
+    {
+        entry = original;
+    }
     if (!result)
     {
         file->seek_position += nBytes;
@@ -272,5 +366,54 @@ int FAT32::Write(ActiveFile* file, void* buffer, uint64_t nBytes)
 
 bool FAT32::AccountStorage(uint64_t (&sectors)[2][16], Device*& storage)
 {
-    return driver->AccountStorage(sectors, storage);
+    bool result = driver->AccountStorage(sectors, storage);
+    storage = result ? backing : nullptr;
+    return result;
+}
+
+FilePermissions FAT32_ActiveFile::GetPermissions() const
+{
+    return entry.permissions;
+}
+
+int FAT32::Finish(int status)
+{
+    bool flushed = status == 0 && driver->Sync();
+    bool committed = journal->Finish(flushed);
+    if (!committed && journal->Healthy())
+    {
+        // Discard all speculative FAT state after validation/full-volume errors.
+        delete driver;
+        driver = new FAT32Driver(journal, start);
+    }
+
+    return committed ? 0 : status ? status : -1;
+}
+
+int FAT32::SetPermissions(const char* path, const FilePermissions& permissions)
+{
+    if (!journal->Begin())
+    {
+        return -1;
+    }
+
+    return Finish(driver->SetPermissions(path, permissions));
+}
+
+int FAT32::Flush()
+{
+    return driver->IsValid() && journal->Flush() ? 0 : -1;
+}
+
+int FAT32::DirectoryCount(const char* path, uint64_t& count)
+{
+    DirEntry entry;
+    if (driver->OpenFile(path, &entry) || !(entry.attributes & FILE_DIRECTORY))
+    {
+        return -1;
+    }
+
+    auto entries = driver->GetDirectories(entry.cluster, 0, false);
+    count = entries.size();
+    return driver->IsValid() ? 0 : -1;
 }

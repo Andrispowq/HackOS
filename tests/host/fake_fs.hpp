@@ -48,6 +48,12 @@ class FakeFS : public Filesystem
         return missing ? nullptr : &file;
     }
 
+    int Lookup(const char* p, ActiveFile*& result) override
+    {
+        result = OpenFile(p);
+        return result ? 0 : -2;
+    }
+
     void CloseFile(ActiveFile*) override
     {
         closed = true;
@@ -61,12 +67,14 @@ class FakeFS : public Filesystem
         return &file;
     }
 
-    void ResizeFile(ActiveFile*, size_t) override
+    int ResizeFile(ActiveFile*, size_t) override
     {
+        return io_result;
     }
 
-    void DeleteFile(ActiveFile*) override
+    int DeleteFile(ActiveFile*) override
     {
+        return io_result;
     }
 
     uint64_t GetDirectoryEntryCount(const char*) override

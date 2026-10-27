@@ -222,7 +222,7 @@ bool Port::Transfer(uint8_t command, uint64_t lba, void* buffer, uint32_t sector
         return false;
     }
 
-    if (sectors && command == ATA_CMD_READ_DMA_EX)
+    if (sectors && !header->Write)
     {
         memcpy(buffer, (void*)tempBuffer, sectors * 512);
     }
@@ -292,16 +292,19 @@ AHCIDriver::AHCIDriver(PCI::PCIDeviceHeader* PCIBaseAddress) : PCIBaseAddress(PC
 AHCIDevice::AHCIDevice(Port* port) : port(port)
 {
     port->Configure();
+    sectors = port->Identify();
 }
 
 bool AHCIDevice::Read(uint64_t LBA, void* buffer, uint64_t size)
 {
-    return size <= 0xffffffff && port->Read(LBA, buffer, (uint32_t)size);
+    return buffer && size && LBA < sectors && size <= sectors - LBA && size <= 0xffffffff &&
+           port->Read(LBA, buffer, (uint32_t)size);
 }
 
 bool AHCIDevice::Write(uint64_t LBA, void* buffer, uint64_t size)
 {
-    return size <= 0xffffffff && port->Write(LBA, buffer, (uint32_t)size);
+    return buffer && size && LBA < sectors && size <= sectors - LBA && size <= 0xffffffff &&
+           port->Write(LBA, buffer, (uint32_t)size);
 }
 
 bool AHCIDevice::Flush()
@@ -309,3 +312,21 @@ bool AHCIDevice::Flush()
     return port->Flush();
 }
 };
+
+uint64_t AHCI::Port::Identify()
+{
+    uint16_t words[256];
+    if (!Transfer(0xec, 0, words, 1) || !(words[83] & (1 << 10)))
+    {
+        return 0;
+    }
+
+    uint64_t size =
+        words[100] | ((uint64_t)words[101] << 16) | ((uint64_t)words[102] << 32) | ((uint64_t)words[103] << 48);
+    return size < (1ULL << 48) ? size : 0;
+}
+
+uint64_t AHCI::AHCIDevice::SectorCount() const
+{
+    return sectors;
+}

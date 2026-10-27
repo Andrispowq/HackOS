@@ -1,4 +1,6 @@
 #include "user.h"
+#include "fs/permissions.h"
+#include "fs/filesystem.h"
 #include "arch/x86_64/ports.h"
 #include "hackos/abi.h"
 #include "lib/string.h"
@@ -78,6 +80,24 @@ uint64_t LoadUserProgramTask(const char* path, bool systemShell, uint64_t argc, 
         if (bytes > HACKOS_ARG_BYTES)
         {
             return 0;
+        }
+    }
+
+    const auto& identity = credentials ? *credentials : parent ? parent->credentials : HackosCredentials{};
+    if (!PathAccess(path, identity, 5))
+    {
+        return 0;
+    }
+
+    extern Process* ready_queue;
+    for (auto process = ready_queue; process; process = process->next)
+    {
+        for (auto file : process->files)
+        {
+            if (file && (file->accessMode & HACKOS_OPEN_WRITE) && !strcmp((char*)file->GetPath(), (char*)path))
+            {
+                return 0;
+            }
         }
     }
 

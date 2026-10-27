@@ -14,3 +14,5 @@
 #define fclose hackos_fclose
 #define free hackos_free
 #define alloc hackos_alloc
+
+#define fflush hackos_fflush

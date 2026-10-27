@@ -15,6 +15,7 @@
 #include "drivers/keyboard/keyboard.h"
 #include "drivers/screen/screen.h"
 #include "fs/filesystem.h"
+#include "fs/permissions.h"
 #include "init/kernelInit.h"
 #include "acpi/fadt.h"
 #include "lib/stdio.h"
@@ -71,6 +72,11 @@ static void Info(HackosFileInfo& info, ActiveFile* file)
     info.size = file->GetSize();
     info.attributes = file->GetAttributes();
     Name(info.name, file->GetName());
+    auto permissions = file->GetPermissions();
+    info.uid = permissions.uid;
+    info.gid = permissions.gid;
+    info.mode = permissions.mode;
+    info.metadataVersion = 1;
 }
 
 static uint64_t UserInput()
@@ -537,30 +543,72 @@ static uint64_t UserAuthLogin(const char* username, const char* source)
     return pid ? pid : HACKOS_ERROR;
 }
 
-static uint64_t UserOpen(const char* name)
+static bool MutationPath(const char* name, char (&path)[256]);
+
+static uint64_t UserOpenMode(const char* name, uint64_t mode)
 {
     char path[256];
-    if (!Path(name, path) || nextHandle == ~0ULL - 2)
+    if (!Path(name, path) || nextHandle == ~0ULL - 5 || !(mode & 3) || (mode & ~7ULL) ||
+        ((mode & HACKOS_OPEN_CREATE) && !(mode & HACKOS_OPEN_WRITE)))
     {
         return HACKOS_ERROR;
+    }
+
+    bool write = mode & HACKOS_OPEN_WRITE;
+    if (write && !MutationPath(name, path))
+    {
+        return HACKOS_ERROR;
+    }
+
+    // Exclusive writers; readers share an immutable snapshot until all close.
+    for (auto process = ready_queue; process; process = process->next)
+    {
+        for (unsigned i = 0; i < 8; ++i)
+        {
+            auto file = process->files[i];
+            if (file && !strcmp((char*)file->GetPath(), path) && (file->accessMode & HACKOS_OPEN_WRITE))
+            {
+                return HACKOS_ERROR;
+            }
+        }
     }
 
     for (unsigned i = 0; i < 8; ++i)
     {
         if (!Caller()->files[i])
         {
-            auto file = filesystems[0]->OpenFile(path);
-            if (!file)
+            ActiveFile* file = nullptr;
+            int status = filesystems[0]->Lookup(path, file);
+            if (status == -2 && (mode & HACKOS_OPEN_CREATE))
+            {
+                if (!PathAccess(path, Caller()->credentials, 3, true))
+                {
+                    return HACKOS_DENIED;
+                }
+
+                FilePermissions permissions = {Caller()->credentials.uid, Caller()->credentials.gid, 0644};
+                if (filesystems[0]->SaveFile(path, nullptr, 0, true, &permissions))
+                {
+                    return HACKOS_ERROR;
+                }
+
+                status = filesystems[0]->Lookup(path, file);
+            }
+
+            if (status || !file)
             {
                 return HACKOS_ERROR;
             }
 
-            if (file->GetAttributes() & DIRECTORY)
+            unsigned access = (mode & HACKOS_OPEN_READ ? 4 : 0) | (write ? 2 : 0);
+            if ((file->GetAttributes() & DIRECTORY) || (write && (file->GetAttributes() & READ_ONLY)) ||
+                !PathAccess(path, Caller()->credentials, access))
             {
                 filesystems[0]->CloseFile(file);
                 return HACKOS_ERROR;
             }
 
+            file->accessMode = mode;
             Caller()->files[i] = file;
             ++user_files_live;
             return Caller()->fileHandles[i] = ++nextHandle;
@@ -568,6 +616,11 @@ static uint64_t UserOpen(const char* name)
     }
 
     return HACKOS_ERROR;
+}
+
+static uint64_t UserOpen(const char* name)
+{
+    return UserOpenMode(name, HACKOS_OPEN_READ);
 }
 
 static int Handle(uint64_t handle)
@@ -592,6 +645,11 @@ static uint64_t UserRead(uint64_t handle, void* destination, uint64_t length)
     }
 
     auto file = Caller()->files[slot];
+    if (!(file->accessMode & HACKOS_OPEN_READ))
+    {
+        return HACKOS_DENIED;
+    }
+
     uint64_t size = file->GetSize();
     uint64_t remaining = file->seek_position < size ? size - file->seek_position : 0;
     if (length > remaining)
@@ -616,11 +674,12 @@ static uint64_t UserClose(uint64_t handle)
         return HACKOS_ERROR;
     }
 
+    int status = Caller()->files[slot]->accessMode & HACKOS_OPEN_WRITE ? filesystems[0]->Flush() : 0;
     filesystems[0]->CloseFile(Caller()->files[slot]);
     --user_files_live;
     Caller()->files[slot] = nullptr;
     Caller()->fileHandles[slot] = 0;
-    return 0;
+    return status ? HACKOS_ERROR : 0;
 }
 
 static uint64_t UserStat(const char* name, HackosFileInfo* destination)
@@ -631,24 +690,21 @@ static uint64_t UserStat(const char* name, HackosFileInfo* destination)
         return HACKOS_ERROR;
     }
 
-    HackosFileInfo info = {};
-    if (!path[1])
+    if (!PathAccess(path, Caller()->credentials, 1, true))
     {
-        info.attributes = DIRECTORY;
-        info.name[0] = '~';
+        return HACKOS_DENIED;
     }
-    else
-    {
-        ActiveFile* file = nullptr;
-        int status = filesystems[0]->Lookup(path, file);
-        if (status)
-        {
-            return status == -2 ? HACKOS_NOT_FOUND : HACKOS_ERROR;
-        }
 
-        Info(info, file);
-        filesystems[0]->CloseFile(file);
+    HackosFileInfo info = {};
+    ActiveFile* file = nullptr;
+    int status = filesystems[0]->Lookup(path, file);
+    if (status)
+    {
+        return status == -2 ? HACKOS_NOT_FOUND : HACKOS_ERROR;
     }
+
+    Info(info, file);
+    filesystems[0]->CloseFile(file);
 
     return Output(destination, &info, sizeof(info)) ? 0 : HACKOS_ERROR;
 }
@@ -677,7 +733,18 @@ static uint64_t UserReadDir(const char* name, uint64_t index, HackosFileInfo* de
         }
     }
 
-    if (index >= filesystems[0]->GetDirectoryEntryCount(path))
+    if (!PathAccess(path, Caller()->credentials, 5))
+    {
+        return HACKOS_DENIED;
+    }
+
+    uint64_t count = 0;
+    if (filesystems[0]->DirectoryCount(path, count))
+    {
+        return HACKOS_ERROR;
+    }
+
+    if (index >= count)
     {
         return 0;
     }
@@ -734,6 +801,11 @@ static uint64_t UserChdir(const char* name)
         }
     }
 
+    if (!PathAccess(path, Caller()->credentials, 1))
+    {
+        return HACKOS_DENIED;
+    }
+
     Name(Caller()->working_dir, path);
     return 0;
 }
@@ -771,6 +843,11 @@ static uint64_t UserFileSave(const char* name, const void* data, uint64_t size, 
         return HACKOS_ERROR;
     }
 
+    if (!PathAccess(path, Caller()->credentials, flags & HACKOS_SAVE_CREATE ? 3 : 2, flags & HACKOS_SAVE_CREATE))
+    {
+        return HACKOS_DENIED;
+    }
+
     // Copy the entire payload before any storage mutation. No userspace heap
     // or writable handle is needed for this bounded whole-file operation.
     void* copy = (void*)kmalloc(size ? size : 1);
@@ -780,7 +857,8 @@ static uint64_t UserFileSave(const char* name, const void* data, uint64_t size, 
     }
 
     bool copied = Caller()->userSpace->CopyFromUser(copy, (uint64_t)data, size);
-    int status = copied ? filesystems[0]->SaveFile(path, copy, size, flags & HACKOS_SAVE_CREATE) : -1;
+    FilePermissions permissions = {Caller()->credentials.uid, Caller()->credentials.gid, 0644};
+    int status = copied ? filesystems[0]->SaveFile(path, copy, size, flags & HACKOS_SAVE_CREATE, &permissions) : -1;
     kfree(copy);
     return status ? HACKOS_ERROR : 0;
 }
@@ -788,21 +866,131 @@ static uint64_t UserFileSave(const char* name, const void* data, uint64_t size, 
 static uint64_t UserMkdir(const char* name)
 {
     char path[256];
-    return MutationPath(name, path) && !filesystems[0]->MakeDirectory(path) ? 0 : HACKOS_ERROR;
+    FilePermissions permissions = {Caller()->credentials.uid, Caller()->credentials.gid, 0755};
+    return MutationPath(name, path) && PathAccess(path, Caller()->credentials, 3, true) &&
+                   !filesystems[0]->MakeDirectory(path, &permissions)
+               ? 0
+               : HACKOS_ERROR;
 }
 
 static uint64_t UserUnlink(const char* name)
 {
     char path[256];
-    return MutationPath(name, path) && !filesystems[0]->RemoveFile(path) ? 0 : HACKOS_ERROR;
+    return MutationPath(name, path) && PathAccess(path, Caller()->credentials, 3, true) &&
+                   !filesystems[0]->RemoveFile(path)
+               ? 0
+               : HACKOS_ERROR;
 }
 
 static uint64_t UserRename(const char* source, const char* destination)
 {
     char from[256], to[256];
-    return MutationPath(source, from) && MutationPath(destination, to) && !filesystems[0]->MoveFile(from, to)
+    return MutationPath(source, from) && MutationPath(destination, to) &&
+                   PathAccess(from, Caller()->credentials, 3, true) && PathAccess(to, Caller()->credentials, 3, true) &&
+                   !filesystems[0]->MoveFile(from, to)
                ? 0
                : HACKOS_ERROR;
+}
+
+static uint64_t UserFileWrite(uint64_t handle, const void* source, uint64_t length)
+{
+    int slot = Handle(handle);
+    if (slot < 0 || length > 512)
+    {
+        return HACKOS_ERROR;
+    }
+
+    auto file = Caller()->files[slot];
+    if (!(file->accessMode & HACKOS_OPEN_WRITE))
+    {
+        return HACKOS_DENIED;
+    }
+
+    if (file->seek_position > HACKOS_FILE_LIMIT || length > HACKOS_FILE_LIMIT - file->seek_position)
+    {
+        return HACKOS_ERROR;
+    }
+
+    uint8_t data[512];
+    if (!Caller()->userSpace->CopyFromUser(data, (uint64_t)source, length))
+    {
+        return HACKOS_ERROR;
+    }
+
+    return filesystems[0]->Write(file, data, length) ? HACKOS_ERROR : length;
+}
+
+static uint64_t UserSeek(uint64_t handle, uint64_t offset)
+{
+    int slot = Handle(handle);
+    if (slot < 0 || offset > HACKOS_FILE_LIMIT)
+    {
+        return HACKOS_ERROR;
+    }
+
+    Caller()->files[slot]->seek_position = offset;
+    return offset;
+}
+
+static uint64_t UserFlush(uint64_t handle)
+{
+    return Handle(handle) >= 0 && !filesystems[0]->Flush() ? 0 : HACKOS_ERROR;
+}
+
+static uint64_t ChangePermissions(const char* name, uint64_t mode, uint64_t uid, uint64_t gid, bool owner)
+{
+    char path[256];
+    if (!MutationPath(name, path) || !PathAccess(path, Caller()->credentials, 1, true) || mode > 0777 ||
+        uid > 0xffffffff || gid > 0xffffffff)
+    {
+        return HACKOS_ERROR;
+    }
+
+    ActiveFile* file = nullptr;
+    if (filesystems[0]->Lookup(path, file))
+    {
+        return HACKOS_ERROR;
+    }
+
+    auto permissions = file->GetPermissions();
+    filesystems[0]->CloseFile(file);
+    if (!IsRoot() && (owner || Caller()->credentials.uid != permissions.uid))
+    {
+        return HACKOS_DENIED;
+    }
+
+    if (owner)
+    {
+        bool validGroup = false;
+        for (uint64_t i = 0; accounts.Group(i); ++i)
+        {
+            validGroup = validGroup || accounts.Group(i)->gid == gid;
+        }
+
+        if (!accounts.Credentials(uid) || !validGroup)
+        {
+            return HACKOS_ERROR;
+        }
+
+        permissions.uid = uid;
+        permissions.gid = gid;
+    }
+    else
+    {
+        permissions.mode = mode;
+    }
+
+    return filesystems[0]->SetPermissions(path, permissions) ? HACKOS_ERROR : 0;
+}
+
+static uint64_t UserChmod(const char* name, uint64_t mode)
+{
+    return ChangePermissions(name, mode, 0, 0, false);
+}
+
+static uint64_t UserChown(const char* name, uint64_t uid, uint64_t gid)
+{
+    return ChangePermissions(name, 0, uid, gid, true);
 }
 
 static uint64_t UserPower(uint64_t operation)
@@ -892,6 +1080,24 @@ static void syscall_handler(Registers* r)
         break;
     case HACKOS_SYS_spawn_foreground:
         r->rax = UserSpawnForeground((const char*)r->rdi, r->rsi, (const char* const*)r->rdx);
+        break;
+    case HACKOS_SYS_open_mode:
+        r->rax = UserOpenMode((const char*)r->rdi, r->rsi);
+        break;
+    case HACKOS_SYS_file_write:
+        r->rax = UserFileWrite(r->rdi, (const void*)r->rsi, r->rdx);
+        break;
+    case HACKOS_SYS_seek:
+        r->rax = UserSeek(r->rdi, r->rsi);
+        break;
+    case HACKOS_SYS_flush:
+        r->rax = UserFlush(r->rdi);
+        break;
+    case HACKOS_SYS_chmod:
+        r->rax = UserChmod((const char*)r->rdi, r->rsi);
+        break;
+    case HACKOS_SYS_chown:
+        r->rax = UserChown((const char*)r->rdi, r->rsi, r->rdx);
         break;
     case HACKOS_SYS_file_save:
         r->rax = UserFileSave((const char*)r->rdi, (const void*)r->rsi, r->rdx, r->rcx);

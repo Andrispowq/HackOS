@@ -1,4 +1,6 @@
 #include "fat32driver.h"
+#include "fs/storage/journal.h"
+#include "hackos/runtime/path.h"
 #include "lib/memory.h"
 #include "lib/string.h"
 #include "arch/x86_64/timer/rtc.h"
@@ -82,6 +84,31 @@ void Stamp(DirectoryEntry& entry)
 }
 }
 
+bool ValidateFAT32BootSector(const FAT32_BootSector& b, uint32_t start, uint64_t capacity)
+{
+    // Block devices currently expose 512-byte sectors only.
+    uint64_t first = (uint64_t)b.NumberOfFATs * b.SectorsPerFAT32 + b.ReservedSectors;
+    uint64_t total = b.TotalSectors ? b.TotalSectors : b.LargeTotalSectors;
+    if (b.BootablePartitionSignature[0] != 0x55 || b.BootablePartitionSignature[1] != 0xaa || b.BytesPerSector != 512 ||
+        !b.SectorsPerCluster || b.SectorsPerCluster > 128 || (b.SectorsPerCluster & (b.SectorsPerCluster - 1)) ||
+        !b.ReservedSectors || !b.NumberOfFATs || b.NumberOfFATs > 2 || !b.SectorsPerFAT32 || b.SectorsPerFAT ||
+        b.RootEntries || b.Version || first >= total || b.ReservedSectors != STORAGE_RESERVED || b.FSInfoSector != 1 ||
+        b.BackupBootSector != 6 || start > capacity || total > capacity - start ||
+        ((b.Flags & 0x80) && (b.Flags & 0xf) >= b.NumberOfFATs))
+    {
+        return false;
+    }
+
+    uint64_t clusters = (total - first) / b.SectorsPerCluster;
+    if (!clusters || clusters >= 0x0ffffff5 || clusters + 2 > (uint64_t)b.SectorsPerFAT32 * 128 || b.RootDirStart < 2 ||
+        b.RootDirStart >= clusters + 2)
+    {
+        return false;
+    }
+
+    return true;
+}
+
 FAT32Driver::FAT32Driver(Device* device, uint32_t part_start) : device(device), PartitionStart(part_start)
 {
     if (!device)
@@ -95,24 +122,14 @@ FAT32Driver::FAT32Driver(Device* device, uint32_t part_start) : device(device), 
         return;
     }
     const auto& b = *BootSector;
-    // Block devices currently expose 512-byte sectors only.
+    if (!ValidateFAT32BootSector(b, PartitionStart, device->SectorCount()))
+    {
+        return;
+    }
+
     uint64_t first = (uint64_t)b.NumberOfFATs * b.SectorsPerFAT32 + b.ReservedSectors;
     uint64_t total = b.TotalSectors ? b.TotalSectors : b.LargeTotalSectors;
-    if (b.BootablePartitionSignature[0] != 0x55 || b.BootablePartitionSignature[1] != 0xaa || b.BytesPerSector != 512 ||
-        !b.SectorsPerCluster || b.SectorsPerCluster > 128 || (b.SectorsPerCluster & (b.SectorsPerCluster - 1)) ||
-        !b.ReservedSectors || !b.NumberOfFATs || b.NumberOfFATs > 2 || !b.SectorsPerFAT32 || b.SectorsPerFAT ||
-        b.RootEntries || b.Version || first >= total || ((b.Flags & 0x80) && (b.Flags & 0xf) >= b.NumberOfFATs))
-    {
-        return;
-    }
-
     uint64_t clusters = (total - first) / b.SectorsPerCluster;
-    if (!clusters || clusters >= 0x0ffffff5 || clusters + 2 > (uint64_t)b.SectorsPerFAT32 * 128 || b.RootDirStart < 2 ||
-        b.RootDirStart >= clusters + 2)
-    {
-        return;
-    }
-
     FirstDataSector = first;
     TotalClusters = clusters;
     ClusterSize = b.SectorsPerCluster * 512;
@@ -443,6 +460,12 @@ vector<DirEntry> FAT32Driver::GetDirectories(uint32_t cluster, uint32_t filter, 
                 continue;
             }
 
+            if (!SameName(entry.name, ".") && !SameName(entry.name, "..") && !Permissions(entry, false))
+            {
+                ioError = true;
+                return {};
+            }
+
             if ((!exclude && !(entry.attributes & filter)) || (exclude && (entry.attributes & filter)))
             {
                 entries.push_back(entry);
@@ -489,6 +512,13 @@ int FAT32Driver::OpenFile(const char* path, DirEntry* entry)
         return -1;
     }
 
+    char normalized[256];
+    if (!NormalizePath(path, "~", normalized, true))
+    {
+        return -1;
+    }
+
+    path = normalized;
     DirEntry current;
     current.cluster = RootDirStart;
     current.attributes = FILE_DIRECTORY;
@@ -544,6 +574,11 @@ int FAT32Driver::OpenFile(const char* path, DirEntry* entry)
         {
             current.cluster = RootDirStart;
         }
+    }
+
+    if (!current.parentCluster && !Permissions(current, false))
+    {
+        return -1;
     }
 
     *entry = current;
@@ -819,7 +854,7 @@ int FAT32Driver::DirectoryAdd(uint32_t cluster, DirEntry& file)
     file.directoryCluster = cluster;
     file.firstDirectoryIndex = first;
     file.directoryEntryCount = needed;
-    return ioError ? -1 : 0;
+    return !ioError && Permissions(file, true) ? 0 : -1;
 }
 
 int FAT32Driver::CreateFile(const char* parentPath, DirEntry* file)
@@ -923,6 +958,11 @@ int FAT32Driver::DeleteFile(DirEntry entry)
     }
 
     if (UpdateEntry(entry, true) || !Sync())
+    {
+        return -1;
+    }
+
+    if (!Permissions(entry, true, true))
     {
         return -1;
     }
@@ -1209,7 +1249,7 @@ int FAT32Driver::Destination(const char* path, DirEntry& parent, DirEntry& file)
     return DirectorySearch(name, parent.cluster, nullptr) == FAT32_ERROR_FILE_NOT_FOUND ? 0 : -1;
 }
 
-int FAT32Driver::MakeDirectory(const char* path)
+int FAT32Driver::MakeDirectory(const char* path, const FilePermissions* permissions)
 {
     DirEntry parent, file;
     if (Destination(path, parent, file))
@@ -1222,6 +1262,10 @@ int FAT32Driver::MakeDirectory(const char* path)
     memcpy(directory, path, length);
     directory[length] = 0;
     file.attributes = FILE_DIRECTORY;
+    if (permissions)
+    {
+        file.permissions = *permissions;
+    }
     return CreateFile(directory, &file);
 }
 
@@ -1248,14 +1292,15 @@ int FAT32Driver::MoveFile(const char* source, const char* destination)
     moved.cluster = original.cluster;
     moved.size = original.size;
     moved.attributes = original.attributes;
+    moved.permissions = original.permissions;
     if (DirectoryAdd(parent.cluster, moved) || !Sync())
     {
         return -1;
     }
 
-    // The destination is durable before the old name is removed. No data
-    // clusters are freed. A failed I/O freezes further operations until remount.
-    if (UpdateEntry(original, true) || !Sync())
+    // Stage the destination and source removal in one outer transaction.
+    // No data clusters are freed; commit/replay publishes the complete move.
+    if (UpdateEntry(original, true) || !Permissions(original, true, true) || !Sync())
     {
         return -1;
     }
@@ -1263,7 +1308,8 @@ int FAT32Driver::MoveFile(const char* source, const char* destination)
     return 0;
 }
 
-int FAT32Driver::SaveFile(const char* path, const void* data, uint32_t size, bool create)
+int FAT32Driver::SaveFile(const char* path, const void* data, uint32_t size, bool create,
+                          const FilePermissions* permissions)
 {
     if ((!data && size) || !valid || ioError)
     {
@@ -1279,6 +1325,11 @@ int FAT32Driver::SaveFile(const char* path, const void* data, uint32_t size, boo
         }
 
         replacement.attributes = FILE_ARCHIVE;
+        replacement.permissions.mode = 0644;
+        if (permissions)
+        {
+            replacement.permissions = *permissions;
+        }
     }
     else
     {
@@ -1296,8 +1347,8 @@ int FAT32Driver::SaveFile(const char* path, const void* data, uint32_t size, boo
         replacement = original;
     }
 
-    // Build a fresh chain so allocation/data-write failures cannot truncate the
-    // old file. Only publish the new chain after checked data/FAT flushes.
+    // Stage a fresh chain and its payload before changing the directory.
+    // The outer transaction publishes data, FAT and metadata together.
     replacement.cluster = AllocateClusterChain(((uint64_t)size + ClusterSize - 1) / ClusterSize);
     if (replacement.cluster == BAD_CLUSTER)
     {
@@ -1339,8 +1390,8 @@ int FAT32Driver::SaveFile(const char* path, const void* data, uint32_t size, boo
 
     if (status || !Sync())
     {
-        // The device may have accepted part of the metadata write. Retain the
-        // chain rather than freeing storage that might now be referenced.
+        // The adapter discards this speculative chain and reloads the FAT
+        // when staging fails. Only its final commit writes home sectors.
         return -1;
     }
 
@@ -1350,4 +1401,128 @@ int FAT32Driver::SaveFile(const char* path, const void* data, uint32_t size, boo
     }
 
     return Sync() ? 0 : -1;
+}
+
+namespace
+{
+struct PermissionRecord
+{
+    uint32_t tag, parent, slot;
+    FilePermissions permissions;
+    uint32_t reserved, checksum;
+};
+
+static_assert(sizeof(PermissionRecord) == 32, "permission record");
+
+uint32_t RecordChecksum(const PermissionRecord& record)
+{
+    const auto* bytes = (const uint8_t*)&record;
+    uint32_t value = 2166136261;
+    for (unsigned i = 0; i < 28; ++i)
+    {
+        value = (value ^ bytes[i]) * 16777619;
+    }
+
+    return value;
+}
+}
+
+bool FAT32Driver::Permissions(DirEntry& entry, bool write, bool remove)
+{
+    PermissionRecord records[16];
+    int free = -1, found = -1;
+    for (unsigned sector = 0; sector < PERMISSION_SECTORS; ++sector)
+    {
+        if (!device->Read((uint64_t)PartitionStart + PERMISSION_START + sector, records, 1))
+        {
+            ioError = true;
+            return false;
+        }
+
+        for (unsigned i = 0; i < 16; ++i)
+        {
+            const auto& record = records[i];
+            if (!record.tag)
+            {
+                PermissionRecord empty;
+                memset(&empty, 0, sizeof(empty));
+                if (memcmp((void*)&record, &empty, sizeof(record)))
+                {
+                    return false;
+                }
+
+                if (free < 0)
+                {
+                    free = sector * 16 + i;
+                }
+            }
+            else if (record.tag != 0x36315048 || record.reserved || record.permissions.mode > 0777 ||
+                     record.checksum != RecordChecksum(record))
+            {
+                return false;
+            }
+            else if (record.parent == entry.parentCluster && record.slot == entry.offsetInParentCluster)
+            {
+                if (found >= 0)
+                {
+                    return false;
+                }
+
+                found = sector * 16 + i;
+                if (!write)
+                {
+                    entry.permissions = record.permissions;
+                }
+            }
+        }
+    }
+
+    if (!write)
+    {
+        return found >= 0;
+    }
+
+    int index = found >= 0 ? found : free;
+    if (index < 0 || (remove && found < 0))
+    {
+        return false;
+    }
+
+    uint64_t sector = (uint64_t)PartitionStart + PERMISSION_START + index / 16;
+    if (!device->Read(sector, records, 1))
+    {
+        ioError = true;
+        return false;
+    }
+
+    auto& record = records[index % 16];
+    memset(&record, 0, sizeof(record));
+    if (!remove)
+    {
+        record.tag = 0x36315048;
+        record.parent = entry.parentCluster;
+        record.slot = entry.offsetInParentCluster;
+        record.permissions = entry.permissions;
+        record.checksum = RecordChecksum(record);
+    }
+
+    if (!device->Write(sector, records, 1))
+    {
+        ioError = true;
+        return false;
+    }
+
+    return true;
+}
+
+int FAT32Driver::SetPermissions(const char* path, const FilePermissions& permissions)
+{
+    DirEntry entry;
+    if (permissions.mode > 0777 || OpenFile(path, &entry))
+    {
+        return -1;
+    }
+
+    entry.permissions = permissions;
+    return Permissions(entry, true) && Sync() ? 0 : -1;
 }

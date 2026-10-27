@@ -27,7 +27,7 @@ table address also does not mean an HPET timer driver is active.
 ## Block devices
 
 [Device](../../kernel/src/drivers/device/device.h) defines checked `Read`, `Write`, `Flush` and
-`GetType`. Instances are stored in a fixed registry with room for 16 devices.
+`GetType`, plus `SectorCount` in 512-byte sectors. Instances are stored in a fixed registry with room for 16 devices.
 The current implementations interpret the I/O `size` argument as a **sector
 count**, while filesystem-level sizes are byte counts.
 
@@ -41,11 +41,13 @@ FAT32 using `devices[0]`. This makes enumeration order part of boot behavior;
 there is no general boot-volume selection mechanism yet.
 
 Transfers return `bool`, with false meaning incomplete I/O; flush support defaults
-to failure. The account store propagates these results, while other filesystem
-callers still need auditing. AHCI splits transfers into at most eight sectors
+to failure. The account store and journaled FAT mutation paths propagate these results.
+ATA IDENTIFY supplies the usable LBA28 capacity; PIO transfers split into at
+most 255 sectors. AHCI IDENTIFY requires LBA48 and supplies its capacity; both
+implementations reject overflow and out-of-capacity requests before transfer. AHCI splits transfers into at most eight sectors
 using one persistent physical bounce page per port, including the upper address
 bits in DMA descriptors. Polling is bounded; a timed-out port stops reusing its
-DMA memory. Device capacity reporting and broader hardware recovery remain TODO.
+DMA memory. Broader hardware recovery and discovery remain TODO.
 
 ## PS/2 input
 

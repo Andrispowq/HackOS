@@ -2,10 +2,40 @@
 #include "filesystem.h"
 #include "lib/memory.h"
 #include "lib/string.h"
+#include "hackos/runtime/path.h"
+
+namespace
+{
+struct VfsHandle
+{
+    ActiveFile* file = nullptr;
+    Filesystem* filesystem = nullptr;
+    uint64_t token = 0;
+    int mode = 0;
+};
+
+VfsHandle handles[64];
+uint64_t nextToken = 0;
+
+VfsHandle* Find(void* token)
+{
+    for (auto& handle : handles)
+    {
+        if (handle.file && handle.token == (uint64_t)token && handle.file->fs_index < MAX_FILESYSTEMS &&
+            filesystems[handle.file->fs_index] == handle.filesystem)
+        {
+            return &handle;
+        }
+    }
+
+    return nullptr;
+}
+}
 
 void* fopen(const char* path, int flags)
 {
-    if (!path || path[0] != 'f' || path[1] != 's')
+    if (!(flags & (O_READ | O_WRITE)) || (flags & ~(O_READ | O_WRITE | O_CREAT)) ||
+        ((flags & O_CREAT) && !(flags & O_WRITE)) || !path || path[0] != 'f' || path[1] != 's')
     {
         return nullptr;
     }
@@ -36,13 +66,41 @@ void* fopen(const char* path, int flags)
         return nullptr;
     }
 
+    VfsHandle* available = nullptr;
+    for (auto& handle : handles)
+    {
+        if (!handle.file)
+        {
+            available = &handle;
+            break;
+        }
+    }
+
+    if (!available || nextToken == ~0ULL)
+    {
+        return nullptr;
+    }
+
     const char* suffix = path + position + 1;
-    size_t length = strlen((char*)suffix);
-    char* translated = new char[length + 2];
-    translated[0] = '~';
-    memcpy(translated + 1, suffix, length + 1);
-    ActiveFile* file = fs->OpenFile(translated);
-    if (!file && (flags & O_CREAT))
+    char translated[256];
+    if (!NormalizePath(suffix, "~", translated))
+    {
+        return nullptr;
+    }
+
+    size_t length = strlen(translated) - 1;
+    for (const auto& handle : handles)
+    {
+        if (handle.file && handle.filesystem == fs && !strcmp((char*)handle.file->GetPath(), translated) &&
+            ((handle.mode | flags) & O_WRITE))
+        {
+            return nullptr;
+        }
+    }
+
+    ActiveFile* file = nullptr;
+    int status = fs->Lookup(translated, file);
+    if (status == -2 && (flags & O_CREAT))
     {
         size_t last = length;
         while (last && translated[last] != '/')
@@ -57,58 +115,64 @@ void* fopen(const char* path, int flags)
         }
     }
 
-    delete[] translated;
     if (file)
     {
         file->fs_index = index;
+        file->accessMode = flags;
+        if ((file->GetAttributes() & DIRECTORY) || ((flags & O_WRITE) && (file->GetAttributes() & READ_ONLY)))
+        {
+            fs->CloseFile(file);
+            return nullptr;
+        }
     }
 
-    return file;
+    if (!file)
+    {
+        return nullptr;
+    }
+
+    *available = {file, fs, ++nextToken, flags};
+    return (void*)available->token;
 }
 
-static Filesystem* FileSystemFor(void* handle)
+int fread(void* buffer, int size, int n, void* token)
 {
+    auto handle = Find(token);
+    if (!handle || !(handle->mode & O_READ) || size < 0 || n < 0 || (!buffer && size && n))
+    {
+        return -1;
+    }
+
+    return handle->filesystem->Read(handle->file, buffer, (uint64_t)size * (uint64_t)n);
+}
+
+int fwrite(void* buffer, int size, int n, void* token)
+{
+    auto handle = Find(token);
+    if (!handle || !(handle->mode & O_WRITE) || size < 0 || n < 0 || (!buffer && size && n))
+    {
+        return -1;
+    }
+
+    return handle->filesystem->Write(handle->file, buffer, (uint64_t)size * (uint64_t)n);
+}
+
+int fclose(void* token)
+{
+    auto handle = Find(token);
     if (!handle)
     {
-        return nullptr;
-    }
-
-    ActiveFile* file = (ActiveFile*)handle;
-    if (file->fs_index >= MAX_FILESYSTEMS)
-    {
-        return nullptr;
-    }
-
-    return filesystems[file->fs_index];
-}
-
-int fread(void* buffer, int size, int n, void* file)
-{
-    Filesystem* fs = FileSystemFor(file);
-    if (!fs || size < 0 || n < 0 || (!buffer && size && n))
-    {
         return -1;
     }
 
-    return fs->Read((ActiveFile*)file, buffer, (uint64_t)size * (uint64_t)n);
+    int result = handle->mode & O_WRITE ? handle->filesystem->Flush() : 0;
+    handle->filesystem->CloseFile(handle->file);
+    *handle = {};
+    return result;
 }
 
-int fwrite(void* buffer, int size, int n, void* file)
+int fflush(void* token)
 {
-    Filesystem* fs = FileSystemFor(file);
-    if (!fs || size < 0 || n < 0 || (!buffer && size && n))
-    {
-        return -1;
-    }
-
-    return fs->Write((ActiveFile*)file, buffer, (uint64_t)size * (uint64_t)n);
-}
-
-void fclose(void* file)
-{
-    Filesystem* fs = FileSystemFor(file);
-    if (fs)
-    {
-        fs->CloseFile((ActiveFile*)file);
-    }
+    auto handle = Find(token);
+    return handle ? handle->filesystem->Flush() : -1;
 }

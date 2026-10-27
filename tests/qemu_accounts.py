@@ -163,6 +163,8 @@ def test(firmware, timeout):
         for source, name in (('auth_probe.cpp', 'AUTHPROBE'), ('wait_probe.cpp', 'HOLDPROBE')):
             program = build_probe(directory, built / 'source', extra=(source, name))
             require_success(command(['mcopy', '-i', filesystem(image), program, '::/USR/BIN/' + name]), 'install probe')
+        from session import provision_imports
+        provision_imports(image, firmware)
         with boot(directory, image, firmware, 'setup', timeout) as g:
             g.fresh = True
             g.setup()

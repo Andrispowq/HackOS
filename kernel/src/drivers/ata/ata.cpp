@@ -106,3 +106,20 @@ bool FlushATA()
     __outb(0x1f7, 0xe7);
     return WaitATA(false);
 }
+
+uint64_t IdentifyATA()
+{
+    if (!BeginATA(0, 1, 0xec) || !WaitATA(true))
+    {
+        return 0;
+    }
+
+    uint16_t words[256];
+    for (unsigned i = 0; i < 256; ++i)
+    {
+        words[i] = __inw(0x1f0);
+    }
+
+    uint64_t sectors = words[60] | ((uint32_t)words[61] << 16);
+    return WaitATA(false) && sectors < (1ULL << 28) ? sectors : 0;
+}

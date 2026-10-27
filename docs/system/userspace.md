@@ -221,10 +221,13 @@ to the protected login agent and ends all descendants, including background
 programs launched under another UID. A manually launched nested shell can exit
 to its parent; only the authenticated session shell owns session teardown.
 
-Filesystem access has no UID/GID or mode metadata. FAT attributes are not Unix
-file permissions. Ordinary users can modify files using the bounded step-15
-interfaces below; read-only files and open paths are rejected. The two account
-files remain kernel-only, and all mutations under `/SYSTEM` are rejected.
+Filesystem ownership and mode bits are stored in the versioned FAT extension.
+Ancestor search, file read/write, executable loading and directory mutations
+are checked in the kernel, including `runas` targets. `chmod` requires owner or
+root; `chown` requires root. New files/directories inherit UID/primary GID and
+modes 0644/0755. `/tmp` is the shared writable directory. The two account files
+remain kernel-only and `/SYSTEM` mutations are forbidden. See the complete
+[permission and recovery contract](filesystems.md).
 
 ## Syscall ABI
 
@@ -248,7 +251,7 @@ return an error rather than being reinterpreted as new operations.
 | 21 | `open(path)` | Returns an opaque read-only file handle |
 | 22 | `read(handle, out, length)` | At most 512 bytes; returns bytes read, 0 at EOF |
 | 23 | `close(handle)` | Closes a handle owned by the caller |
-| 24 | `stat(path, out)` | Copies file size, attributes and name; `HACKOS_NOT_FOUND` for a missing component |
+| 24 | `stat(path, out)` | Copies file size, attributes, name, UID/GID/mode; `HACKOS_NOT_FOUND` for a missing component |
 | 25 | `readdir(path, index, out)` | Copies one directory entry; 1 found, 0 end |
 | 26 | `power(operation)` | 0 ACPI shutdown, 1 restart; UID 0 or boot login agent owning the logged-out terminal |
 | 27 | `yield()` | Gives another runnable task a scheduling opportunity |
@@ -279,6 +282,12 @@ return an error rather than being reinterpreted as new operations.
 | 52 | `mkdir(path)` | Create one directory; existing destinations/missing parents fail |
 | 53 | `unlink(path)` | Remove a regular file only |
 | 54 | `rename(source, destination)` | Move a regular file to a new full path on the first filesystem; never overwrite |
+| 55 | `open_mode(path, flags)` | Read=1, write=2, create=4; at least read/write required; create requires write; existing files are not truncated |
+| 56 | `file_write(handle, data, length)` | Owned writable handle; maximum 512 bytes and 32 KiB resulting offset; commits before returning byte count |
+| 57 | `seek(handle, offset)` | Absolute offset up to 32768; returns offset; gaps zero-filled on write |
+| 58 | `flush(handle)` | Flush filesystem for a valid owned handle; zero or error |
+| 59 | `chmod(path, mode)` | Owner/root only, nine permission bits (0000–0777); zero or error |
+| 60 | `chown(path, uid, gid)` | Root only, registered user/group IDs; zero or error |
 
 Calls use `int 0x80`: RAX is the number, RDI/RSI/RDX/RCX/R8 hold arguments,
 and saved RAX receives the result. Successful operations without another result
@@ -297,7 +306,9 @@ records with pinned sizes and zeroed padding. `HackosCredentials` is 48 bytes
 are zero. User records append a 32-byte name (80 bytes total); group records
 contain GID, zero reserved and a 32-byte name (40 bytes). The process record is
 now 288 bytes: its original PID/state/name prefix is followed by UID/GID and
-parent PID. Old process-info consumers must be rebuilt with the new layout.
+parent PID. `HackosFileInfo` is now 288 bytes: its original 272-byte prefix
+is followed by uint32 UID, GID, mode and metadataVersion (1). All file-info
+consumers must be rebuilt with this layout; old binary consumers are unsupported.
 IDs accepted as syscall arguments are validated at full 64-bit width, so high
 bits cannot alias root. Unknown spawn flags are rejected before task creation.
 Paths are NUL-terminated within 256 bytes; normalization accepts `/`, `~` or
@@ -313,7 +324,8 @@ returns kernel addresses, virtual objects, format strings or `va_list` objects.
 Each process can own eight file handles. Monotonically allocated opaque tokens
 are checked against the caller's live slots; closed, stale and foreign tokens
 are rejected. Exit, fault and kill close all outstanding handles. Read handles
-remain read-only. Path-based mutation rejects any path with a live read handle
+remain read-only; `open_mode` can request an exclusive writer. No other opener
+may coexist with a writer. Path-based mutation rejects any path with a live handle
 in any process, including unreaped zombies. Dispatcher serialization protects
 this check and the operation; it does not yield inside its preemption guard.
 
@@ -322,7 +334,8 @@ flags and oversize data, and checks allocation failure. Flag 0 requires an
 existing regular file; flag 1 requires an absent destination. Empty saves are
 supported. Invalid buffers, protected paths, read-only/open files, unsupported
 operations, allocation failures and I/O errors return `HACKOS_ERROR`. There is
-no cross-filesystem syntax, writable descriptor, append or general seek API.
+no cross-filesystem syntax or append flag. Descriptor writes and absolute seeks
+use calls 55–58; permission failures may also return `HACKOS_DENIED`.
 
 The editor and `xxd` reserve a 32 KiB private BSS buffer, check the file size,
 read it completely using owned handles, and close before modifying it. The
@@ -336,8 +349,8 @@ not save or prompt, and reports discarded changes. Ctrl-C retains normal
 foreground termination. Background editors fail without consuming terminal
 input. Input overflow is reported so the user can inspect the buffer.
 
-These operations are synchronous and bounded but do not add journaling or
-Unix permissions. See [filesystem persistence limits](filesystems.md).
+Mutations are synchronous and journaled together with their UID/GID/mode
+metadata. See [filesystem persistence limits](filesystems.md).
 
 ## Runtime and tests
 
@@ -494,8 +507,9 @@ output, nonzero exit status, Ctrl-C and actual faults/errors remain visible.
 `ls` prints one entry per row and suffixes directories with `/`. By default it
 hides dot-prefixed names and FAT hidden entries. `-a` includes those entries
 (including `.` and `..` where supplied by the filesystem). `-l` adds a type
-(`d` or `-`), FAT attribute flags (`r` read-only, `h` hidden, `s` system, `a`
-archive; `-` for absent flags), byte size and name. This is filesystem metadata,
-not Unix ownership/permissions; the API does not expose owners or timestamps.
+(`d` or `-`) and `rwx` mode, numeric UID/GID, FAT attribute flags (`r` read-only, `h` hidden, `s` system, `a`
+archive; `-` for absent flags), byte size and name. Ownership comes from the
+permission records; FAT attributes are shown separately. Timestamps remain
+unexposed.
 Use `-la`, `-al`, separate flags, or `--` to end option parsing. A single optional
 path is supported; unknown flags, empty paths and extra paths report usage.

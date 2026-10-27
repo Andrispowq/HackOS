@@ -67,6 +67,8 @@ def test(firmware, timeout):
         fs_image = str(image) + ("@@"+str(846*512) if firmware == "bios" else "")
         for p in programs:
             require_success(command(["mcopy", "-o", "-i", fs_image, p, "::/USR/BIN/"+p.name]), "install " + p.name)
+        from session import provision_imports
+        provision_imports(image, firmware)
         with tempfile.TemporaryDirectory(prefix="hackos-user-") as temporary:
             temporary = Path(temporary)
             qmp_path, gdb_path = temporary/"qmp", temporary/"gdb"
@@ -100,7 +102,15 @@ def test(firmware, timeout):
                     def enter(text, expected):
                         offset = len(output()); qmp.type(text+"\n")
                         wait(lambda: expected in output()[offset:], expected)
-                        wait(lambda: "root@root:~$ " in output()[offset:], "shell prompt after command")
+                        # Each write syscall is atomic, but the prompt uses
+                        # several writes. A background probe can interleave its
+                        # known page-copy/ready messages between prompt pieces.
+                        def prompt_visible():
+                            text = output()[offset:]
+                            for diagnostic in ("xyz\n", "RING3_PROBE_READY\n"):
+                                text = text.replace(diagnostic, "")
+                            return "root@root:~$ " in text
+                        wait(prompt_visible, "shell prompt after command")
                     def inspect(name, body):
                         qmp.call("stop")
                         script = directory/(name+".gdb")

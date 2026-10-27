@@ -33,6 +33,9 @@ The command suite is built from `libs/commands` and packaged as separate ELF
 programs. Step 15 adds `xxd`, `mkdir`, `rm`, `mv` and `edit`. Try `mkdir /notes`
 and `edit /notes/hello.txt`; Ctrl+S saves and Ctrl+X exits without saving. The
 editor accepts ASCII/LF/tab text up to 32 KiB. `mv` refuses existing destinations.
+Step 16 adds `chmod 600 /notes/hello.txt` and `chown alice staff /notes/hello.txt`.
+Ordinary users create files under `/tmp` or directories root grants them; `/` and
+`/usr` are owned by root. `ls -l` reports UID/GID and permission bits.
 Guest file changes persist across normal runs, but rebuilds preserve only accounts. The initial administrator has UID 0 regardless of its chosen name. Try `id`,
 `users`, `groups`, `groupadd staff`, `useradd alice staff`, `passwd alice`, and
 `runas alice id`. `logout` ends the whole session and returns to login. New users
@@ -187,7 +190,10 @@ verifies the copy, and replaces the old image only after success. Corrupt slot
 contents are preserved for kernel recovery; missing or wrong-size files abort
 the build instead of silently resetting accounts. An image from before step 14
 must be moved aside explicitly before the first Docker rebuild. No other guest
-filesystem changes are preserved by rebuilding.
+filesystem changes, including ownership/mode changes, are preserved by rebuilding.
+Step-16 images require the reserved FAT storage extension; older volumes cannot
+be mounted directly. A preserving rebuild can migrate their accounts into the
+newly packaged filesystem.
 
 For native debugging, run `make debug` (add `TARGET_BIOS=false` for UEFI), then:
 

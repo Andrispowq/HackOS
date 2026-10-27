@@ -5,6 +5,8 @@
 #include "lib/data_structures/vector.h"
 #include "drivers/device/device.h"
 
+bool ValidateFAT32BootSector(const FAT32_BootSector& boot, uint32_t start, uint64_t capacity);
+
 class FAT32Driver
 {
   public:
@@ -15,7 +17,7 @@ class FAT32Driver
 
     bool IsValid() const
     {
-        return valid;
+        return valid && !ioError;
     }
 
     vector<DirEntry> GetDirectories(uint32_t cluster, uint32_t filter_attributes, bool exclude);
@@ -25,18 +27,22 @@ class FAT32Driver
     int ReadFile(DirEntry entry, uint64_t offset, void* buffer, uint64_t bytes);
     int WriteFile(DirEntry& entry, uint64_t offset, void* buffer, uint64_t bytes);
     int ResizeFile(DirEntry& entry, uint32_t size);
-    int MakeDirectory(const char* path);
+    int MakeDirectory(const char* path, const FilePermissions* permissions = nullptr);
     int RemoveFile(const char* path);
     int MoveFile(const char* source, const char* destination);
-    int SaveFile(const char* path, const void* data, uint32_t size, bool create);
+    int SaveFile(const char* path, const void* data, uint32_t size, bool create,
+                 const FilePermissions* permissions = nullptr);
 
     uint32_t GetRootDirStart() const
     {
         return RootDirStart;
     }
 
-  private:
     bool Sync();
+    int SetPermissions(const char* path, const FilePermissions& permissions);
+
+  private:
+    bool Permissions(DirEntry& entry, bool write, bool remove = false);
     int Destination(const char* path, DirEntry& parent, DirEntry& file);
     bool ValidCluster(uint32_t cluster) const;
     uint32_t ReadFAT(uint32_t cluster) const;

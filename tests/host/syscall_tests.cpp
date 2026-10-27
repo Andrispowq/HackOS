@@ -11,7 +11,7 @@ static_assert(HACKOS_SYS_exit == 0 && HACKOS_SYS_user_write == 14 && HACKOS_SYS_
                   HACKOS_SYS_spawn_as == 46 && HACKOS_SYS_auth_state == 47 && HACKOS_SYS_auth_setup == 48 &&
                   HACKOS_SYS_auth_login == 49 && HACKOS_SYS_password_set == 50 && HACKOS_SYS_file_save == 51 &&
                   HACKOS_SYS_mkdir == 52 && HACKOS_SYS_unlink == 53 && HACKOS_SYS_rename == 54 &&
-                  HACKOS_SYSCALL_COUNT == 55,
+                  HACKOS_SYS_open_mode == 55 && HACKOS_SYS_chown == 60 && HACKOS_SYSCALL_COUNT == 61,
               "User syscall ABI changed");
 
 TEST(syscall_record_layout)
@@ -22,7 +22,7 @@ TEST(syscall_record_layout)
     CHECK(sizeof(HackosWindowState) == 32);
     CHECK(sizeof(HackosWindowEvent) == 32);
     CHECK(__builtin_offsetof(HackosWindowSpec, title) == 16);
-    CHECK(sizeof(HackosFileInfo) == 272 && sizeof(HackosProcessInfo) == 288);
+    CHECK(sizeof(HackosFileInfo) == 288 && sizeof(HackosProcessInfo) == 288);
     CHECK(__builtin_offsetof(HackosFileInfo, name) == 16);
     CHECK(__builtin_offsetof(HackosProcessInfo, name) == 16);
     CHECK(__builtin_offsetof(HackosProcessInfo, uid) == 272);
