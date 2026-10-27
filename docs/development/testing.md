@@ -519,3 +519,37 @@ framebuffer captures were inspected. Both public parallel build paths passed,
 as did formatting (18.1.8), workflow lint and Compose checks. The final report
 set is `tests/out/step17-verified/validation.json`; full ASan+UBSan remains
 required on native x86-64 CI.
+
+## Stream, pipeline, timeout and serial regressions
+
+`python3 tests/qemu_streams.py --firmware bios` (and `uefi`), or
+`make -C tests test-streams FIRMWARE=...`, installs STREAMPROBE on a disposable
+image. It exercises descriptor inheritance and shared offsets, duplication,
+exhaustion, invalid buffers, atomic full-pipe writes, blocking wakeups, EOF,
+broken pipes, poll events, deadline expiry without consuming results, held-job
+startup and cleanup. Real PS/2 commands test quoted/adjacent redirections,
+append/truncate, left-to-right stderr duplication, byte-exact binary pipelines
+larger than the buffer, built-in redirection, stopped/background jobs, Ctrl-C,
+kill and logout. GDB observes blocked/stopped states and resource counts;
+mtools independently checks persisted bytes. COM1 logs must include loader and
+kernel entry, runtime output and a controlled user fault without passwords. A
+second boot with no UART verifies login and saved output remain usable.
+
+Host parser tests cover operator quoting/escaping, ordered redirects, malformed
+syntax and bounds. Kernel boot tests compare every PT_LOAD byte and BSS before
+entry, catching BIOS staging/page-table overlap as the kernel grows. Existing
+account, shell, userspace, window, file, storage and usability suites remain
+required on both firmware paths. CI includes the new streams suite and artifacts
+under `tests/out/qemu-streams-{bios,uefi}/`.
+
+Step 18 local validation passed 191 UBSan host checks, five boot-asset checks,
+the BIOS loader-chain probe, two debugger-harness checks, fresh BIOS/UEFI builds
+and all nine QEMU suites on both firmware paths. The stripped kernel is 215,352
+bytes in the unchanged 393,216-byte BIOS slot. Both loaded ELF segments and BSS
+were checked against the build; stream framebuffer captures were inspected.
+Formatting (288 project-owned C/C++ files, clang-format 18.1.8), workflow lint
+and Compose checks passed. Legacy `cat`/`read` usage assertions now reflect stdin
+support; job-control tests synchronize on observed scheduler state and command
+prompts, and pipeline output checks exclude debug-only lifecycle messages.
+The final report and source hashes are under `tests/out/step18-verified/`.
+Full ASan+UBSan remains required on native x86-64 CI.

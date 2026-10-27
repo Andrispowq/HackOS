@@ -12,6 +12,6 @@ int main(int argc, char**)
         return 0;
     }
 
-    Print("Clear request denied.\n");
+    Error("Clear request denied.\n");
     return 1;
 }

@@ -48,6 +48,11 @@ template <typename T, unsigned Capacity> class EventQueue
         overflow = true;
     }
 
+    bool Ready() const
+    {
+        return count || overflow;
+    }
+
     bool TakeOverflow()
     {
         if (!overflow)

@@ -9,8 +9,8 @@ int main(int argc, char** argv)
 
     if (syscall_rename(argv[1], argv[2]))
     {
-        Print("mv: failed; destination must be a new file path on the same filesystem.\n");
-        Print("Check for open/read-only files, invalid paths or I/O errors.\n");
+        Error("mv: failed; destination must be a new file path on the same filesystem.\n");
+        Error("Check for open/read-only files, invalid paths or I/O errors.\n");
         return 1;
     }
 

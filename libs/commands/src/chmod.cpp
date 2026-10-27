@@ -13,7 +13,7 @@ int main(int argc, char** argv)
     {
         if (*c < '0' || *c > '7' || ++digits > 3)
         {
-            Print("Mode must be three octal digits or fewer.\n");
+            Error("Mode must be three octal digits or fewer.\n");
             return 2;
         }
 
@@ -22,7 +22,7 @@ int main(int argc, char** argv)
 
     if (!digits || syscall_chmod(argv[2], mode))
     {
-        Print("Cannot change permissions.\n");
+        Error("Cannot change permissions.\n");
         return 1;
     }
 

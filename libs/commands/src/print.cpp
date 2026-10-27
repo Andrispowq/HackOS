@@ -8,7 +8,7 @@ int main(int argc, char** argv)
         HackosClock time;
         if (syscall_clock(&time))
         {
-            Print("Clock unavailable.\n");
+            Error("Clock unavailable.\n");
             return 1;
         }
 

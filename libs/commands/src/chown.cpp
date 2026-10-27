@@ -16,7 +16,7 @@ int main(int argc, char** argv)
 
     if (syscall_chown(argv[3], user.credentials.uid, group.gid))
     {
-        Print("Cannot change ownership.\n");
+        Error("Cannot change ownership.\n");
         return 1;
     }
 

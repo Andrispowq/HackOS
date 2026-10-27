@@ -14,5 +14,6 @@ enum class KeyboardRead
     Overflow
 };
 KeyboardRead ReadKeyboard(char& ch);
+bool KeyboardReady();
 
 #endif

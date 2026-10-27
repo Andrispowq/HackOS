@@ -1,6 +1,18 @@
+#include "../../../../include/hackos/serial.h"
+
 #include <efi.h>
 #include <efilib.h>
 #include <elf.h>
+
+static int serialAvailable;
+
+static void SerialLog(const char* text)
+{
+    while (serialAvailable && *text)
+    {
+        serialAvailable = HackosSerialPut(*text++);
+    }
+}
 
 typedef unsigned long long size_t;
 
@@ -240,11 +252,14 @@ done:
 
 EFI_STATUS efi_main(EFI_HANDLE image, EFI_SYSTEM_TABLE* system)
 {
+    serialAvailable = HackosSerialInitialise();
+    SerialLog("HackOS UEFI loader\n");
     InitializeLib(image, system);
     BS->SetWatchdogTimer(0, 0, 0, NULL);
     EFI_FILE* kernel = LoadFile(L"\\kernel.elf", image);
     if (!kernel)
     {
+        SerialLog("UEFI: Cannot open kernel.elf\n");
         Print(L"Cannot open kernel.elf\n");
         return EFI_NOT_FOUND;
     }
@@ -254,6 +269,7 @@ EFI_STATUS efi_main(EFI_HANDLE image, EFI_SYSTEM_TABLE* system)
     kernel->Close(kernel);
     if (EFI_ERROR(status))
     {
+        SerialLog("UEFI: Cannot load kernel\n");
         Print(L"Cannot load kernel: %r\n", status);
         return status;
     }
@@ -262,6 +278,7 @@ EFI_STATUS efi_main(EFI_HANDLE image, EFI_SYSTEM_TABLE* system)
     info.font = LoadFont(image);
     if (!info.font)
     {
+        SerialLog("UEFI: Cannot load the PSF1 font\n");
         Print(L"Cannot load the PSF1 font\n");
         return EFI_NOT_FOUND;
     }
@@ -276,6 +293,7 @@ EFI_STATUS efi_main(EFI_HANDLE image, EFI_SYSTEM_TABLE* system)
 
     if (gop->Mode->Info->PixelFormat != PixelBlueGreenRedReserved8BitPerColor)
     {
+        SerialLog("UEFI: A 32-bit BGR framebuffer is required\n");
         Print(L"A 32-bit BGR framebuffer is required\n");
         return EFI_UNSUPPORTED;
     }
@@ -301,6 +319,7 @@ EFI_STATUS efi_main(EFI_HANDLE image, EFI_SYSTEM_TABLE* system)
 
     if (!info.rsdp)
     {
+        SerialLog("UEFI: ACPI RSDP unavailable\n");
         Print(L"ACPI RSDP unavailable\n");
         return EFI_NOT_FOUND;
     }
@@ -311,9 +330,11 @@ EFI_STATUS efi_main(EFI_HANDLE image, EFI_SYSTEM_TABLE* system)
     info.memMap = AllocatePool(255 * sizeof(MemoryMapEntry));
     if (!info.memMap)
     {
+        SerialLog("UEFI: handoff allocation failed\n");
         return EFI_OUT_OF_RESOURCES;
     }
 
+    SerialLog("UEFI: kernel loaded, leaving boot services\n");
     Print(L"Starting HackOS (%dx%d)\n", info.framebuffer.width, info.framebuffer.height);
     UINTN size = 0, key = 0, stride = 0;
     UINT32 version;
@@ -327,6 +348,7 @@ EFI_STATUS efi_main(EFI_HANDLE image, EFI_SYSTEM_TABLE* system)
     EFI_MEMORY_DESCRIPTOR* map = AllocatePool(capacity);
     if (!map)
     {
+        SerialLog("UEFI: memory map allocation failed\n");
         return EFI_OUT_OF_RESOURCES;
     }
 
@@ -365,6 +387,7 @@ EFI_STATUS efi_main(EFI_HANDLE image, EFI_SYSTEM_TABLE* system)
         }
     }
 
+    SerialLog("UEFI: boot handoff failed or kernel returned\n");
     // Firmware services cannot be used after attempting ExitBootServices.
     for (;;)
     {

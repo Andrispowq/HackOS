@@ -4,7 +4,7 @@ int main(int argc, char** argv)
 {
     if (argc != 1 && !(argc == 2 && Equal(argv[1], "aux")))
     {
-        Print("Usage: ps [aux]\n");
+        Error("Usage: ps [aux]\n");
         return 2;
     }
 
@@ -19,6 +19,9 @@ int main(int argc, char** argv)
               : info.state == 3 ? ") WAITING"
               : info.state == 4 ? ") INPUT"
               : info.state == 5 ? ") STOPPED"
+              : info.state == 6 ? ") IO"
+              : info.state == 7 ? ") STARTING"
+              : info.state == 8 ? ") SLEEP"
                                 : ") ZOMBIE");
         Print(" uid=");
         Number(info.uid);

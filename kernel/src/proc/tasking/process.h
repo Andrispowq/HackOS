@@ -10,6 +10,9 @@
 #define PROCESS_STATE_WAITING 3
 #define PROCESS_STATE_INPUT 4
 #define PROCESS_STATE_STOPPED 5
+#define PROCESS_STATE_IO 6
+#define PROCESS_STATE_STARTING 7
+#define PROCESS_STATE_SLEEP 8
 #define SIG_ILL 1
 #define SIG_TERM 2
 #define SIG_SEGV 3
@@ -17,6 +20,7 @@
 
 class UserAddressSpace;
 class ActiveFile;
+struct Stream;
 
 struct ChildResult
 {
@@ -24,6 +28,7 @@ struct ChildResult
     int64_t status = 0;
     bool done = false;
     bool job = false;
+    uint64_t group = 0, statusPid = 0;
 };
 
 class Process
@@ -48,6 +53,10 @@ class Process
     uint64_t parentPid = 0, waitingFor = 0;
     int64_t exitStatus = 0;
     ChildResult children[16] = {};
+
+    bool waitTimed = false;
+    uint64_t wakeTick = 0;
+    Stream* descriptors[HACKOS_FD_LIMIT] = {};
 
     uint64_t windows[4] = {};
 
@@ -85,4 +94,8 @@ void WakeTerminalReaders();
 uint64_t ReadTerminal(uint64_t flags);
 uint64_t WaitForJob(uint64_t group, int64_t* status, uint64_t flags);
 uint64_t ControlJob(uint64_t group, uint64_t operation);
+uint64_t WaitForChildTimeout(uint64_t pid, int64_t* status, uint64_t flags, uint64_t timeout);
+uint64_t WaitForJobTimeout(uint64_t group, int64_t* status, uint64_t flags, uint64_t timeout);
+void WakeStreamWaiters();
+uint64_t UserSleep(uint64_t timeout);
 #endif

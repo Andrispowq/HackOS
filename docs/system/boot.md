@@ -109,3 +109,15 @@ initialization. The kernel Makefile uses this script for both boot paths.
 instead. It should not be selected without reconciling that entry symbol.
 
 Related work is listed in [TODO](../TODO.md).
+
+## Loader diagnostics and staging protection
+
+The BIOS stage-2 page allocator reserves the entire ELF staging range
+`0x20000..0x80000`, matching all 768 sectors read from LBA 78. An older
+`0x50000` cutoff could overwrite staged data when the kernel grew past 192 KiB;
+step 18 corrects it without changing the disk layout. Boot regressions compare
+both firmware paths' loaded ELF segments, including zeroed BSS, before executing
+the kernel entry point.
+
+Both C loaders and kernel entry emit bounded COM1 diagnostics. See
+[serial logging](streams.md#serial-diagnostics) for capture and coverage limits.

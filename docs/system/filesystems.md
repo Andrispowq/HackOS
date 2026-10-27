@@ -60,7 +60,7 @@ it. `ls -l` shows the actual mode, numeric UID/GID, FAT attributes and size.
 
 ## Handles and checked I/O
 
-Userspace gets eight process-owned, nontransferable handles. `open` remains
+The compatibility API provides eight process-owned, nontransferable file tokens. `open` remains
 read-only. `open_mode` adds read/write/create flags; readers can share, while a
 writer excludes every other opener. `file_write` accepts at most 512 bytes,
 `seek` is absolute and bounded to 32 KiB, and growth zero-fills gaps. Unknown
@@ -68,6 +68,13 @@ flags, foreign/stale handles and invalid buffers fail before mutation. Handle
 creation reserves capacity before creating a file. Exit/kill/fault reap handles.
 Each write commits before success; `flush` is an explicit durability/error
 boundary. Closing a writer flushes and releases it even if flushing fails.
+
+Step 18 also provides 16 inherited stream descriptors, including stdin/stdout/stderr.
+File descriptions share positions and append state across duplication/spawn;
+final close releases the filesystem object. Descriptor I/O accepts up to 1024
+bytes while keeping the same 32 KiB write/seek and permission/journal limits.
+Readers, exclusive writers and mutation checks cover both APIs. See
+[streams](streams.md) for open/truncate/append, pipes, poll and ownership.
 
 The internal `fsN:/...` VFS also uses bounded opaque tokens, rejects unknown
 modes and stale/arbitrary tokens, enforces `O_READ`/`O_WRITE`, and requires write

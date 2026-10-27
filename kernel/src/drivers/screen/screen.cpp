@@ -1,3 +1,4 @@
+#include "drivers/serial/serial.h"
 #include "screen.h"
 #include "window_manager.h"
 #include "drivers/mouse/mouse.h"
@@ -217,6 +218,7 @@ int Display::putc(char ch)
 {
     PreemptionGuard guard;
     dirty = true;
+    SerialCharacter(ch);
     // QEMU's optional debug console mirrors text independently of the framebuffer.
     asm volatile("outb %0, $0xe9" ::"a"((uint8_t)ch));
     uint32_t& x = console.current_x;

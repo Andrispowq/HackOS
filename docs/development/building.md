@@ -29,6 +29,9 @@ completion before showing the prompt; a separate trailing `&` launches in the
 background. Try `input` for interactive text input; Ctrl-C returns to
 the shell. Up/Down browses the fixed 256-command history, and `history` lists it.
 Bare commands resolve in `/usr/bin`; directory/history/session and job controls stay in the shell.
+Try `print hello | cat > /tmp/message`, `cat < /tmp/message`, `print again >> /tmp/message`
+and `cat /missing 2> /tmp/errors`. Pipelines support up to four stages, with
+ordered redirections and quoted paths. `cat` preserves exact bytes.
 Tab completes commands and paths. Ctrl+Z stops a foreground job; `jobs`, `fg`,
 `bg`, `wait` and `kill %job` manage its process group.
 The command suite is built from `libs/commands` and packaged as separate ELF
@@ -226,3 +229,9 @@ C/C++ in kernel/common/libs/include/tests/util and BIOS, plus the custom UEFI
 loader only. GNU-EFI and supplied UEFI headers are excluded. It preserves file
 modes. New code uses Allman braces, four spaces, separate statements and blank
 lines between definitions; keep logical blocks separated where helpful.
+
+COM1 logging can be captured independently of the graphical console:
+`python3 tools/run_qemu.py --firmware bios --image out/bios/HackOS.img --serial-log out/bios/serial.log`.
+Use `--firmware uefi` with its own image for UEFI. The parent log directory must
+exist. See [streams and logging](../system/streams.md) for the bounded UART and
+password-echo contracts.

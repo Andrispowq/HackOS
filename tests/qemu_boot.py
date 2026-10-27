@@ -49,9 +49,9 @@ set breakpoint pending off
 set remotetimeout 10
 target remote ''' + str(socket) + '''
 python
-import gdb
+import gdb, struct
 for symbol in ["kernel_main", "InitialiseIRQ()", "timer_callback"]:
-    bp = gdb.Breakpoint(symbol, type=gdb.BP_HARDWARE_BREAKPOINT)
+    bp = gdb.Breakpoint("*kernel_main" if symbol == "kernel_main" else symbol, type=gdb.BP_HARDWARE_BREAKPOINT)
     if not bp.locations:
         raise gdb.GdbError("Unresolved milestone: " + symbol)
     addresses = [location.address for location in bp.locations]
@@ -60,6 +60,18 @@ for symbol in ["kernel_main", "InitialiseIRQ()", "timer_callback"]:
     if pc not in addresses:
         raise gdb.GdbError("Stopped somewhere other than milestone: " + symbol)
     print("HACKOS_MILESTONE=" + symbol, flush=True)
+    if symbol == "kernel_main" and not ''' + repr(self_test) + ''':
+        data = open(''' + repr(str(elf)) + ''', 'rb').read()
+        offset = struct.unpack_from('<Q', data, 32)[0]
+        stride, count = struct.unpack_from('<HH', data, 54)
+        for i in range(count):
+            kind, flags, file, virtual, physical, size, memory, alignment = struct.unpack_from('<IIQQQQQQ', data, offset + i * stride)
+            if kind == 1:
+                expected = data[file:file + size] + bytes(memory - size)
+                actual = bytes(gdb.selected_inferior().read_memory(virtual, memory))
+                assert actual == expected, 'Loader corrupted ELF segment at ' + hex(virtual)
+        print('HACKOS_MILESTONE=elf_segments', flush=True)
+
     if symbol == "timer_callback" and not ''' + repr(self_test) + ''':
         ticks = int(gdb.parse_and_eval("tick"))
         for repeat in range(3):
@@ -97,7 +109,7 @@ quit
                         raise AssertionError(f"Kernel did not reach all milestones in {timeout}s; see gdb.log and guest.log") from exc
                     (directory/"gdb.log").write_text(result.stdout)
                     assert result.returncode == 0, f"GDB exited {result.returncode}; see gdb.log"
-                    for milestone in ("kernel_main","InitialiseIRQ()","timer_callback", *(() if self_test else ("repeated_timer",))):
+                    for milestone in ("kernel_main","InitialiseIRQ()","timer_callback", *(() if self_test else ("repeated_timer", "elf_segments"))):
                         assert "HACKOS_MILESTONE="+milestone in result.stdout, f"Missing milestone {milestone}"
                     return ("Debugger runner reached test-only labels; no kernel/IRQ coverage." if self_test else
                             "Reached kernel entry, IRQ initialization, and repeated timer interrupts.")

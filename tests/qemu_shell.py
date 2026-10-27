@@ -47,10 +47,10 @@ class QMP:
         time.sleep(0.025)
 
     def type(self, text):
-        punctuation = {" ": "spc", ".": "dot", "/": "slash", "-": "minus",
+        punctuation = {">": "dot", "<": "comma", "|": "backslash", " ": "spc", ".": "dot", "/": "slash", "-": "minus",
                        "\n": "ret", "\b": "backspace", "_": "minus", "%": "5", "~": "grave_accent", "&": "7", '"': "apostrophe", "'": "apostrophe", "\\": "backslash"}
         for ch in text:
-            self.key(punctuation.get(ch, ch.lower()), ch.isupper() or ch in "_%~&\"")
+            self.key(punctuation.get(ch, ch.lower()), ch.isupper() or ch in "_%~&<>|\"")
 
     def close(self):
         self.stream.close()
@@ -224,7 +224,7 @@ bp.delete()
                     enter("history &", "Shell built-ins cannot run in the background.")
                     enter("shutdown now", "Usage: shutdown")
                     enter("restart now", "Usage: restart")
-                    enter("cat", "Usage: cat <path>")
+                    enter("cat one two", "Usage: cat [path]")
                     enter('cd ""', "Path must not be empty.")
                     enter("ls extra", "Cannot list directory.")
                     enter("ls", "USR/")
@@ -255,8 +255,8 @@ bp.delete()
                     enter("wd", "\n~/USR\n")
                     enter('cat "HELLO.TXT"', "This is an example file")
                     enter("read HELLO.TXT", "This is an example file")
-                    enter("cat HELLO.TXT extra", "Usage: cat <path>")
-                    enter("read", "Usage: cat <path>")
+                    enter("cat HELLO.TXT extra", "Usage: cat [path]")
+                    enter("read HELLO.TXT extra", "Usage: cat [path]")
                     enter("/usr/bin/print explicit_path", "\nexplicit_path\n")
                     enter("../usr/bin/print relative_path", "\nrelative_path\n")
                     enter("cat MISSING", "File not found.")

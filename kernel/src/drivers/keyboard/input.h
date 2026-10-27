@@ -134,12 +134,12 @@ class KeyboardInput
             }
 
             bool shift = leftShift || rightShift;
-            if ((leftControl || rightControl) && (ch == 's' || ch == 'x' || ch == 'z'))
+            if ((leftControl || rightControl) && (ch == 's' || ch == 'x' || ch == 'z' || ch == 'd'))
             {
-                ch = ch == 's' ? 19 : ch == 'x' ? 24 : 26;
+                ch = ch == 'd' ? 4 : ch == 's' ? 19 : ch == 'x' ? 24 : 26;
             }
 
-            if (ch == 3 || ch == 19 || ch == 24 || ch == 26)
+            if (ch == 4 || ch == 3 || ch == 19 || ch == 24 || ch == 26)
             {
             }
             else if (ch >= 'a' && ch <= 'z')

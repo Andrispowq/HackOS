@@ -2,37 +2,42 @@
 
 int main(int argc, char** argv)
 {
-    if (!Arguments(argc, 2, "cat <path> (or read <path>)"))
+    if (argc > 2)
     {
+        Error("Usage: cat [path] (or read [path])\n");
         return 2;
     }
 
-    uint64_t file = syscall_open(argv[1]);
-    if (file == HACKOS_ERROR)
+    uint64_t fd = argc == 2 ? syscall_fd_open(argv[1], HACKOS_OPEN_READ) : HACKOS_STDIN;
+    if (fd >= HACKOS_FD_LIMIT)
     {
-        Print("File not found.\n");
+        Error("File not found.\n");
         return 1;
     }
 
-    char buffer[512];
+    char buffer[HACKOS_IO_LIMIT];
     int status = 0;
     for (;;)
     {
-        uint64_t length = syscall_read(file, buffer, sizeof(buffer));
+        uint64_t length = syscall_fd_read(fd, buffer, sizeof(buffer), HACKOS_WAIT_FOREVER);
         if (!length)
         {
             break;
         }
 
-        if (length == HACKOS_ERROR || syscall_user_write(buffer, length) != length)
+        if (length > sizeof(buffer) || !Write(HACKOS_STDOUT, buffer, length))
         {
-            Print("Read failed.\n");
+            Error("Read/write failed.\n");
             status = 1;
             break;
         }
     }
 
-    syscall_close(file);
-    Print("\n");
+    if (argc == 2 && syscall_fd_close(fd) != 0)
+    {
+        Error("Close failed.\n");
+        status = 1;
+    }
+
     return status;
 }

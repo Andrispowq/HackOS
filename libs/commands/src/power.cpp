@@ -20,6 +20,6 @@ int main(int argc, char**)
         return 0;
     }
 
-    Print(result == HACKOS_DENIED ? "Permission denied: root required.\n" : "Power request failed.\n");
+    Error(result == HACKOS_DENIED ? "Permission denied: root required.\n" : "Power request failed.\n");
     return 1;
 }

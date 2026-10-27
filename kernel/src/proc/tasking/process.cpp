@@ -1,4 +1,6 @@
 #include "process.h"
+#include "deadline.h"
+#include "proc/user/streams.h"
 #include "hackos/abi.h"
 #include "drivers/keyboard/keyboard.h"
 #include "arch/x86_64/interrupts/guard.h"
@@ -65,8 +67,37 @@ static void WakeJobWaiters()
     }
 }
 
+void WakeStreamWaiters()
+{
+    for (auto p = ready_queue; p; p = p->next)
+    {
+        if (p->state == PROCESS_STATE_IO)
+        {
+            p->state = PROCESS_STATE_ALIVE;
+        }
+    }
+}
+
+uint64_t UserSleep(uint64_t timeout)
+{
+    InterruptGuard guard;
+    WaitDeadline deadline(timeout);
+    if (!deadline.Valid() || timeout == HACKOS_WAIT_FOREVER)
+    {
+        return HACKOS_ERROR;
+    }
+
+    while (!deadline.Expired())
+    {
+        deadline.Block(PROCESS_STATE_SLEEP);
+    }
+
+    return 0;
+}
+
 void WakeTerminalReaders()
 {
+    WakeStreamWaiters();
     for (auto p = ready_queue; p; p = p->next)
     {
         if (p->state == PROCESS_STATE_INPUT)
@@ -252,6 +283,7 @@ Process::Process(const char* label, void* entry, void* parameter)
 Process::~Process()
 {
     ReleaseUserWindows(this);
+    ReleaseStreams(this);
     for (auto file : files)
     {
         if (file)
@@ -338,6 +370,8 @@ static void CompleteProcess(Process* child)
     }
 
     child->state = PROCESS_STATE_ZOMBIE;
+    // Pipe peers must observe exit immediately, independently of idle reaping.
+    ReleaseStreams(child, true);
     // A nested shell/controller owns the groups it explicitly created. End
     // those jobs before discarding its completion records and terminal link.
     for (auto p = ready_queue; p; p = p->next)
@@ -424,9 +458,15 @@ static void CompleteProcess(Process* child)
 
 uint64_t WaitForChild(uint64_t pid, int64_t* status, uint64_t flags)
 {
+    return WaitForChildTimeout(pid, status, flags, HACKOS_WAIT_FOREVER);
+}
+
+uint64_t WaitForChildTimeout(uint64_t pid, int64_t* status, uint64_t flags, uint64_t timeout)
+{
     InterruptGuard guard;
     auto parent = current_process;
-    if (!parent || !parent->userSpace || flags & ~HACKOS_WAIT_NOHANG ||
+    WaitDeadline deadline(timeout);
+    if (!deadline.Valid() || !parent || !parent->userSpace || flags & ~HACKOS_WAIT_NOHANG ||
         (status && !parent->userSpace->WritableRange((uint64_t)status, sizeof(*status))))
     {
         return HACKOS_ERROR;
@@ -453,9 +493,14 @@ uint64_t WaitForChild(uint64_t pid, int64_t* status, uint64_t flags)
     }
     while (!result->done)
     {
+        if (deadline.Expired())
+        {
+            parent->waitingFor = 0;
+            return HACKOS_TIMED_OUT;
+        }
+
         parent->waitingFor = pid;
-        parent->state = PROCESS_STATE_WAITING;
-        ScheduleIRQ(); // No PreemptionGuard: this task is genuinely blocked.
+        deadline.Block(PROCESS_STATE_WAITING);
     }
 
     parent->waitingFor = 0;
@@ -488,9 +533,15 @@ static ChildResult* OwnedJob(uint64_t group)
 
 uint64_t WaitForJob(uint64_t group, int64_t* status, uint64_t flags)
 {
+    return WaitForJobTimeout(group, status, flags, HACKOS_WAIT_FOREVER);
+}
+
+uint64_t WaitForJobTimeout(uint64_t group, int64_t* status, uint64_t flags, uint64_t timeout)
+{
     InterruptGuard guard;
     auto result = OwnedJob(group);
-    if (!result || (flags & ~HACKOS_WAIT_NOHANG) ||
+    WaitDeadline deadline(timeout);
+    if (!deadline.Valid() || !result || (flags & ~HACKOS_WAIT_NOHANG) ||
         (status && !current_process->userSpace->WritableRange((uint64_t)status, sizeof(*status))))
     {
         return HACKOS_ERROR;
@@ -504,9 +555,14 @@ uint64_t WaitForJob(uint64_t group, int64_t* status, uint64_t flags)
             return 0;
         }
 
+        if (deadline.Expired())
+        {
+            current_process->waitingGroup = 0;
+            return HACKOS_TIMED_OUT;
+        }
+
         current_process->waitingGroup = group;
-        current_process->state = PROCESS_STATE_WAITING;
-        ScheduleIRQ();
+        deadline.Block(PROCESS_STATE_WAITING);
     }
 
     current_process->waitingGroup = 0;
@@ -518,6 +574,16 @@ uint64_t WaitForJob(uint64_t group, int64_t* status, uint64_t flags)
 
     bool stopped = JobState(group) == 2;
     int64_t value = stopped ? 148 : result->status;
+    if (!stopped && result->statusPid)
+    {
+        for (auto& member : current_process->children)
+        {
+            if (member.pid == result->statusPid)
+            {
+                value = member.status;
+            }
+        }
+    }
     if (status)
     {
         current_process->userSpace->CopyToUser((uint64_t)status, &value, sizeof(value));
@@ -525,6 +591,14 @@ uint64_t WaitForJob(uint64_t group, int64_t* status, uint64_t flags)
 
     if (!stopped)
     {
+        for (auto& member : current_process->children)
+        {
+            if (member.group == group)
+            {
+                member = {};
+            }
+        }
+
         *result = {};
     }
 
@@ -574,7 +648,7 @@ uint64_t ControlJob(uint64_t group, uint64_t operation)
             reader = p;
         }
 
-        if (p->state == PROCESS_STATE_STOPPED)
+        if (p->state == PROCESS_STATE_STOPPED || p->state == PROCESS_STATE_STARTING)
         {
             // Recheck a suspended wait/read predicate, including a child that
             // completed while its parent was stopped.
@@ -711,6 +785,16 @@ Registers* Schedule(Registers* frame)
                     break;
                 }
             }
+        }
+    }
+
+    for (auto p = ready_queue; p; p = p->next)
+    {
+        if (p->waitTimed &&
+            (p->state == PROCESS_STATE_WAITING || p->state == PROCESS_STATE_IO || p->state == PROCESS_STATE_SLEEP) &&
+            (int64_t)(tick - p->wakeTick) >= 0)
+        {
+            p->state = PROCESS_STATE_ALIVE;
         }
     }
 

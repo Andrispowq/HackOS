@@ -19,6 +19,17 @@ inline bool CompletionPrefix(const char* line, CompletionWord& word)
     for (size_t i = 0; line[i]; ++i)
     {
         char ch = line[i];
+        if (!quote && (ch == '|' || ch == '<' || ch == '>'))
+        {
+            word.index = ch == '|' ? 0 : 1;
+            word.command[0] = 0;
+            word.text[0] = 0;
+            word.start = i + 1;
+            used = 0;
+            active = false;
+            continue;
+        }
+
         if (!quote && (ch == ' ' || ch == '\t'))
         {
             if (active)
@@ -113,7 +124,8 @@ inline bool CompletionReplace(const char* line, size_t start, const char* word, 
     while (*word)
     {
         char ch = *word++;
-        bool escape = ch == ' ' || ch == '\t' || ch == '\\' || ch == '\'' || ch == '"' || ch == '&';
+        bool escape = ch == ' ' || ch == '\t' || ch == '\\' || ch == '\'' || ch == '"' || ch == '&' || ch == '|' ||
+                      ch == '<' || ch == '>';
         if (used + (escape ? 2 : 1) > 255)
         {
             return false;

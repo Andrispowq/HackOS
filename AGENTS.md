@@ -32,6 +32,11 @@ Step 17 adds blocking terminal reads, controller-owned process groups and
 Ctrl-Z/Ctrl-C job control (`jobs`, `fg`, `bg`, `wait`, `kill %job`). Descendants
 inherit groups, completion waits cover the entire job, and stopped jobs retain
 resources until resumed or terminated. Tab completes commands and quoted paths.
+Step 18 adds inherited stdin/stdout/stderr descriptors, shared open-file positions,
+bounded pipes, ordered shell redirection and four-stage pipeline jobs. Descriptor,
+child and job waits accept timeouts; poll and sleep block in the scheduler.
+COM1 records loader/kernel entry, terminal output and faults with bounded hardware
+waits. See `docs/system/streams.md` for the ABI, limits and lifecycle rules.
 Libc has a private 512 KiB heap, allocation/split helpers and userspace integer
 formatting. Heap pages are NX and reclaimed on every exit path; direct heap
 resizing must not be mixed with libc allocation. Process-info records are 296
@@ -156,7 +161,7 @@ in the kernel; command parsing and line editing run in the ring-3 shell.
   with target `readelf`, and compare BIOS payload sizes to the table above.
   Run `tests/qemu_accounts.py`, `tests/qemu_shell.py`, `tests/qemu_user.py`,
   `tests/qemu_windows.py`, `tests/qemu_files.py`, `tests/qemu_storage.py` and
-  `tests/qemu_usability.py` with
+  `tests/qemu_usability.py` and `tests/qemu_streams.py` with
   `--firmware bios` and `--firmware uefi` after fresh image builds for interactive input, ABI, register-state and task-lifecycle checks.
   Use a disposable image for FAT32 write tests and a copied OVMF VARS file.
 - Screen output is graphical; `-nographic` alone does not expose the framebuffer

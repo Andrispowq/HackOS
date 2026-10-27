@@ -42,3 +42,7 @@ test-storage:
 .PHONY: test-usability
 test-usability:
 	$(PYTHON) qemu_usability.py --firmware $(FIRMWARE)
+
+.PHONY: test-streams
+test-streams:
+	$(PYTHON) qemu_streams.py --firmware $(FIRMWARE)

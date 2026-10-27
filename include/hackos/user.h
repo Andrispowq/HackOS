@@ -25,5 +25,7 @@ inline void Copy(char* to, const char* from)
 }
 
 void Print(const char* text);
+void Error(const char* text);
+bool Write(uint64_t fd, const void* data, uint64_t length);
 void Number(uint64_t value, unsigned base = 10);
 }

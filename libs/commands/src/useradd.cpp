@@ -4,7 +4,7 @@ int main(int argc, char** argv)
 {
     if (argc != 2 && argc != 3)
     {
-        Print("Usage: useradd <name> [group]\n");
+        Error("Usage: useradd <name> [group]\n");
         return 2;
     }
 

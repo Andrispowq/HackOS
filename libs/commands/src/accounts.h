@@ -11,7 +11,7 @@ inline bool FindUser(const char* name, HackosUserInfo& user)
         }
     }
 
-    Print("Unknown user.\n");
+    Error("Unknown user.\n");
     return false;
 }
 
@@ -25,7 +25,7 @@ inline bool FindGroup(const char* name, HackosGroupInfo& group)
         }
     }
 
-    Print("Unknown group.\n");
+    Error("Unknown group.\n");
     return false;
 }
 
@@ -33,7 +33,7 @@ inline int AccountResult(uint64_t result, const char* success)
 {
     if (result == HACKOS_DENIED || result == HACKOS_ERROR)
     {
-        Print(result == HACKOS_DENIED ? "Permission denied: root required.\n" : "Account operation failed.\n");
+        Error(result == HACKOS_DENIED ? "Permission denied: root required.\n" : "Account operation failed.\n");
         return 1;
     }
 

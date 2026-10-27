@@ -11,14 +11,14 @@ import time
 
 ROOT = Path(__file__).resolve().parents[1]
 
-def run(firmware, image, web=False, debug=False, snapshot=False):
+def run(firmware, image, web=False, debug=False, snapshot=False, serial_log=None):
     if not image.is_file(): raise FileNotFoundError(f'Build the {firmware} image first: {image}')
     with tempfile.TemporaryDirectory(prefix='hackos-run-') as temporary:
         args = ['qemu-system-x86_64', '-machine', 'q35', '-accel', 'tcg', '-cpu', 'qemu64,+rdrand',
                 '-m', '1G', '-smp', 'cores=4,threads=1,sockets=1', '-net', 'none',
                 '-drive', f'file={image.resolve()},format=raw',
                 '-usb', '-device', 'usb-ehci,id=ehci', '-device', 'qemu-xhci,id=xhci',
-                '-monitor', 'none', '-serial', 'none']
+                '-monitor', 'none', '-serial', f'file:{serial_log.resolve()}' if serial_log else 'none']
         if snapshot: args += ['-snapshot']
         if firmware == 'uefi':
             ovmf = ROOT / 'boot/UEFI/OVMFbin'
@@ -60,6 +60,7 @@ if __name__ == '__main__':
     parser.add_argument('--image', type=Path, required=True)
     parser.add_argument('--web', action='store_true')
     parser.add_argument('--debug', action='store_true')
+    parser.add_argument('--serial-log', type=Path, help='Capture COM1 boot, fault and terminal diagnostics')
     parser.add_argument('--snapshot', action='store_true', help='Discard guest writes when QEMU stops')
     args = parser.parse_args()
-    run(args.firmware, args.image, args.web, args.debug, args.snapshot)
+    run(args.firmware, args.image, args.web, args.debug, args.snapshot, args.serial_log)

@@ -1,4 +1,5 @@
 #include "kernel.h"
+#include "drivers/serial/serial.h"
 
 #include "init/kernelInit.h"
 
@@ -19,6 +20,8 @@ KernelInfo* kInfo;
 
 extern "C" int kernel_main(KernelInfo* info)
 {
+    InitialiseSerial();
+    SerialText(info->booted_from_BIOS ? "HackOS kernel entry: BIOS\n" : "HackOS kernel entry: UEFI\n");
     kInfo = info;
 
     InitialiseDisplay(info);

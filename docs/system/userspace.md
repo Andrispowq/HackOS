@@ -1,6 +1,6 @@
 # Programs and userspace
 
-[System index](index.md) · [Memory](memory.md) · [Interrupts](interrupts.md)
+[System index](index.md) · [Memory](memory.md) · [Interrupts](interrupts.md) · [Streams and waits](streams.md)
 
 HackOS boots into the ring-3 login agent at `~/USR/BIN/LOGIN`, with no root
 credentials. `InitialiseKernel` initializes filesystems, validates the account
@@ -83,7 +83,7 @@ Console rendering and hardware operations remain kernel services.
 | `print tick`, `print time`, `print date` | Show monotonic ticks or RTC values |
 | `ps [aux]`, `kill <pid>` | List tasks or stop a user program; idle, login and session shell are protected |
 | `ls [-la] [path]`, `wd`, `cd <path>` | Browse the first filesystem; `~` denotes its root |
-| `cat <path>`, `read <path>` | Read a complete file in bounded chunks; close its owned handle on completion |
+| `cat [path]`, `read [path]` | Copy a file or stdin to stdout in bounded chunks, preserving exact bytes |
 | `xxd <file>` | Load at most 32 KiB and print offsets, hex, binary and ASCII columns |
 | `mkdir <path>` | Create one directory with an existing parent |
 | `rm <file>` | Remove one regular file; no directories or recursion |
@@ -105,8 +105,8 @@ until Enter. Tab completes built-ins, `/usr/bin` commands and file/directory pat
 Completion matches FAT case, extends a common prefix and lists ambiguous matches;
 unique directories gain `/`, files/commands gain a space. Quotes and escaped spaces
 are decoded and safely re-escaped; `cd` offers directories only. Scans are bounded
-to 1024 directory entries and the 255-character line limit. Pipelines, redirection
-and environment expansion remain unsupported. Program output shares the console.
+to 1024 directory entries and the 255-character line limit. Pipeline/redirection
+boundaries are recognized. Environment expansion remains unsupported.
 
 All commands are parsed once into a command name and arguments. The parser
 splits on spaces/tabs (the interactive line editor accepts printable characters). Single or double quotes group
@@ -147,7 +147,8 @@ The foreground prompt appears after the whole job finishes or stops. Nonzero sta
 reported. `spawn_foreground` copies arguments and grants input ownership before
 the child can run, avoiding a spawn-to-handoff race. `spawn_job` additionally
 creates a distinct process group and records the caller as its controller. The
-shell uses this for every launch and waits without reading input. A bare trailing
+shell uses this for simple launches and `spawn_io` for redirected/pipeline jobs,
+then waits without reading input. A bare trailing
 `&` grants no terminal access; completed background jobs are collected and
 reported at command boundaries, without interrupting a partially typed line.
 
@@ -205,10 +206,19 @@ shell can create its own jobs; controller exit also ends those jobs. Session
 logout still ends every descendant, including stopped jobs under other UIDs.
 
 This is bounded single-terminal job control, not POSIX signals: there are no
-signal handlers, pipelines, `setpgid`/`setsid`, or automatic SIGTTIN/SIGTTOU.
+signal handlers, `setpgid`/`setsid`, or automatic SIGTTIN/SIGTTOU.
 A resumed background reader receives `HACKOS_DENIED`. Stopped windows retain
 existing pixels; raw PS/2 scancodes and modifier/key-up records are not exposed
 by the decoded terminal API.
+
+## Standard streams and pipelines
+
+Processes inherit local stdin/stdout/stderr descriptors; `cat` reads stdin when
+no path is supplied. The shell supports `|`, `<`, `>`, `>>`, `2>` and ordered
+`2>&1`, including quoted paths and background/stopped pipelines. Four stages
+share one controller-owned job; its last stage supplies completion status.
+See [streams, deadlines and serial diagnostics](streams.md) for descriptor
+ownership, pipe lifecycle, poll, timed waits, bounds and syscall slots 66–78.
 
 ## Private heap and runtime helpers
 
@@ -282,7 +292,8 @@ children just like any other credential.
 `kill` permits the same UID or UID 0 to stop a user process. Kernel tasks, the
 login agent, authenticated shell and the calling task remain protected by this API. Wait results still
 belong exclusively to the parent PID, and file/window handles remain scoped to
-the owning process; sharing a UID never transfers handles or wait rights.
+the owning process; sharing a UID never transfers handles or wait rights. Stream
+descriptors are explicitly inherited or mapped by spawn; see [streams](streams.md).
 Terminal backspace/clear and foreground handoff depend on terminal ownership,
 not root. `systemShell` identifies the protected terminal anchor only; it is no
 longer a power/kill/account privilege. Terminal Ctrl-C targets the foreground group; window Ctrl-C retains its
@@ -370,6 +381,7 @@ return an error rather than being reinterpreted as new operations.
 | 63 | `job_control(group, operation)` | Owned job: 0 foreground, 1 background, 2 terminate, 3 query |
 | 64 | `heap_resize(bytes)` | Commit/release a private page-rounded heap prefix up to 512 KiB; return heap base |
 | 65 | `spawn_job(path, argc, argv, flags)` | Create a controlled process group; flag 1 requests atomic foreground handoff |
+| 66–78 | Stream descriptors, pipe, poll, timed waits, sleep and mapped spawn | See the [complete stream ABI](streams.md#descriptor-abi) |
 
 Calls use `int 0x80`: RAX is the number, RDI/RSI/RDX/RCX/R8 hold arguments,
 and saved RAX receives the result. Successful operations without another result
@@ -393,7 +405,7 @@ is followed by uint32 UID, GID, mode and metadataVersion (1). All file-info
 and process-info consumers must be rebuilt with these layouts; old binary consumers are unsupported.
 IDs accepted as syscall arguments are validated at full 64-bit width, so high
 bits cannot alias root. Process states 4 and 5 mean blocked terminal input and
-stopped; existing states retain their numbers. Unknown spawn flags are rejected before task creation.
+stopped, 6 I/O wait, 7 held startup, and 8 sleep; existing states retain their numbers. Unknown spawn flags are rejected before task creation.
 Paths are NUL-terminated within 256 bytes; normalization accepts `/`, `~` or
 a path relative to the caller's working directory. Copy-in validates mapped user pages; copy-out
 also requires writable pages and validates the whole range before touching it.
@@ -441,8 +453,8 @@ The active [libc Makefile](../../libs/libc/Makefile) builds startup assembly,
 user-side printing/number formatting, shared memory/string/bitmap primitives,
 and generated syscall wrappers. It excludes the older allocation, file-object,
 and window helpers still present in that directory. The active public headers
-are `hackos/user.h`, `hackos/syscall.h` and `hackos/abi.h`. There is no user heap
-API yet; shell buffers are bounded stack/static storage.
+are `hackos/user.h`, `hackos/syscall.h` and `hackos/abi.h`. The private heap and
+formatting helpers are described above; shell buffers remain bounded stack/static storage.
 
 Kernel and user code compile shared primitives with their own flags. Line editing
 is shared with host tests through `common/include/hackos/runtime/line_buffer.h`.
@@ -583,8 +595,8 @@ damage tracking and a frame-presentation API are not introduced by this change.
 
 ### Command display and directory listings
 
-Successful process start/exit diagnostics go only to the optional QEMU debug
-port (0xe9). They no longer enter the graphical console or scrollback. Command
+Successful process start/exit diagnostics go to the optional QEMU debug
+port (0xe9) and COM1 serial log. They no longer enter the graphical console or scrollback. Command
 output, nonzero exit status, Ctrl-C and actual faults/errors remain visible.
 
 `ls` prints one entry per row and suffixes directories with `/`. By default it

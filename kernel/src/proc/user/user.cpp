@@ -1,4 +1,6 @@
 #include "user.h"
+#include "streams.h"
+#include "drivers/serial/serial.h"
 #include "fs/permissions.h"
 #include "fs/filesystem.h"
 #include "arch/x86_64/ports.h"
@@ -18,6 +20,7 @@ static void DebugText(const char* text)
 {
     while (*text)
     {
+        SerialCharacter(*text);
         __outb(0xe9, *text++);
     }
 }
@@ -34,7 +37,8 @@ static void DebugNumber(uint64_t value)
 
     while (count)
     {
-        __outb(0xe9, digits[--count]);
+        SerialCharacter(digits[--count]);
+        __outb(0xe9, digits[count]);
     }
 }
 
@@ -99,6 +103,11 @@ uint64_t LoadUserProgramTask(const char* path, bool systemShell, uint64_t argc, 
                 return 0;
             }
         }
+    }
+
+    if (StreamPathBusy(path, true))
+    {
+        return 0;
     }
 
     uint64_t address;
@@ -215,6 +224,7 @@ uint64_t LoadUserProgramTask(const char* path, bool systemShell, uint64_t argc, 
     cursor = (cursor & ~7ULL) - (argc + 1) * sizeof(uint64_t);
     space->CopyToUser(cursor, userArgv, (argc + 1) * sizeof(uint64_t));
     auto process = new Process(path, (void*)header->e_entry);
+    InheritStreams(process, parent);
     process->systemShell = systemShell;
     process->processGroup = !parent || parent->systemShell ? process->pid : parent->processGroup;
     process->jobOwnerPid = parent && parent->systemShell ? parent->pid : parent ? parent->jobOwnerPid : 0;
@@ -259,25 +269,7 @@ uint64_t LoadUserProgramTask(const char* path, bool systemShell, uint64_t argc, 
 
 uint64_t user_write(const char* buffer, uint64_t length)
 {
-    auto process = GetRunningProcess();
-    if (!process || !process->userSpace || length > 1024)
-    {
-        return ~0ULL;
-    }
-
-    char copy[1024];
-    if (!process->userSpace->CopyFromUser(copy, (uint64_t)buffer, length))
-    {
-        return ~0ULL;
-    }
-
-    auto display = Display::SharedDisplay();
-    for (uint64_t i = 0; i < length; ++i)
-    {
-        display->putc(copy[i]);
-    }
-
-    return length;
+    return UserFdWrite(HACKOS_STDOUT, buffer, length, HACKOS_WAIT_FOREVER);
 }
 
 [[noreturn]] void ExitUserProcess(uint64_t code)

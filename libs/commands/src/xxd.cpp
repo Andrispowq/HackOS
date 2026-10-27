@@ -17,7 +17,7 @@ int main(int argc, char** argv)
     uint64_t size;
     if (LoadWholeFile(argv[1], contents, size))
     {
-        Print("xxd: cannot read file.\n");
+        Error("xxd: cannot read file.\n");
         return 1;
     }
 

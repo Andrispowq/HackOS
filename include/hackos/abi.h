@@ -148,3 +148,34 @@ constexpr uint64_t HACKOS_WINDOW_QUERY = 0;
 constexpr uint64_t HACKOS_WINDOW_MINIMIZE = 1;
 constexpr uint64_t HACKOS_WINDOW_MAXIMIZE = 2;
 constexpr uint64_t HACKOS_WINDOW_RESTORE = 3;
+
+// Stream descriptors are local indices; legacy file tokens retain their ABI.
+constexpr uint64_t HACKOS_STDIN = 0, HACKOS_STDOUT = 1, HACKOS_STDERR = 2;
+constexpr uint64_t HACKOS_FD_LIMIT = 16;
+constexpr uint64_t HACKOS_IO_LIMIT = 1024;
+constexpr uint64_t HACKOS_PIPE_CAPACITY = 4096;
+constexpr uint64_t HACKOS_WAIT_FOREVER = ~0ULL;
+constexpr uint64_t HACKOS_TIMED_OUT = ~7ULL;
+constexpr uint64_t HACKOS_WOULD_BLOCK = ~8ULL;
+constexpr uint64_t HACKOS_BROKEN_PIPE = ~9ULL;
+constexpr uint64_t HACKOS_OPEN_TRUNCATE = 8;
+constexpr uint64_t HACKOS_OPEN_APPEND = 16;
+constexpr uint32_t HACKOS_POLL_READ = 1, HACKOS_POLL_WRITE = 2;
+constexpr uint32_t HACKOS_POLL_HANGUP = 4, HACKOS_POLL_ERROR = 8, HACKOS_POLL_INVALID = 16;
+
+struct HackosPollFd
+{
+    uint64_t fd;
+    uint32_t events, revents;
+};
+
+// spawn_io creates a held job member. group=0 starts a new owned group;
+// job_control starts the completed group. Only these three descriptors transfer.
+struct HackosSpawnIo
+{
+    uint64_t streams[3];
+    uint64_t group;
+};
+
+static_assert(sizeof(HackosPollFd) == 16, "poll ABI");
+static_assert(sizeof(HackosSpawnIo) == 32, "spawn I/O ABI");

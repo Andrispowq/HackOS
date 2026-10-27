@@ -155,8 +155,9 @@ void InitPaging(MemoryMapEntry* entries)
 
         for (uint64_t address = start; address + 4096 <= end; address += 4096)
         {
-            // Low loader/ELF buffers, VGA/ROM and the kernel load area stay reserved.
-            if (address < 0x50000 || (address >= 0x90000 && address < 0x200000))
+            // The full 768-sector ELF staging buffer is 0x20000..0x80000.
+            // Low loader buffers, VGA/ROM and the kernel load area stay reserved.
+            if (address < 0x80000 || (address >= 0x90000 && address < 0x200000))
             {
                 continue;
             }

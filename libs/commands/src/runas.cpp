@@ -5,7 +5,7 @@ int main(int argc, char** argv)
 {
     if (argc < 3 || !*argv[2])
     {
-        Print("Usage: runas <user> <command> [args]\n");
+        Error("Usage: runas <user> <command> [args]\n");
         return 2;
     }
 
@@ -32,7 +32,7 @@ int main(int argc, char** argv)
 
     if (!NormalizePath(argv[2], explicitPath ? cwd : "~/USR/BIN", path))
     {
-        Print("Invalid program path.\n");
+        Error("Invalid program path.\n");
         return 1;
     }
 
@@ -46,14 +46,14 @@ int main(int argc, char** argv)
     }
     if (pid == HACKOS_DENIED || pid == HACKOS_ERROR)
     {
-        Print(pid == HACKOS_DENIED ? "Permission denied: root required.\n" : "Cannot launch program.\n");
+        Error(pid == HACKOS_DENIED ? "Permission denied: root required.\n" : "Cannot launch program.\n");
         return 1;
     }
 
     int64_t status;
     if (syscall_wait(pid, &status, 0) != pid)
     {
-        Print("Wait failed.\n");
+        Error("Wait failed.\n");
         return 1;
     }
 

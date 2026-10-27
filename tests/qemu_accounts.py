@@ -75,12 +75,13 @@ class Guest:
 
 
 @contextmanager
-def boot(directory, image, firmware, name, timeout, *, write_error=False, entropy=True, reboot=False):
+def boot(directory, image, firmware, name, timeout, *, write_error=False, entropy=True, reboot=False, serial=True, paused=False):
     with tempfile.TemporaryDirectory(prefix='hackos-accounts-') as temporary:
         temporary = Path(temporary)
         g = Guest()
         g.directory, g.timeout, g.fresh = directory, timeout, False
         g.console = directory / (name + '-console.log')
+        g.serial = directory / (name + '-serial.log')
         qmp_path = temporary / 'qmp'
         g.gdb = temporary / 'gdb'
         drive = str(image)
@@ -91,12 +92,14 @@ def boot(directory, image, firmware, name, timeout, *, write_error=False, entrop
         args = ['qemu-system-x86_64', '-machine', 'q35', '-accel', 'tcg',
                 '-cpu', 'qemu64,+rdrand' if entropy else 'qemu64,-rdrand', '-m', '1G',
                 '-smp', 'cores=4,threads=1,sockets=1', '-display', 'none', '-monitor', 'none',
-                '-serial', 'none', '-net', 'none',
+                '-serial', f'file:{g.serial}' if serial else 'none', '-net', 'none',
                 '-drive', f'file={drive},format=raw,werror=report',
                 '-usb', '-device', 'usb-ehci,id=ehci', '-device', 'qemu-xhci,id=xhci',
                 '-qmp', f'unix:{qmp_path},server=on,wait=off',
                 '-gdb', f'unix:{g.gdb},server=on,wait=off',
                 '-debugcon', f'file:{g.console}', '-global', 'isa-debugcon.iobase=0xe9']
+        if paused:
+            args += ['-S']
         if not reboot:
             args += ['-no-reboot']
         if firmware == 'uefi':
@@ -126,6 +129,8 @@ def boot(directory, image, firmware, name, timeout, *, write_error=False, entrop
                 output = g.output()
                 for secret in (ADMIN_PASSWORD, ALICE_PASSWORD, CHANGED_PASSWORD, 'WrongPass123'):
                     assert secret not in output, 'Password leaked to console/debug log'
+                    if serial:
+                        assert secret not in g.serial.read_text(errors='replace'), 'Password leaked to serial log'
 
 
 def inspect_slots(image, password):

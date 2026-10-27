@@ -1,3 +1,4 @@
+#include "../../../../include/hackos/serial.h"
 
 #include "cpu/idt.h"
 #include "cpu/isr.h"
@@ -14,6 +15,16 @@
 #include "libc/function.h"
 
 #include "elf_loader/elf.h"
+
+static int serialAvailable;
+
+static void SerialLog(const char* text)
+{
+    while (serialAvailable && *text)
+    {
+        serialAvailable = HackosSerialPut(*text++);
+    }
+}
 
 struct tm start_time;
 
@@ -34,6 +45,8 @@ uint64_t free_mem_addr;
 
 void loader_main(struct FramebufferInfo* info)
 {
+    serialAvailable = HackosSerialInitialise();
+    SerialLog("HackOS BIOS loader\n");
     free_mem_addr = (uint64_t)&end;
 
     //Initialise the Interrupt Descriptor Table, and paging
@@ -83,6 +96,7 @@ void loader_main(struct FramebufferInfo* info)
     Elf64_Ehdr* header = LoadProgram((void*)0x20000, &kernelMemory);
     if (!header)
     {
+        SerialLog("BIOS: ELF header not supported\n");
         kprintf("ELF header not supported!\n");
         while (1)
         {

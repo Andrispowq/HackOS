@@ -10,8 +10,8 @@ inline bool Arguments(int argc, int expected, const char* usage)
         return true;
     }
 
-    Print("Usage: ");
-    Print(usage);
-    Print("\n");
+    Error("Usage: ");
+    Error(usage);
+    Error("\n");
     return false;
 }

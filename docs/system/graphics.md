@@ -70,7 +70,8 @@ devices but does not turn this framebuffer into a serial console. Automated
 tests capture console characters through QEMU debug port `0xe9` and also save
 a framebuffer screenshot. To capture text manually, add
 `-debugcon file:console.log -global isa-debugcon.iobase=0xe9` to QEMU. This mirror
-starts with the kernel console; it is not an early-loader serial driver.
+starts with the kernel console. Step 18 also provides independent COM1 logs
+from both C loaders and kernel entry; see [serial diagnostics](streams.md#serial-diagnostics).
 
 See [building and running](../development/building.md) and the
 [testing plan](../development/testing.md).

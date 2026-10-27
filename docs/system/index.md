@@ -42,7 +42,8 @@ flowchart TD
 
 ## Kernel startup
 
-The entry point is [kernel_main](../../kernel/src/kernel.cpp). It calls
+The entry point is [kernel_main](../../kernel/src/kernel.cpp). It initializes COM1
+and logs the boot path before graphics, then calls
 `InitialiseDisplay` and `InitialiseKernel`, copies the backbuffer to the display,
 and becomes the idle task. Idle reclaims exited task stacks and halts between IRQs.
 
@@ -61,6 +62,8 @@ into two phases:
 The standalone `~/USR/BIN/SHELL` owns command parsing and PS/2 line editing in
 ring 3. Its checked syscall interface supplies terminal, file, process and power
 services, plus inherited working directories and UID/GID/group credentials.
+[Standard streams](streams.md) add descriptors, pipes, redirection, poll and
+scheduler deadlines.
 The shell starts after authentication; account administration requires UID 0.
 Power also requires UID 0, except for the boot login agent while it owns the
 logged-out terminal and displays login/restart/shutdown actions. Kill permits the

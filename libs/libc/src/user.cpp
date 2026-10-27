@@ -2,20 +2,33 @@
 
 namespace User
 {
-void Print(const char* text)
+bool Write(uint64_t fd, const void* data, uint64_t length)
 {
-    uint64_t left = Length(text);
-    while (left)
+    auto bytes = (const char*)data;
+    while (length)
     {
-        uint64_t length = left > 1024 ? 1024 : left;
-        if (syscall_user_write(text, length) != length)
+        uint64_t count = length > HACKOS_IO_LIMIT ? HACKOS_IO_LIMIT : length;
+        uint64_t result = syscall_fd_write(fd, bytes, count, HACKOS_WAIT_FOREVER);
+        if (!result || result > count)
         {
-            return;
+            return false;
         }
 
-        text += length;
-        left -= length;
+        bytes += result;
+        length -= result;
     }
+
+    return true;
+}
+
+void Print(const char* text)
+{
+    Write(HACKOS_STDOUT, text, Length(text));
+}
+
+void Error(const char* text)
+{
+    Write(HACKOS_STDERR, text, Length(text));
 }
 
 void Number(uint64_t value, unsigned base)

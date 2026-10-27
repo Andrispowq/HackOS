@@ -69,3 +69,9 @@ KeyboardRead ReadKeyboard(char& ch)
 
     return terminalInput.Pop(ch) ? KeyboardRead::Character : KeyboardRead::Empty;
 }
+
+bool KeyboardReady()
+{
+    InterruptGuard guard;
+    return terminalInput.Ready();
+}

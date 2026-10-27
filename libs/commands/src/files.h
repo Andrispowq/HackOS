@@ -14,7 +14,7 @@ inline uint64_t LoadWholeFile(const char* path, char* data, uint64_t& size)
 
     if ((info.attributes & HACKOS_DIRECTORY) || info.size > HACKOS_FILE_LIMIT)
     {
-        Print("Expected a file of at most 32768 bytes.\n");
+        Error("Expected a file of at most 32768 bytes.\n");
         return HACKOS_ERROR;
     }
 

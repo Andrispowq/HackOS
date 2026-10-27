@@ -1,7 +1,7 @@
 #include "hackos/user.h"
 #include "hackos/stdio.h"
 #include "hackos/runtime/line_buffer.h"
-#include "hackos/runtime/arguments.h"
+#include "hackos/runtime/pipeline.h"
 #include "hackos/runtime/history.h"
 #include "hackos/runtime/path.h"
 #include "hackos/runtime/completion.h"
@@ -79,7 +79,7 @@ static bool WaitJob(Job& job)
 
     if (result != job.group)
     {
-        Print("Wait failed.\n");
+        Error("Wait failed.\n");
         return false;
     }
 
@@ -90,18 +90,9 @@ static bool WaitJob(Job& job)
     }
     else if (status)
     {
-        Print("Program exited with status ");
-        if (status < 0)
-        {
-            Print("-");
-            Number(0ULL - (uint64_t)status);
-        }
-        else
-        {
-            Number(status);
-        }
-
-        Print(".\n");
+        char message[80];
+        snprintf(message, sizeof(message), "Program exited with status %ld.\n", status);
+        Error(message);
     }
 
     return true;
@@ -152,9 +143,9 @@ static bool Arguments(int argc, int expected, const char* usage)
         return true;
     }
 
-    Print("Usage: ");
-    Print(usage);
-    Print("\n");
+    Error("Usage: ");
+    Error(usage);
+    Error("\n");
     return false;
 }
 
@@ -172,16 +163,16 @@ static void Launch(int argc, char** args, bool background, bool lookup = true)
     char path[256];
     if (!NormalizePath(args[0], explicitPath ? workingDirectory : "~/USR/BIN", path))
     {
-        Print("Invalid or too long program path.\n");
+        Error("Invalid or too long program path.\n");
         return;
     }
 
     HackosFileInfo info;
     if (syscall_stat(path, &info) != 0 || (info.attributes & HACKOS_DIRECTORY))
     {
-        Print(explicitPath ? "Cannot load user program: " : "Unknown command: ");
-        Print(args[0]);
-        Print("\n");
+        Error(explicitPath ? "Cannot load user program: " : "Unknown command: ");
+        Error(args[0]);
+        Error("\n");
         return;
     }
 
@@ -199,16 +190,16 @@ static void Launch(int argc, char** args, bool background, bool lookup = true)
 
     if (!job)
     {
-        Print("Job table full; wait for a job first.\n");
+        Error("Job table full; wait for a job first.\n");
         return;
     }
 
     uint64_t pid = syscall_spawn_job(path, argc, args, background ? 0 : HACKOS_SPAWN_FOREGROUND);
     if (pid == HACKOS_ERROR || pid == HACKOS_DENIED)
     {
-        Print("Cannot load user program: ");
-        Print(path);
-        Print("\n");
+        Error("Cannot load user program: ");
+        Error(path);
+        Error("\n");
         return;
     }
 
@@ -224,29 +215,14 @@ static void Launch(int argc, char** args, bool background, bool lookup = true)
     }
 }
 
-static void Command(char* input)
+static void Builtin(int argc, char** args, bool background)
 {
-    // The optional user prefix is not part of the program argv limit.
-    char* args[HACKOS_MAX_ARGS + 1];
-    bool background;
-    int argc = ParseArguments(input, args, HACKOS_MAX_ARGS + 1, background);
-    if (argc < 0)
-    {
-        Print("Invalid arguments (quotes, escapes, or too many arguments).\n");
-        return;
-    }
-
-    if (!argc)
-    {
-        return;
-    }
-
     const char* command = args[0];
     if (Equal(command, "user"))
     {
         if (argc < 2 || !*args[1])
         {
-            Print("Usage: user <path> [args] [&]\n");
+            Error("Usage: user <path> [args] [&]\n");
             return;
         }
 
@@ -256,7 +232,7 @@ static void Command(char* input)
 
     if (argc > HACKOS_MAX_ARGS)
     {
-        Print("Invalid arguments (too many arguments).\n");
+        Error("Invalid arguments (too many arguments).\n");
         return;
     }
 
@@ -265,7 +241,7 @@ static void Command(char* input)
     {
         if (background || argc > 2 || (Equal(command, "jobs") && argc != 1))
         {
-            Print("Usage: jobs | fg [job] | bg [job] | wait [job] | kill %job\n");
+            Error("Usage: jobs | fg [job] | bg [job] | wait [job] | kill %job\n");
             return;
         }
 
@@ -299,7 +275,7 @@ static void Command(char* input)
         auto job = FindJob(argc == 2 ? args[1] : nullptr);
         if (!job)
         {
-            Print("No such job.\n");
+            Error("No such job.\n");
             return;
         }
 
@@ -314,7 +290,7 @@ static void Command(char* input)
                                                     : HACKOS_JOB_FOREGROUND;
         if (syscall_job_control(job->group, operation) != 0)
         {
-            Print("Job operation failed.\n");
+            Error("Job operation failed.\n");
         }
         else if (operation == HACKOS_JOB_BACKGROUND)
         {
@@ -342,7 +318,7 @@ static void Command(char* input)
     {
         if (background)
         {
-            Print("Shell built-ins cannot run in the background.\n");
+            Error("Shell built-ins cannot run in the background.\n");
             return;
         }
 
@@ -355,13 +331,13 @@ static void Command(char* input)
 
             if (!*args[1])
             {
-                Print("Path must not be empty.\n");
+                Error("Path must not be empty.\n");
                 return;
             }
 
             if (syscall_chdir(args[1]) != 0)
             {
-                Print("Directory not found.\n");
+                Error("Directory not found.\n");
             }
         }
         else
@@ -384,6 +360,250 @@ static void Command(char* input)
     }
 
     Launch(argc, args, background);
+}
+
+static bool IsBuiltin(const ShellStage& stage)
+{
+    const char* name = stage.argv[0];
+    return Equal(name, "cd") || Equal(name, "history") || Equal(name, "logout") || Equal(name, "jobs") ||
+           Equal(name, "fg") || Equal(name, "bg") || Equal(name, "wait") ||
+           (Equal(name, "kill") && stage.argc == 2 && stage.argv[1][0] == '%');
+}
+
+static bool Redirect(const ShellStage& stage, uint64_t (&streams)[3], uint64_t (&opened)[8], unsigned& count)
+{
+    for (unsigned i = 0; i < stage.redirectCount; ++i)
+    {
+        const auto& redirect = stage.redirects[i];
+        if (redirect.source >= 0)
+        {
+            streams[redirect.target] = streams[redirect.source];
+        }
+        else
+        {
+            uint64_t fd = syscall_fd_open(redirect.path, redirect.mode);
+            if (fd >= HACKOS_FD_LIMIT)
+            {
+                Error("Cannot open redirection: ");
+                Error(redirect.path);
+                Error("\n");
+                return false;
+            }
+
+            opened[count++] = fd;
+            streams[redirect.target] = fd;
+        }
+    }
+
+    return true;
+}
+
+static void Command(char* input)
+{
+    ShellPipeline pipeline;
+    if (!ParsePipeline(input, pipeline))
+    {
+        Error("Invalid arguments (quotes, escapes, operators, or too many arguments).\n");
+        return;
+    }
+
+    if (!pipeline.count)
+    {
+        return;
+    }
+
+    // Preserve the existing simple launch path and its diagnostics.
+    if (pipeline.count == 1 && !pipeline.stages[0].redirectCount)
+    {
+        auto& stage = pipeline.stages[0];
+        Builtin(stage.argc, stage.argv, pipeline.background);
+        return;
+    }
+
+    for (unsigned i = 0; i < pipeline.count; ++i)
+    {
+        if (IsBuiltin(pipeline.stages[i]) && (pipeline.count != 1 || pipeline.background))
+        {
+            Error("Shell built-ins require a single foreground command.\n");
+            return;
+        }
+    }
+
+    if (IsBuiltin(pipeline.stages[0]))
+    {
+        // Saved descriptors also give ordered dup redirections stable sources.
+        uint64_t streams[3] = {13, 14, 15}, opened[8];
+        unsigned count = 0;
+        bool saved = true;
+        for (unsigned i = 0; i < 3; ++i)
+        {
+            saved = syscall_dup2(i, 13 + i) == 13 + i && saved;
+        }
+
+        bool ready = saved && Redirect(pipeline.stages[0], streams, opened, count);
+        if (ready)
+        {
+            for (unsigned i = 0; i < 3; ++i)
+            {
+                syscall_dup2(streams[i], i);
+            }
+        }
+
+        for (unsigned i = 0; i < count; ++i)
+        {
+            syscall_fd_close(opened[i]);
+        }
+
+        if (ready)
+        {
+            auto& stage = pipeline.stages[0];
+            Builtin(stage.argc, stage.argv, false);
+        }
+
+        for (unsigned i = 0; i < 3; ++i)
+        {
+            syscall_dup2(13 + i, i);
+            syscall_fd_close(13 + i);
+        }
+
+        return;
+    }
+
+    char paths[4][256];
+    for (unsigned i = 0; i < pipeline.count; ++i)
+    {
+        auto& stage = pipeline.stages[i];
+        bool explicitPath = Equal(stage.argv[0], "user");
+        if (explicitPath)
+        {
+            --stage.argc;
+            for (unsigned j = 0; j < stage.argc; ++j)
+            {
+                stage.argv[j] = stage.argv[j + 1];
+            }
+        }
+
+        if (!stage.argc || stage.argc > HACKOS_MAX_ARGS || !*stage.argv[0])
+        {
+            Error("Invalid program arguments.\n");
+            return;
+        }
+
+        for (const char* ch = stage.argv[0]; *ch; ++ch)
+        {
+            explicitPath = explicitPath || *ch == '/' || *ch == '~';
+        }
+
+        HackosFileInfo info;
+        if (!NormalizePath(stage.argv[0], explicitPath ? workingDirectory : "~/USR/BIN", paths[i]) ||
+            syscall_stat(paths[i], &info) != 0 || (info.attributes & HACKOS_DIRECTORY))
+        {
+            Error("Cannot load user program: ");
+            Error(stage.argv[0]);
+            Error("\n");
+            return;
+        }
+
+        stage.argv[0] = paths[i];
+    }
+
+    CollectBackground();
+    Job* job = nullptr;
+    for (auto& slot : jobs)
+    {
+        if (!slot.group)
+        {
+            job = &slot;
+            break;
+        }
+    }
+
+    if (!job)
+    {
+        Error("Job table full; wait for a job first.\n");
+        return;
+    }
+
+    uint64_t previous = HACKOS_ERROR;
+    bool success = true;
+    for (unsigned i = 0; i < pipeline.count; ++i)
+    {
+        uint64_t ends[2] = {HACKOS_ERROR, HACKOS_ERROR};
+        bool more = i + 1 < pipeline.count;
+        if (more && syscall_pipe(ends) != 0)
+        {
+            success = false;
+            break;
+        }
+
+        HackosSpawnIo specification = {{previous == HACKOS_ERROR ? 0 : previous, more ? ends[1] : 1, 2}, job->group};
+        uint64_t opened[8];
+        unsigned count = 0;
+        auto& stage = pipeline.stages[i];
+        bool ready = Redirect(stage, specification.streams, opened, count);
+        uint64_t pid = ready ? syscall_spawn_io(paths[i], stage.argc, stage.argv, &specification) : HACKOS_ERROR;
+        for (unsigned j = 0; j < count; ++j)
+        {
+            syscall_fd_close(opened[j]);
+        }
+
+        if (previous != HACKOS_ERROR)
+        {
+            syscall_fd_close(previous);
+        }
+
+        if (more)
+        {
+            syscall_fd_close(ends[1]);
+        }
+
+        previous = ends[0];
+        if (pid == HACKOS_ERROR || pid == HACKOS_DENIED)
+        {
+            success = false;
+            break;
+        }
+
+        if (!job->group)
+        {
+            job->group = pid;
+            Copy(job->name, paths[0]);
+        }
+    }
+
+    if (previous != HACKOS_ERROR)
+    {
+        syscall_fd_close(previous);
+    }
+
+    if (!success)
+    {
+        if (job->group)
+        {
+            syscall_job_control(job->group, HACKOS_JOB_TERMINATE);
+            syscall_job_wait(job->group, nullptr, 0);
+            *job = {};
+        }
+
+        Error("Pipeline could not start.\n");
+        return;
+    }
+
+    if (syscall_job_control(job->group, pipeline.background ? HACKOS_JOB_BACKGROUND : HACKOS_JOB_FOREGROUND) != 0)
+    {
+        syscall_job_control(job->group, HACKOS_JOB_TERMINATE);
+        syscall_job_wait(job->group, nullptr, 0);
+        *job = {};
+        Error("Pipeline could not start.\n");
+    }
+    else if (pipeline.background)
+    {
+        JobLine(*job, "Running");
+    }
+    else
+    {
+        WaitJob(*job);
+    }
 }
 
 static void Complete(LineBuffer& line)
@@ -544,7 +764,7 @@ int main()
         uint64_t value = syscall_terminal_read(0);
         if (value == HACKOS_DENIED || value == HACKOS_ERROR)
         {
-            Print("Shell does not own terminal input.\n");
+            Error("Shell does not own terminal input.\n");
             return 1;
         }
 

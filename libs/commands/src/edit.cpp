@@ -92,7 +92,7 @@ int main(int argc, char** argv)
     // A background editor must fail before clearing or consuming the terminal.
     if (syscall_console(2) == HACKOS_DENIED)
     {
-        Print("edit: foreground terminal required.\n");
+        Error("edit: foreground terminal required.\n");
         return 1;
     }
 
@@ -100,7 +100,7 @@ int main(int argc, char** argv)
     bool create = status == HACKOS_NOT_FOUND;
     if ((status && !create) || !document.Valid())
     {
-        Print("edit: cannot load file (limit 32768 bytes; ASCII, LF and tabs only).\n");
+        Error("edit: cannot load file (limit 32768 bytes; ASCII, LF and tabs only).\n");
         return 1;
     }
 
@@ -111,7 +111,7 @@ int main(int argc, char** argv)
         uint64_t key = syscall_terminal_read(0);
         if (key == HACKOS_DENIED || key == HACKOS_ERROR)
         {
-            Print("edit: terminal unavailable.\n");
+            Error("edit: terminal unavailable.\n");
             return 1;
         }
 

@@ -7,6 +7,7 @@
 #include "arch/x86_64/ports.h"
 #include "proc/tasking/process.h"
 #include "proc/user/user.h"
+#include "proc/user/streams.h"
 #include "proc/user/accounts.h"
 #include "proc/user/account_store.h"
 #include "security/crypto.h"
@@ -580,10 +581,10 @@ static uint64_t UserAuthLogin(const char* username, const char* source)
 
 static bool MutationPath(const char* name, char (&path)[256]);
 
-static uint64_t UserOpenMode(const char* name, uint64_t mode)
+static uint64_t OpenUserFile(const char* name, uint64_t mode, ActiveFile*& destination)
 {
     char path[256];
-    if (!Path(name, path) || nextHandle == ~0ULL - 5 || !(mode & 3) || (mode & ~7ULL) ||
+    if (!Path(name, path) || !(mode & 3) || (mode & ~7ULL) ||
         ((mode & HACKOS_OPEN_CREATE) && !(mode & HACKOS_OPEN_WRITE)))
     {
         return HACKOS_ERROR;
@@ -591,6 +592,11 @@ static uint64_t UserOpenMode(const char* name, uint64_t mode)
 
     bool write = mode & HACKOS_OPEN_WRITE;
     if (write && !MutationPath(name, path))
+    {
+        return HACKOS_ERROR;
+    }
+
+    if (StreamPathBusy(path, true))
     {
         return HACKOS_ERROR;
     }
@@ -608,45 +614,56 @@ static uint64_t UserOpenMode(const char* name, uint64_t mode)
         }
     }
 
+    ActiveFile* file = nullptr;
+    int status = filesystems[0]->Lookup(path, file);
+    if (status == -2 && (mode & HACKOS_OPEN_CREATE))
+    {
+        if (!PathAccess(path, Caller()->credentials, 3, true))
+        {
+            return HACKOS_DENIED;
+        }
+
+        FilePermissions permissions = {Caller()->credentials.uid, Caller()->credentials.gid, 0644};
+        if (filesystems[0]->SaveFile(path, nullptr, 0, true, &permissions))
+        {
+            return HACKOS_ERROR;
+        }
+
+        status = filesystems[0]->Lookup(path, file);
+    }
+
+    if (status || !file)
+    {
+        return HACKOS_ERROR;
+    }
+
+    unsigned access = (mode & HACKOS_OPEN_READ ? 4 : 0) | (write ? 2 : 0);
+    if ((file->GetAttributes() & DIRECTORY) || (write && (file->GetAttributes() & READ_ONLY)) ||
+        !PathAccess(path, Caller()->credentials, access))
+    {
+        filesystems[0]->CloseFile(file);
+        return HACKOS_ERROR;
+    }
+
+    file->accessMode = mode;
+    destination = file;
+    ++user_files_live;
+    return 0;
+}
+
+static uint64_t UserOpenMode(const char* name, uint64_t mode)
+{
+    if (nextHandle == ~0ULL - 5)
+    {
+        return HACKOS_ERROR;
+    }
+
     for (unsigned i = 0; i < 8; ++i)
     {
         if (!Caller()->files[i])
         {
-            ActiveFile* file = nullptr;
-            int status = filesystems[0]->Lookup(path, file);
-            if (status == -2 && (mode & HACKOS_OPEN_CREATE))
-            {
-                if (!PathAccess(path, Caller()->credentials, 3, true))
-                {
-                    return HACKOS_DENIED;
-                }
-
-                FilePermissions permissions = {Caller()->credentials.uid, Caller()->credentials.gid, 0644};
-                if (filesystems[0]->SaveFile(path, nullptr, 0, true, &permissions))
-                {
-                    return HACKOS_ERROR;
-                }
-
-                status = filesystems[0]->Lookup(path, file);
-            }
-
-            if (status || !file)
-            {
-                return HACKOS_ERROR;
-            }
-
-            unsigned access = (mode & HACKOS_OPEN_READ ? 4 : 0) | (write ? 2 : 0);
-            if ((file->GetAttributes() & DIRECTORY) || (write && (file->GetAttributes() & READ_ONLY)) ||
-                !PathAccess(path, Caller()->credentials, access))
-            {
-                filesystems[0]->CloseFile(file);
-                return HACKOS_ERROR;
-            }
-
-            file->accessMode = mode;
-            Caller()->files[i] = file;
-            ++user_files_live;
-            return Caller()->fileHandles[i] = ++nextHandle;
+            uint64_t result = OpenUserFile(name, mode, Caller()->files[i]);
+            return result ? result : Caller()->fileHandles[i] = ++nextHandle;
         }
     }
 
@@ -715,6 +732,132 @@ static uint64_t UserClose(uint64_t handle)
     Caller()->files[slot] = nullptr;
     Caller()->fileHandles[slot] = 0;
     return status ? HACKOS_ERROR : 0;
+}
+
+static uint64_t UserFdOpen(const char* name, uint64_t mode)
+{
+    bool truncate = mode & HACKOS_OPEN_TRUNCATE;
+    bool append = mode & HACKOS_OPEN_APPEND;
+    int slot = FreeDescriptor(Caller());
+    if (slot < 0 || (mode & ~31ULL) || ((truncate || append) && !(mode & HACKOS_OPEN_WRITE)) || (truncate && append))
+    {
+        return HACKOS_ERROR;
+    }
+
+    auto stream = AllocateStream();
+    if (!stream)
+    {
+        return HACKOS_ERROR;
+    }
+
+    // Reserve all bookkeeping before opening/creating/truncating any file.
+    Caller()->descriptors[slot] = stream;
+    uint64_t result = OpenUserFile(name, mode & 7, stream->file);
+    if (result)
+    {
+        UserFdClose(slot);
+        return result;
+    }
+
+    auto file = stream->file;
+    stream->append = append;
+    if (truncate)
+    {
+        char path[256];
+        Name(path, file->GetPath());
+        filesystems[0]->CloseFile(file);
+        stream->file = nullptr;
+        --user_files_live;
+        if (filesystems[0]->SaveFile(path, nullptr, 0, false) || filesystems[0]->Lookup(path, file))
+        {
+            UserFdClose(slot);
+            return HACKOS_ERROR;
+        }
+
+        file->accessMode = mode & 7;
+        stream->file = file;
+        ++user_files_live;
+    }
+
+    return slot;
+}
+
+static uint64_t UserSpawnIo(const char* name, uint64_t argc, const char* const* argv, const HackosSpawnIo* source)
+{
+    HackosSpawnIo specification;
+    if (!Caller()->userSpace->CopyFromUser(&specification, (uint64_t)source, sizeof(specification)))
+    {
+        return HACKOS_ERROR;
+    }
+
+    for (auto fd : specification.streams)
+    {
+        if (fd != HACKOS_ERROR && (fd >= HACKOS_FD_LIMIT || !Caller()->descriptors[fd]))
+        {
+            return HACKOS_ERROR;
+        }
+    }
+
+    ChildResult* leader = nullptr;
+    if (specification.group)
+    {
+        for (auto& child : Caller()->children)
+        {
+            if (child.pid == specification.group && child.job)
+            {
+                leader = &child;
+            }
+        }
+
+        bool held = false;
+        for (auto process = ready_queue; process; process = process->next)
+        {
+            if (process->processGroup == specification.group && process->jobOwnerPid == Caller()->pid &&
+                process->state == PROCESS_STATE_STARTING)
+            {
+                held = true;
+            }
+        }
+
+        if (!leader || !held)
+        {
+            return HACKOS_DENIED;
+        }
+    }
+
+    uint64_t pid = UserSpawnArgs(name, argc, argv);
+    if (pid == HACKOS_ERROR || pid == HACKOS_DENIED)
+    {
+        return pid;
+    }
+
+    uint64_t group = specification.group ? specification.group : pid;
+    for (auto process = ready_queue; process; process = process->next)
+    {
+        if (process->pid == pid)
+        {
+            SelectStreams(process, Caller(), specification);
+            process->processGroup = group;
+            process->jobOwnerPid = Caller()->pid;
+            process->state = PROCESS_STATE_STARTING;
+        }
+    }
+
+    for (auto& child : Caller()->children)
+    {
+        if (child.pid == pid)
+        {
+            child.group = group;
+            child.job = pid == group;
+            if (!leader)
+            {
+                leader = &child;
+            }
+        }
+    }
+
+    leader->statusPid = pid;
+    return pid;
 }
 
 static uint64_t UserStat(const char* name, HackosFileInfo* destination)
@@ -849,6 +992,11 @@ static bool MutationPath(const char* name, char (&path)[256])
 {
     if (!Path(name, path) || !path[1] || Caller()->authenticationAgent || strcmp(path, (char*)"~/SYSTEM") == 0 ||
         strncmp(path, (char*)"~/SYSTEM/", 9) == 0)
+    {
+        return false;
+    }
+
+    if (StreamPathBusy(path))
     {
         return false;
     }
@@ -1098,11 +1246,56 @@ static void syscall_handler(Registers* r)
         return;
     }
 
-    PreemptionGuard guard;
+    // These calls can suspend the current kernel stack. Never put a
+    // PreemptionGuard around them; each predicate/state change is IRQ-atomic.
     switch (r->rax)
     {
     case HACKOS_SYS_user_write:
         r->rax = user_write((const char*)r->rdi, r->rsi);
+        return;
+    case HACKOS_SYS_fd_read:
+        r->rax = UserFdRead(r->rdi, (void*)r->rsi, r->rdx, r->rcx);
+        return;
+    case HACKOS_SYS_fd_write:
+        r->rax = UserFdWrite(r->rdi, (const void*)r->rsi, r->rdx, r->rcx);
+        return;
+    case HACKOS_SYS_poll:
+        r->rax = UserPoll((HackosPollFd*)r->rdi, r->rsi, r->rdx);
+        return;
+    case HACKOS_SYS_wait_timeout:
+        r->rax = WaitForChildTimeout(r->rdi, (int64_t*)r->rsi, r->rdx, r->rcx);
+        return;
+    case HACKOS_SYS_job_wait_timeout:
+        r->rax = WaitForJobTimeout(r->rdi, (int64_t*)r->rsi, r->rdx, r->rcx);
+        return;
+    case HACKOS_SYS_sleep:
+        r->rax = UserSleep(r->rdi);
+        return;
+    }
+
+    PreemptionGuard guard;
+    switch (r->rax)
+    {
+    case HACKOS_SYS_fd_open:
+        r->rax = UserFdOpen((const char*)r->rdi, r->rsi);
+        break;
+    case HACKOS_SYS_fd_close:
+        r->rax = UserFdClose(r->rdi);
+        break;
+    case HACKOS_SYS_dup2:
+        r->rax = UserDup2(r->rdi, r->rsi);
+        break;
+    case HACKOS_SYS_pipe:
+        r->rax = UserPipe((uint64_t*)r->rdi);
+        break;
+    case HACKOS_SYS_fd_seek:
+        r->rax = UserFdSeek(r->rdi, r->rsi);
+        break;
+    case HACKOS_SYS_fd_flush:
+        r->rax = UserFdFlush(r->rdi);
+        break;
+    case HACKOS_SYS_spawn_io:
+        r->rax = UserSpawnIo((const char*)r->rdi, r->rsi, (const char* const*)r->rdx, (const HackosSpawnIo*)r->rcx);
         break;
     case HACKOS_SYS_spawn_job:
         r->rax = UserSpawnJob((const char*)r->rdi, r->rsi, (const char* const*)r->rdx, r->rcx);

@@ -5,14 +5,14 @@ int main(int argc, char** argv)
 {
     if (argc < 1 || argc > 2)
     {
-        Print("Usage: passwd [user]\n");
+        Error("Usage: passwd [user]\n");
         return 2;
     }
 
     HackosCredentials identity;
     if (syscall_identity(&identity) != 0 || identity.uid != 0)
     {
-        Print("Permission denied: root required.\n");
+        Error("Permission denied: root required.\n");
         return 1;
     }
 
@@ -39,7 +39,7 @@ int main(int argc, char** argv)
     EraseSecret(password, sizeof(password));
     if (result == HACKOS_NO_ENTROPY)
     {
-        Print("Secure randomness unavailable; password was not saved.\n");
+        Error("Secure randomness unavailable; password was not saved.\n");
         return 1;
     }
 

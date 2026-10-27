@@ -83,7 +83,7 @@ accounts, authentication and setup are addressed in step 14.
 
 ## Proposed continuation after step 14
 
-Steps 1–17 are implemented. The order below is a proposal for future iterations,
+Steps 1–18 are implemented. The order below is a proposal for future iterations,
 not authorization to implement them automatically. A fresh chat should read
 `AGENTS.md`, this file, `docs/system/userspace.md`, and the build/testing guides
 before starting. Preserve the root `.clang-format` style, leave vendored code
@@ -129,7 +129,17 @@ alone, and verify both BIOS and UEFI for each implementation step.
     group termination; a bounded private heap with malloc/calloc/realloc/free,
     C++ allocation, split and userspace formatting; quote-aware Tab completion.
     See [userspace contracts and limits](system/userspace.md). POSIX signals,
-    pipelines, raw scancode events and a general virtual-memory API remain deferred.
+    raw scancode events and a general virtual-memory API remain deferred. Pipelines
+    follow in step 18.
+
+18. **Streams, pipes, deadlines and logging — implemented:** inherited standard
+    streams and local file descriptors, shared file offsets, bounded atomic pipe
+    writes, EOF/broken-pipe handling, poll, timed child/job waits and sleep.
+    The shell supports four-stage jobs, ordered file/descriptor redirection,
+    foreground/background control and exact-byte `cat` streams. COM1 diagnostics
+    cover both C loaders, kernel entry, terminal output, lifecycle and faults.
+    BIOS staging now reserves the complete 384 KiB kernel buffer; boot tests compare
+    loaded ELF segments byte for byte. See [streams and waits](system/streams.md).
 
 The remaining subsystem lists below are the broader hardening backlog. Later
 work requires a new request.
@@ -162,7 +172,8 @@ future changes; prior results are not a substitute.
   BIOS/UEFI boots. Step 14 enlarged the fixed reservation; the FAT32-file loader remains deferred.
 - [ ] Strengthen BIOS ELF validation and both loaders' malformed-input cleanup.
   Extend firmware tests to missing files, unsupported GOP formats and map overflow.
-- [ ] Add a serial/debug reporting path for failures before graphics is available.
+- [x] Add bounded COM1 diagnostics before kernel graphics and in both C loaders (step 18).
+- [ ] Extend serial diagnostics to BIOS real-mode MBR/stage-1/video failures.
 - [ ] Replace dense physical-page bookkeeping for highly sparse memory maps;
   distinguish reserved/allocated ownership and test high-RAM guests.
 - [ ] Audit legacy page-table cloning; private user page ownership and exit

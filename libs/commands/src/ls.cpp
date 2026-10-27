@@ -2,7 +2,7 @@
 
 static void Usage()
 {
-    Print("Usage: ls [-l] [-a] [--] [path]\n");
+    Error("Usage: ls [-l] [-a] [--] [path]\n");
 }
 
 int main(int argc, char** argv)
@@ -68,7 +68,7 @@ int main(int argc, char** argv)
 
         if (result == HACKOS_ERROR || result == HACKOS_DENIED)
         {
-            Print("Cannot list directory.\n");
+            Error("Cannot list directory.\n");
             return 1;
         }
 

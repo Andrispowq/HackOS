@@ -9,7 +9,7 @@ int main(int argc, char** argv)
 
     if (syscall_unlink(argv[1]))
     {
-        Print("rm: failed (missing, protected, open or non-file path, or I/O error).\n");
+        Error("rm: failed (missing, protected, open or non-file path, or I/O error).\n");
         return 1;
     }
 
