@@ -51,7 +51,10 @@ more devices.
 - [x] Add foreground input ownership, safe Ctrl-C termination, and a fixed
   256-command shell history with Up/Down draft navigation.
 - [ ] Add blocking input, process-group/job control, a user heap, file writes and
-  window focus/input/resize to the safe ABI. Port remaining legacy runtime helpers.
+  window maximise/minimise and wheel/raw-key events to the safe ABI.
+  Port remaining legacy runtime helpers.
+- [x] Add bounded window dragging/resizing, focus/z-order, per-window input
+  events and overflow recovery.
 - [x] Port the old window test to `USR/BIN/WINDOW` using process-owned handles,
   bounded pixel copies, close polling, and automatic lifecycle cleanup.
 - [ ] Extend automatic file/window cleanup to future user allocations. Add

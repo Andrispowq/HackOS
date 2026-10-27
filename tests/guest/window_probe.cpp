@@ -1,5 +1,7 @@
 #include "hackos/user.h"
 
+extern "C" { volatile uint64_t event_gate = 0; }
+
 static bool Check(bool condition)
 {
     if (!condition)
@@ -15,6 +17,8 @@ int main(int argc, char** argv)
     HackosWindowSpec spec = {100, 100, 200, 170, "Window probe"};
     HackosWindowRect rect = {0, 0, 1, 1};
     uint32_t pixel = 0xffabcdef;
+    HackosWindowState state;
+    HackosWindowEvent event;
 
     if (argc == 3 && User::Equal(argv[1], "foreign"))
     {
@@ -24,7 +28,9 @@ int main(int argc, char** argv)
             handle = handle * 10 + argv[2][i] - '0';
         }
 
-        bool ok = syscall_window_poll(handle) == HACKOS_ERROR;
+        bool ok = syscall_window_state(handle, &state) == HACKOS_ERROR;
+        ok = syscall_window_event(handle, &event) == HACKOS_ERROR && ok;
+        ok = syscall_window_poll(handle) == HACKOS_ERROR && ok;
         ok = syscall_window_close(handle) == HACKOS_ERROR && ok;
         ok = syscall_window_blit(handle, &rect, &pixel) == HACKOS_ERROR && ok;
         return Check(ok) ? 0 : 1;
@@ -32,6 +38,32 @@ int main(int argc, char** argv)
 
     uint64_t handle = syscall_window_create(&spec);
     if (!Check(handle != HACKOS_ERROR)) return 1;
+
+    bool initial = syscall_window_event(handle, (HackosWindowEvent*)0x100000) == HACKOS_ERROR;
+    initial = syscall_window_event(handle, (HackosWindowEvent*)0x4000001fffff) == HACKOS_ERROR && initial;
+    initial = syscall_window_event(handle, &event) == 1 && event.type == HACKOS_WINDOW_FOCUS && event.focused == 1 && initial;
+    initial = syscall_window_event(handle, &event) == 0 && initial;
+    initial = syscall_window_state(handle, (HackosWindowState*)0x100000) == HACKOS_ERROR && initial;
+    initial = syscall_window_state(handle, &state) == 0 && state.focused == 1 && state.width == 200 && initial;
+    if (!Check(initial)) return 1;
+
+    if (argc == 2 && User::Equal(argv[1], "events"))
+    {
+        User::Print("WINDOW_EVENTS_READY\n");
+        while (!event_gate)
+        {
+            syscall_yield();
+        }
+
+        bool ok = syscall_window_event(handle, (HackosWindowEvent*)0x100000) == HACKOS_ERROR;
+        ok = syscall_window_event(handle, &event) == 1 && event.type == HACKOS_WINDOW_OVERFLOW && ok;
+        ok = syscall_window_event(handle, &event) == 0 && ok;
+        ok = syscall_window_state(handle, &state) == 0 && state.focused == 1 && ok;
+        if (!Check(ok)) return 1;
+
+        User::Print("WINDOW_EVENTS_OK\n");
+        return 0;
+    }
 
     if (argc == 2)
     {

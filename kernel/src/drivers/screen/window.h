@@ -4,6 +4,8 @@
 #include "lib/stdint.h"
 
 #include "framebuffer.h"
+#include "hackos/abi.h"
+#include "hackos/runtime/event_queue.h"
 
 class Window
 {
@@ -11,7 +13,14 @@ public:
     Window();
     ~Window();
 
-    void Update();
+    void SetOwner(uint64_t pid) { owner = pid; }
+    uint64_t GetOwner() const { return owner; }
+    void SetFocused(bool value);
+    void SetMouse(int32_t x, int32_t y, uint32_t buttons);
+    HackosWindowState State() const;
+    void SendEvent(uint32_t type, uint32_t key = 0);
+    bool ReadEvent(HackosWindowEvent& event);
+    void InputOverflow();
     void Draw(Framebuffer* framebuffer);
 
     //Getters
@@ -58,6 +67,12 @@ public:
     void SetCursorGrabbed(bool cursor_grabbed) { this->cursor_grabbed = cursor_grabbed; }
 
 private:
+    uint64_t owner = 0;
+    bool focused = false;
+    int32_t mouseX = 0, mouseY = 0;
+    uint32_t mouseButtons = 0;
+    EventQueue<HackosWindowEvent, 64> events;
+
     bool toBeClosed = false;
 
     uint64_t ID = 0;

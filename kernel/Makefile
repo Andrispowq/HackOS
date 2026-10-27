@@ -37,6 +37,10 @@ COMMON_KERNEL := true
 COMMON_DIR := ../common
 include $(COMMON_DIR)/runtime.mk
 
+# Keep the interactive compositor inside the fixed BIOS kernel slot. Retain
+# debug information, frame pointers and all freestanding/interrupt ABI flags.
+$(OBJ_DIR)/drivers/screen/window.o $(OBJ_DIR)/drivers/screen/window_manager.o: CFLAGS += -O2
+
 .PHONY: kernel link clean
 kernel: $(BUILD_DIR)/kernel.elf
 link: $(BIN_DIR)/kernel.elf

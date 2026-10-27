@@ -22,6 +22,8 @@ def test(firmware, timeout):
 
     def run():
         programs = [build_probe(directory, built/"source", extra=("window_probe.cpp", "WINPROBE"))]
+        symbols = require_success(command([os.environ.get("CROSS_COMPILE", "x86_64-elf-") + "nm", directory/"WINPROBE"]), "probe symbols")
+        gate = int(re.search(r"^([0-9a-f]+) [A-Za-z] event_gate$", symbols, re.M)[1], 16)
         image = directory/"HackOS.img"
         shutil.copy2(built/"HackOS.img", image)
         fs_image = str(image) + ("@@"+str(334*512) if firmware == "bios" else "")
@@ -95,7 +97,8 @@ bp.delete()
                         script = directory/(name + ".gdb")
                         script.write_text("set pagination off\nset confirm off\ntarget remote " + str(gdb_path) + "\npython\nimport gdb\n" + """
 bp = gdb.Breakpoint("ReapExitedProcesses()", type=gdb.BP_HARDWARE_BREAKPOINT)
-# Two idle passes ensure the preceding pass reaped zombies and flushed drawing.
+# Allow input dispatch, deferred scheduling, then zombie reclamation/redraw.
+gdb.execute("continue")
 gdb.execute("continue")
 gdb.execute("continue")
 bp.delete()
@@ -109,6 +112,31 @@ back = display["backbuffer"]
                         require_success(result, "inspect window state")
                         assert "WINDOW_STATE_OK" in result.stdout, result.stdout
                         qmp.call("cont")
+
+                    mouse_x = 0
+                    mouse_y = 0
+
+                    def move(x, y):
+                        nonlocal mouse_x, mouse_y
+                        while mouse_x != x or mouse_y != y:
+                            dx = max(-100, min(100, x - mouse_x))
+                            dy = max(-100, min(100, y - mouse_y))
+                            qmp.call("input-send-event", {"events": [
+                                {"type": "rel", "data": {"axis": "x", "value": dx}},
+                                {"type": "rel", "data": {"axis": "y", "value": dy}}]})
+                            mouse_x += dx
+                            mouse_y += dy
+                            time.sleep(0.06)
+
+                    def button(down):
+                        qmp.call("input-send-event", {"events": [
+                            {"type": "btn", "data": {"button": "left", "down": down}}]})
+                        time.sleep(0.15)
+
+                    def click(x, y):
+                        move(x, y)
+                        button(True)
+                        button(False)
 
                     def launch():
                         offset = len(output())
@@ -135,6 +163,75 @@ bp.delete()
                     qmp.call("stop")
                     qmp.call("screendump", {"filename": str(directory/"window.ppm")})
                     qmp.call("cont")
+                    # Drag without crossing a window border, then resize the client.
+                    move(230, 215)
+                    button(True)
+                    move(310, 265)
+                    button(False)
+                    wait_text("WINDOW_MOVE 280 250", offset)
+                    move(476, 446)
+                    button(True)
+                    move(516, 476)
+                    button(False)
+                    wait_text("WINDOW_RESIZE 240 200", offset)
+                    wait_text("WINDOW_PAINT 240 200", offset)
+                    inspect("geometry", """
+w = gdb.parse_and_eval("KernelWindowManager->focused")
+assert int(w["startX"]) == 280 and int(w["startY"]) == 250
+assert int(w["sizeX"]) == 240 and int(w["sizeY"]) == 230
+assert int(gdb.parse_and_eval("KernelWindowManager->capture")) == 0
+""")
+                    key_offset = len(output())
+                    qmp.type("a")
+                    wait_text("WINDOW_KEY 97 0", key_offset)
+                    wait_text("WINDOW_PAINT 240 200", key_offset)
+                    inspect("key-paint", """
+assert int(fb["address"][295 * int(fb["pitch"]) + 295]) == (0xff000000 | (97 * 0x12345 & 0xffffff))
+""")
+                    key_offset = len(output())
+                    click(330, 330)
+                    wait_text("WINDOW_MOUSE 50 50", key_offset)
+                    wait_text("WINDOW_PAINT 240 200", key_offset)
+                    inspect("mouse-paint", """
+assert int(fb["address"][330 * int(fb["pitch"]) + 330]) == 0xffffffff
+""")
+                    qmp.call("stop")
+                    qmp.call("screendump", {"filename": str(directory/"interactive.ppm")})
+                    qmp.call("cont")
+                    # A captured client release outside the window must arrive.
+                    move(335, 335)
+                    button(True)
+                    move(600, 550)
+                    button(False)
+                    inspect("capture-release", """
+w = gdb.parse_and_eval("KernelWindowManager->focused")
+assert int(w["mouseButtons"]) == 0
+assert int(w["mouseX"]) == 320 and int(w["mouseY"]) == 270
+assert int(gdb.parse_and_eval("KernelWindowManager->capture")) == 0
+""")
+                    # Oversize and undersize drags are bounded by the ABI limits.
+                    move(516, 476)
+                    button(True)
+                    move(900, 800)
+                    button(False)
+                    wait_text("WINDOW_RESIZE 320 240", offset)
+                    move(596, 516)
+                    button(True)
+                    move(290, 290)
+                    button(False)
+                    wait_text("WINDOW_RESIZE 96 30", offset)
+                    inspect("resize-limits", """
+w = gdb.parse_and_eval("KernelWindowManager->focused")
+assert int(w["sizeX"]) == 96 and int(w["sizeY"]) == 60
+""")
+                    move(290, 265)
+                    button(True)
+                    move(0, 0)
+                    button(False)
+                    inspect("drag-limits", """
+w = gdb.parse_and_eval("KernelWindowManager->focused")
+assert int(w["startX"]) == 1 and int(w["startY"]) == 1
+""")
                     qmp.type("q")
                     wait_text("Window demo closed.", offset)
                     wait_text("root@root:~$ ", offset)
@@ -148,33 +245,90 @@ assert int(fb["address"][245 * int(fb["pitch"]) + 215]) == int(back["address"][2
                     wait_text("^C\nroot@root:~$ ", offset)
 
                     offset = launch()
-                    # Use actual PS/2 mouse packets to activate the title-bar X.
-                    for dx, dy in [(100, 100), (100, 100), (100, 0), (85, 15)]:
-                        qmp.call("input-send-event", {"events": [
-                            {"type": "rel", "data": {"axis": "x", "value": dx}},
-                            {"type": "rel", "data": {"axis": "y", "value": dy}}]})
-                        time.sleep(0.1)
-                    qmp.call("input-send-event", {"events": [
-                        {"type": "btn", "data": {"button": "left", "down": True}}]})
-                    time.sleep(0.1)
-                    qmp.call("input-send-event", {"events": [
-                        {"type": "rel", "data": {"axis": "x", "value": 1}}]})
+                    click(385, 215)
                     wait_text("Window demo closed.", offset)
                     wait_text("root@root:~$ ", offset)
-                    qmp.call("input-send-event", {"events": [
-                        {"type": "btn", "data": {"button": "left", "down": False}},
-                        {"type": "rel", "data": {"axis": "x", "value": -1}}]})
+
+                    # Two independent owners: focus raises a window and routes keys
+                    # without leaking them to the shell or the unfocused owner.
+                    enter("./USR/BIN/WINDOW &", "Window demo ready.")
+                    click(20, 900)
+                    inspect("desktop-focus", """
+assert int(gdb.parse_and_eval("KernelWindowManager->focused")) == 0
+""")
+                    enter("./USR/BIN/WINDOW second &", "Window demo ready.")
+                    click(250, 300)
+                    inspect("focus-first", """
+manager = gdb.parse_and_eval("KernelWindowManager")
+assert int(manager["windows"]["_size"]) == 2
+assert int(manager["focused"]["startX"]) == 200
+assert int(manager["windows"]["ptr"][1]) == int(manager["focused"])
+assert int(manager["windows"]["ptr"][0]["owner"]) != int(manager["focused"]["owner"])
+""")
+                    key_offset = len(output())
+                    qmp.type("b")
+                    wait_text("WINDOW_KEY 98 0", key_offset)
+                    wait_text("WINDOW_PAINT 200 170", key_offset)
+                    inspect("key-isolation", """
+manager = gdb.parse_and_eval("KernelWindowManager")
+other = manager["windows"]["ptr"][0]
+active = manager["focused"]
+assert int(other["drawArea"]["address"][15 * 200 + 15]) == 0xffff00ff
+assert int(active["drawArea"]["address"][15 * 200 + 15]) == (0xff000000 | (98 * 0x12345 & 0xffffff))
+""")
+                    assert output()[key_offset:].count("WINDOW_KEY 98 0") == 1
+                    key_offset = len(output())
+                    qmp.type("q")
+                    wait_text("Window demo closed.", key_offset)
+                    inspect("focus-fallback", """
+assert int(gdb.parse_and_eval("KernelWindowManager->focused->startX")) == 450
+""")
+                    qmp.key("c", control=True)
+                    inspect("background-interrupt", """
+assert int(gdb.parse_and_eval("user_windows_live")) == 0
+assert int(gdb.parse_and_eval("KernelWindowManager->focused")) == 0
+assert int(gdb.parse_and_eval("terminalOwner")) == 2
+""")
+                    enter("print focus_returned", "\nfocus_returned\n")
+
+                    offset = len(output())
+                    qmp.type("./USR/BIN/WINPROBE events\n")
+                    wait_text("WINDOW_EVENTS_READY", offset)
+                    qmp.type("x" * 100)
+                    inspect("event-overflow", """
+import struct
+w = gdb.parse_and_eval("KernelWindowManager->focused")
+assert int(w["events"]["count"]) == 64
+assert int(w["events"]["overflow"]) == 1
+p = gdb.parse_and_eval("ready_queue")
+while int(p) and int(p["pid"]) != int(w["owner"]):
+    p = p["next"]
+va = """ + str(gate) + """
+entry = p["userSpace"]["leaf"]["entries"][(va - 0x400000000000) // 4096]
+physical = (int(entry["address"]) << 12) + (va & 4095)
+gdb.selected_inferior().write_memory(physical, struct.pack("<Q", 1))
+""")
+                    wait_text("WINDOW_EVENTS_OK", offset)
+                    wait_text("root@root:~$ ", offset)
+
+                    offset = len(output())
+                    qmp.type("./USR/BIN/WINPROBE hold\n")
+                    wait_text("WINDOW_HELD", offset)
+                    qmp.type("x" * 100)
+                    qmp.key("c", control=True)
+                    wait_text("^C\nroot@root:~$ ", offset)
 
                     enter("./USR/BIN/WINPROBE", "WINDOW_API_OK")
                     enter("./USR/BIN/WINPROBE fault", "Program exited with status 142.")
                     enter("./USR/BIN/WINPROBE hold &", "WINDOW_HELD")
+                    click(20, 900)
                     enter("ps", "WINPROBE")
                     pid = re.findall(r"Process: ~/USR/BIN/WINPROBE \((\d+)\) ALIVE", output())[-1]
                     enter("kill " + pid, "Task stopped.")
                     inspect("cleanup", """
 assert int(gdb.parse_and_eval("user_windows_live")) == 0
 assert int(gdb.parse_and_eval("KernelWindowManager->windows._size")) == 0
-assert int(gdb.parse_and_eval("tasks_reaped")) == 7
+assert int(gdb.parse_and_eval("tasks_reaped")) == 11
 p = gdb.parse_and_eval("ready_queue")
 labels = []
 while int(p):
@@ -192,7 +346,7 @@ assert int(fb["address"][245 * int(fb["pitch"]) + 215]) == int(back["address"][2
                     qmp.type("shutdown\n")
                     process.wait(timeout=timeout)
                     assert process.returncode == 0
-                    return "CPL3 window demo, pixel composition/restoration, Q and PS/2 close, Ctrl-C, checked pointers/rectangles, per-process quota, foreign/stale handles, exit/fault/kill cleanup and shutdown."
+                    return "CPL3 window demo, pixel composition/restoration, Q and PS/2 close, bounded drag/resize, client mouse capture/release, focus/z-order and key isolation, event overflow recovery, background Ctrl-C, checked pointers/rectangles/events, per-process quota, foreign/stale handles, exit/fault/kill cleanup and shutdown."
                 finally:
                     if qmp: qmp.close()
                     process.terminate()

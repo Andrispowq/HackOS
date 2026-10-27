@@ -65,4 +65,6 @@ sources carry their own license notices; retain those notices when changing or
 redistributing that code.
 
 Launch `./USR/BIN/WINDOW` for the standalone ring-3 window demo. It uses owned
-handles and checked pixel uploads; close X, press Q, or use Ctrl-C to return.
+handles and checked pixel uploads. Drag the title, resize the bottom-right grip,
+click to focus, and type/click to change its client. Close X, press Q, or use
+Ctrl-C to return. Click the desktop to route keys back to the shell.

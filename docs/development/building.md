@@ -21,7 +21,8 @@ Use `./USR/BIN/TEST alpha "two words"` to see argument passing and read a file
 from ring 3, or `user USR/BIN/RING3` for
 the print/preemption/exit demo. `shutdown` requests kernel ACPI power-off. The
 raw-pointer libc ABI is retired. Launch `./USR/BIN/WINDOW` for the ported
-window demo; close its X button, press Q, or use Ctrl-C. Program commands wait for
+window demo; drag its title, resize the bottom-right grip, click to focus,
+and type/click in the client. Close X, press Q, or use Ctrl-C. Program commands wait for
 completion before showing the prompt; a separate trailing `&` launches in the
 background. Try `./USR/BIN/INPUT` for interactive text input; Ctrl-C returns to
 the shell. Up/Down browses the fixed 256-command history, and `history` lists it.
@@ -179,3 +180,7 @@ x86_64-elf-gdb kernel/bin/kernel.elf
 private Unix socket and a bounded timeout; see [testing](testing.md). A
 framebuffer requires a graphical window or VNC: `-nographic` does not turn it
 into a text console.
+
+The kernel compiles `window.cpp` and `window_manager.cpp` with `-O2` to keep the
+interactive compositor within the fixed BIOS kernel slot. Debug information,
+frame pointers, freestanding flags and the no-red-zone policy are retained.

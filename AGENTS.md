@@ -26,7 +26,8 @@ shell retains foreground-spawn, kill and power rights. Ctrl-C is deferred from
 IRQ context to a safe scheduler point. Shell history is a static 256-command ring.
 Userspace windows use process-owned handles and bounded pixel uploads; idle
 reclaims them on exit and composites them over the console. `USR/BIN/WINDOW`
-is the standalone demo. See `docs/system/userspace.md` for ABI, ownership and lifecycle contracts.
+is the standalone demo. Idle dispatches ordered keyboard/mouse ingress, focus
+and pointer capture; window events use fixed queues and copied state records. See `docs/system/userspace.md` for ABI, ownership and lifecycle contracts.
 
 ## Where to look
 

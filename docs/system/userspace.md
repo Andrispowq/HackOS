@@ -112,13 +112,14 @@ and yields on zero. Echo and line editing are program responsibilities. Try
 `./USR/BIN/INPUT` for the packaged interactive example: it echoes edited lines,
 accepts `exit`, and can be interrupted with Ctrl-C.
 
-Both Ctrl keys support Ctrl-C. It terminates the foreground process with status
-130 even if that process never reads input or its queue is full. The IRQ records
-a target PID; the scheduler performs termination only after preemption guards
-have ended. Normal deferred cleanup still closes files and frees user memory.
-Ctrl-C does not kill background tasks or the shell. At the shell prompt it cancels
-the current line and history navigation. This targets one foreground process,
-not a process group; interactive children of that process do not inherit input.
+Both Ctrl keys support Ctrl-C. With terminal focus it terminates the foreground
+process with status 130 even if the program never reads input or its queue is
+full. Idle records the target PID; the scheduler terminates it only after
+preemption guards end. Deferred cleanup closes files/windows and frees user
+memory. With window focus the target is that window's owner, including background
+processes. The shell is protected; at its prompt Ctrl-C cancels the current line
+and history navigation. This targets one process, not a process group; children
+do not inherit terminal input.
 
 ## Command history
 
@@ -177,6 +178,8 @@ return an error rather than being reinterpreted as new operations.
 | 32 | `window_blit(handle, rect, pixels)` | Copy a packed rectangle of up to 1024 pixels; return 0 |
 | 33 | `window_poll(handle)` | 0 while open, 1 after the mouse closes it; nonblocking |
 | 34 | `window_close(handle)` | Destroy the window and release its handle; return 0 |
+| 35 | `window_state(handle, out)` | Copy geometry, focus and latest client-relative pointer state; return 0 |
+| 36 | `window_event(handle, out)` | Copy one event; 1 delivered, 0 empty, error for invalid pointers/handles |
 
 Calls use `int 0x80`: RAX is the number, RDI/RSI/RDX/RCX/R8 hold arguments,
 and saved RAX receives the result. Successful operations without another result
@@ -214,7 +217,10 @@ All active programs use the isolated linker layout in `libs/ring3/userspace.ld`.
 The test program reads a file through the safe ABI; the ring3 demo exercises
 print, timer preemption and exit. The standalone `WINDOW` program ports the old
 window demo onto owned handles and pixel uploads. Launch `./USR/BIN/WINDOW`,
-then close its X button, press Q, or use Ctrl-C. Background launches also work; Q requires foreground input ownership.
+then drag its title bar, resize its bottom-right grip, click to focus, type to
+change the colour marker, and click the client to mark a position. Close X,
+press Q, or use Ctrl-C. Background windows also receive focused keyboard input;
+click the desktop to type shell commands.
 The old split adapters retain host coverage,
 but allocation-dependent legacy libc helpers are not linked into user programs.
 
@@ -249,11 +255,56 @@ pointers are checked against the caller's mappings.
 The mouse X button removes the window; its handle remains reserved until
 `window_close` or process cleanup so the owner can observe `window_poll == 1`.
 Invalid, foreign and explicitly closed handles return `HACKOS_ERROR`. Polling
-does not block. The title-bar maximise/minimise decorations are not active
-controls; resize, move, focus, per-window keyboard input and mouse event queues
-remain future work.
+does not block. The inactive title-bar maximise/minimise decorations have been
+removed. Dragging, resizing, focus and input events are described below; maximise/minimise, wheel input and raw key-up events remain
+future work.
 
 Idle updates mouse closure and flushes dirty drawing under a preemption guard.
 The compositor overlays windows onto the physical display after copying the
 console backbuffer. Window pixels never overwrite the console backbuffer;
 closing or reclaiming a window triggers redraw to restore the console beneath.
+
+### Window interaction and events
+
+New windows take focus. A left click raises and focuses the topmost window under
+the pointer; clicking outside windows restores terminal keyboard routing. The
+focused title bar is blue. Closing the focused window selects the topmost
+remaining window, or the terminal if none remain. Ownership remains enforced
+regardless of focus: another process cannot query or consume your window events.
+
+Drag the title bar to move, or the bottom-right 8-by-8 grip to resize. Geometry
+stays within the display and existing 96–320 by 30–240 client limits. Resize
+clears the client buffer and queues a resize event; repaint using the current
+state. Blits using obsolete geometry fail safely and can be retried after a
+state query. Dragging/resizing captures the pointer until left-button release.
+A press inside the client similarly captures motion/release outside the window;
+client-relative coordinates are signed and may be negative or beyond its size.
+
+`HackosWindowState` is 32 bytes: unsigned x/y/client width/client height, signed
+mouseX/mouseY, then unsigned buttons/focused. Button bits are left=1, middle=2,
+right=4; focused is 0 or 1. `HackosWindowEvent` is also 32 bytes: unsigned type/key,
+signed x/y, then unsigned client width/height/buttons/focused. All fields are
+initialized. Types are KEY=1, MOUSE=2, FOCUS=3, MOVE=4, RESIZE=5, OVERFLOW=6.
+MOVE x/y are screen coordinates; other event x/y are client-relative pointer
+coordinates. KEY carries the translated US-layout character or existing arrow
+code (press/repeat only). Mouse motion/button snapshots go to the topmost client
+under the pointer, or the captured client during a drag.
+
+Each window has a fixed 64-event queue. Overflow discards the incomplete queue
+and returns one OVERFLOW event; query `window_state` and repaint to resynchronize.
+Invalid output pointers do not consume an event. `window_poll` remains the close
+notification, and closed windows retain their handle until explicit close or
+owner cleanup. Events never expose a kernel pointer.
+
+IRQs only decode and enqueue bounded input. A shared 128-entry ingress queue
+orders keyboard and mouse input; idle applies a click's focus change before a
+following key. Input loss cancels pointer capture and reports overflow. Ctrl-C
+is latched separately so a full queue cannot mask it. With window focus Ctrl-C
+terminates that window's owning process (and cleans all its windows), including
+background owners. Without window focus it retains terminal foreground/cancel
+semantics. Keyboard typeahead is cleared on focus/terminal ownership changes.
+
+For two independent owners, launch `./USR/BIN/WINDOW &`, click the desktop,
+then launch `./USR/BIN/WINDOW second &`. Switch focus by clicking their clients;
+only the focused demo reacts to typed keys. Each demo paints small bounded
+strips, logs events, handles resize races, and recovers queue overflow.

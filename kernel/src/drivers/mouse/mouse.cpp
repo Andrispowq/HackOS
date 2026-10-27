@@ -1,4 +1,7 @@
 #include "mouse.h"
+#include "arch/x86_64/interrupts/guard.h"
+#include "hackos/runtime/event_queue.h"
+#include "hackos/abi.h"
 
 #include "arch/x86_64/ports.h"
 #include "arch/x86_64/interrupts/idt.h"
@@ -72,10 +75,11 @@ static uint8_t MouseCycle = 0;
 static uint8_t MousePacket[4];
 static uint8_t MousePacketReady = 0;
 static int MousePositionX, MousePositionY;
-static int MousePositionOldX, MousePositionOldY;
 
 static uint32_t Width, Height;
 static uint8_t buttons;
+static EventQueue<MouseState, 128> mouseEvents;
+static bool interruptPending;
 
 static void ProcessMousePacket()
 {
@@ -134,9 +138,6 @@ static void ProcessMousePacket()
     if (MousePositionY < 0) MousePositionY = 0;
     if (MousePositionY > Height - 1) MousePositionY = Height - 1;
     
-    Display::SharedDisplay()->framebuffer.ClearMouseCursor(MousePointer, MousePositionOldX, MousePositionOldY);
-    Display::SharedDisplay()->framebuffer.DrawMouseCursor(MousePointer, MousePositionX, MousePositionY, 0xffffffff);
-
     if (MousePacket[0] & PS2LeftButton)
     {
         buttons |= 0x1 << 0;
@@ -164,16 +165,14 @@ static void ProcessMousePacket()
         buttons &= ~(0x1 << 2);
     }
 
+    mouseEvents.Push({MousePositionX, MousePositionY, buttons, 0});
+
     MousePacketReady = false;
-    MousePositionOldX = MousePositionX;
-    MousePositionOldY = MousePositionY;
 }
 
 static void mouse_callback(Registers* regs)
 {
     uint8_t status = __inb(0x60);
-
-    ProcessMousePacket();
 
     static uint8_t skip = 1;
     if (skip) 
@@ -198,6 +197,7 @@ static void mouse_callback(Registers* regs)
         MousePacket[2] = status;
         MousePacketReady = 1;
         MouseCycle = 0;
+        ProcessMousePacket();
         break;
     }
 }
@@ -248,4 +248,59 @@ uint8_t GetMouseButton(uint8_t index)
     }
 
     return buttons & (0x1 << index);
+}
+
+unsigned ReadMouse(MouseState& state)
+{
+    InterruptGuard guard;
+    if (mouseEvents.TakeOverflow())
+    {
+        state = {MousePositionX, MousePositionY, buttons, 0};
+        return 2;
+    }
+
+    if (mouseEvents.Pop(state))
+    {
+        if (state.key == HACKOS_KEY_INTERRUPT) interruptPending = false;
+        return 1;
+    }
+
+    // A full ingress queue must not swallow Ctrl-C. Lost input is reported
+    // first, then the latched interrupt is delivered at a safe idle pass.
+    if (interruptPending)
+    {
+        interruptPending = false;
+        state = {0, 0, 0, HACKOS_KEY_INTERRUPT};
+        return 1;
+    }
+
+    return 0;
+}
+
+void DrawMouse()
+{
+    InterruptGuard guard;
+    Display::SharedDisplay()->framebuffer.DrawMouseCursor(MousePointer, MousePositionX, MousePositionY, 0xffffffff);
+}
+
+void QueueKey(uint32_t key)
+{
+    InterruptGuard guard;
+    if (key == HACKOS_KEY_INTERRUPT) interruptPending = true;
+
+    mouseEvents.Push({0, 0, 0, key});
+}
+
+void DiscardQueuedKeys()
+{
+    InterruptGuard guard;
+    unsigned count = mouseEvents.Count();
+    MouseState state;
+    for (unsigned i = 0; i < count; i++)
+    {
+        mouseEvents.Pop(state);
+        if (!state.key) mouseEvents.Push(state);
+    }
+
+    interruptPending = false;
 }

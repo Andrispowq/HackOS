@@ -25,20 +25,26 @@ void SetTerminalOwner(uint64_t pid)
 {
     InterruptGuard guard;
     if (!terminalShell) terminalShell = pid; // first owner is the boot shell
+    if (pendingInterrupt == terminalOwner) pendingInterrupt = 0;
+
     terminalOwner = pid;
-    pendingInterrupt = 0;
     ClearKeyboard(); // typeahead must never cross an ownership boundary
 }
 bool OwnsTerminal(uint64_t pid) { return pid && pid == terminalOwner; }
 void RequestTerminalInterrupt()
 {
-    // IRQ context: latch a target only. Do not kill/yield inside an interrupted
-    // allocator or console PreemptionGuard. Ctrl-C at the shell stays an event.
+    // Input dispatch latches a target only. Do not kill/yield while a
+    // PreemptionGuard is active. Ctrl-C at the shell stays an event.
     if (terminalOwner && terminalOwner != terminalShell)
     {
         pendingInterrupt = terminalOwner;
         ClearKeyboard();
     }
+}
+
+void RequestUserInterrupt(uint64_t pid)
+{
+    if (pid && pid != terminalShell) pendingInterrupt = pid;
 }
 
 void DisablePreemption() { InterruptGuard guard; ++preemption_depth; }
@@ -191,7 +197,7 @@ Registers* Schedule(Registers* frame)
     if (pendingInterrupt)
     {
         uint64_t target = pendingInterrupt; pendingInterrupt = 0;
-        if (target == terminalOwner && target != terminalShell)
+        if (target != terminalShell)
             for (auto p = ready_queue; p; p = p->next)
                 if (p->pid == target && p->state != PROCESS_STATE_ZOMBIE)
                 { p->exitStatus = 130; CompleteProcess(p); break; }

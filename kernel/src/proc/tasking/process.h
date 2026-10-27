@@ -62,4 +62,5 @@ uint64_t WaitForChild(uint64_t pid, int64_t* status, uint64_t flags);
 void SetTerminalOwner(uint64_t pid);
 bool OwnsTerminal(uint64_t pid);
 void RequestTerminalInterrupt();
+void RequestUserInterrupt(uint64_t pid);
 #endif

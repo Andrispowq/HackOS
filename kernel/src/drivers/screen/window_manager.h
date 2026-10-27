@@ -18,12 +18,23 @@ public:
     void Update();
     void Draw();
 
-    Window* CreateWindow(uint32_t startX, uint32_t startY, uint32_t sizeX, uint32_t sizeY);
+    Window* CreateWindow(uint32_t startX, uint32_t startY, uint32_t sizeX, uint32_t sizeY, uint64_t owner = 0);
     Window* GetWindow(uint64_t ID);
     void DestroyWindow(Window* window);
     void DestroyWindowByID(uint64_t ID);
+    void Keyboard(uint32_t key);
 
 private:
+    void Focus(Window* window);
+    void Mouse(int32_t x, int32_t y, uint32_t buttons);
+    Window* Hit(int32_t x, int32_t y);
+
+    Window* focused = nullptr;
+    Window* capture = nullptr;
+    unsigned captureMode = 0; // 1 client, 2 title drag, 3 resize grip
+    int32_t anchorX = 0, anchorY = 0;
+    uint32_t originalWidth = 0, originalHeight = 0;
+    uint32_t previousButtons = 0;
     vector<Window*> windows;
 
     Framebuffer drawBuffer;

@@ -50,17 +50,19 @@ heap pages are not necessarily physically contiguous.
 The [keyboard driver](../../kernel/src/drivers/keyboard/keyboard.cpp) reads
 translated set-1 scancodes from port `0x60`. Its allocation-free decoder tracks
 both Shift keys and Caps Lock, bounds-checks make/break codes, and handles or
-ignores extended sequences. Decoded characters enter a 255-character FIFO. The
+ignores extended sequences. Decoded keys join the ordered input ingress queue.
+Idle routes them to the focused window, or a 255-character terminal FIFO. The
 terminal owner (boot shell or foreground program) drains it through the input
 syscall and edits a bounded line in ring 3,
 and dispatches commands on Enter. The kernel reads the queue with interrupts
 briefly disabled; background processes cannot consume terminal input. Extended Up/Down keys become
 events, and either Ctrl key plus C cancels shell input or requests termination of
-the foreground process at a safe scheduling point. Overflow discards input instead of executing
+the focused window owner or terminal foreground process at a safe scheduling point. Overflow discards input instead of executing
 a truncated command. The keyboard layout is US ASCII.
 
 The [mouse driver](../../kernel/src/drivers/mouse/mouse.cpp) configures the PS/2
-controller, assembles packets, updates position/buttons, and draws the cursor.
+controller, assembles complete packets and queues position/button snapshots.
+The compositor draws the cursor after windows.
 IRQ1 and IRQ12 connect these drivers to the [interrupt layer](interrupts.md).
 
 These are PS/2 drivers even when QEMU also exposes USB controllers. The kernel
@@ -78,3 +80,9 @@ mapping, and ownership of registered devices explicit. Use the existing QEMU
 `q35` configuration as a starting point and add hardware variants deliberately.
 
 See [TODO](../TODO.md) for error propagation and boot-device selection work.
+
+Window interaction uses an ordered fixed input queue shared by PS/2 mouse and
+translated key input. IRQ handlers only enqueue; idle routes events to windows
+or the terminal and updates focus/capture. Mouse packets are processed when
+their final byte arrives, and the cursor is drawn by the compositor rather than
+the IRQ. See [window events](userspace.md#window-interaction-and-events).

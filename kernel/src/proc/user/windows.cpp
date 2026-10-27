@@ -1,6 +1,7 @@
 #include "windows.h"
 
 #include "address_space.h"
+#include "arch/x86_64/interrupts/guard.h"
 #include "proc/tasking/process.h"
 #include "drivers/screen/window_manager.h"
 #include "drivers/screen/screen.h"
@@ -48,7 +49,7 @@ uint64_t UserWindowCreate(const HackosWindowSpec* source)
     {
         if (!process->windows[i])
         {
-            auto window = KernelWindowManager->CreateWindow(spec.x, spec.y, spec.width, spec.height + 30);
+            auto window = KernelWindowManager->CreateWindow(spec.x, spec.y, spec.width, spec.height + 30, process->pid);
             if (!window) return HACKOS_ERROR;
 
             window->SetTitle(spec.title);
@@ -133,4 +134,32 @@ void ReleaseUserWindows(Process* process)
             Display::SharedDisplay()->dirty = true;
         }
     }
+}
+
+uint64_t UserWindowState(uint64_t handle, HackosWindowState* destination)
+{
+    auto process = GetRunningProcess();
+    if (WindowSlot(process, handle) < 0) return HACKOS_ERROR;
+
+    auto window = KernelWindowManager->GetWindow(handle);
+    if (!window) return HACKOS_ERROR;
+
+    auto state = window->State();
+    return process->userSpace->CopyToUser((uint64_t)destination, &state, sizeof(state)) ? 0 : HACKOS_ERROR;
+}
+
+uint64_t UserWindowEvent(uint64_t handle, HackosWindowEvent* destination)
+{
+    auto process = GetRunningProcess();
+    if (WindowSlot(process, handle) < 0) return HACKOS_ERROR;
+    if (!process->userSpace->WritableRange((uint64_t)destination, sizeof(*destination))) return HACKOS_ERROR;
+
+    auto window = KernelWindowManager->GetWindow(handle);
+    if (!window) return HACKOS_ERROR;
+
+    HackosWindowEvent event = {};
+    if (!window->ReadEvent(event)) return 0;
+
+    process->userSpace->CopyToUser((uint64_t)destination, &event, sizeof(event));
+    return 1;
 }

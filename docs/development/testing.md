@@ -282,3 +282,10 @@ pointers, rectangle limits, per-process quota, foreign and stale handles. GDB
 then verifies cleanup after normal exit, fault and kill, including user page
 reclamation. Diagnostics live in `tests/out/qemu-windows-{bios,uefi}`; CI runs
 this suite for both firmware paths.
+
+The window suite also drives real PS/2 dragging, min/max resize and screen-edge
+clamping, pointer capture with an outside release, focus/z-order across two
+independent owners, key isolation, a background Ctrl-C, and full event-queue
+recovery. GDB checks geometry, focus, pixel changes, queue bounds and complete
+resource reclamation. `interactive.ppm` captures the resized, painted demo.
+Host tests cover queue FIFO/wrap/overflow/reset and the new 32-byte ABI records.

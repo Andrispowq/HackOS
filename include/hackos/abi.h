@@ -36,3 +36,27 @@ struct HackosWindowRect
 
 static_assert(sizeof(HackosWindowSpec) == 48, "window specification ABI");
 static_assert(sizeof(HackosWindowRect) == 16, "window rectangle ABI");
+
+constexpr uint32_t HACKOS_WINDOW_KEY = 1;
+constexpr uint32_t HACKOS_WINDOW_MOUSE = 2;
+constexpr uint32_t HACKOS_WINDOW_FOCUS = 3;
+constexpr uint32_t HACKOS_WINDOW_MOVE = 4;
+constexpr uint32_t HACKOS_WINDOW_RESIZE = 5;
+constexpr uint32_t HACKOS_WINDOW_OVERFLOW = 6;
+
+struct HackosWindowState
+{
+    uint32_t x, y, width, height;
+    int32_t mouseX, mouseY;
+    uint32_t buttons, focused;
+};
+
+struct HackosWindowEvent
+{
+    uint32_t type, key;
+    int32_t x, y;
+    uint32_t width, height, buttons, focused;
+};
+
+static_assert(sizeof(HackosWindowState) == 32, "window state ABI");
+static_assert(sizeof(HackosWindowEvent) == 32, "window event ABI");

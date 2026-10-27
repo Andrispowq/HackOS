@@ -44,17 +44,19 @@ pixels. User uploads are tightly packed pixel arrays, not framebuffer objects.
 
 [Window](../../kernel/src/drivers/screen/window.cpp) provides per-window state
 and drawing. [WindowManager](../../kernel/src/drivers/screen/window_manager.cpp)
-owns a list of windows, updates mouse closure, draws onto the physical display,
+owns a list of windows, applies focus, dragging, resizing and mouse closure, draws onto the physical display,
 and resolves window IDs. Window pixels do not alter the console backbuffer.
 
 Userspace uses process-owned opaque handles through `window_create`,
-`window_blit`, `window_poll`, and `window_close`. Creation takes a copied title
+`window_blit`, `window_poll`, `window_close`, `window_state` and `window_event`. Creation takes a copied title
 and bounded geometry; drawing copies validated pixel rectangles. No kernel
 framebuffer pointer or object layout is exposed. Exit, fault, kill and Ctrl-C
 release the owner's windows. See [userspace](userspace.md#owned-windows) for
 record layouts, quotas and return values.
 
-Idle updates the manager and flushes dirty rendering under a preemption guard.
+Idle dispatches ordered keyboard/mouse input, updates the manager, and flushes
+dirty rendering under a preemption guard. IRQs do not draw or allocate. Mouse
+cursor rendering follows window composition, so it stays above window pixels.
 Creation, uploads, mouse closure and resource cleanup mark the display dirty.
 Console output also marks it dirty; compositing keeps windows visible over
 updated text. Removing a window restores the console from its untouched
@@ -72,3 +74,11 @@ starts with the kernel console; it is not an early-loader serial driver.
 
 See [building and running](../development/building.md) and the
 [testing plan](../development/testing.md).
+
+The focused window has a blue title bar and receives translated key events.
+Clicking a window raises it; clicking the desktop restores terminal input.
+Title dragging and the bottom-right resize grip capture the pointer until
+release and clamp geometry to screen/ABI limits. Client presses capture mouse
+motion and release, including outside the client. Fixed per-window event queues
+and an explicit overflow/state-query contract let user programs recover input
+loss; details are in [userspace](userspace.md#window-interaction-and-events).

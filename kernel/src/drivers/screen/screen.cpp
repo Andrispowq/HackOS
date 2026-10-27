@@ -1,5 +1,6 @@
 #include "screen.h"
 #include "window_manager.h"
+#include "drivers/mouse/mouse.h"
 #include "arch/x86_64/interrupts/guard.h"
 
 #include "arch/x86_64/ports.h"
@@ -81,6 +82,7 @@ void Display::DrawBackbuffer()
     if (KernelWindowManager)
     {
         KernelWindowManager->Draw();
+        DrawMouse();
     }
 }
 
