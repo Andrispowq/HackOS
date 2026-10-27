@@ -311,3 +311,9 @@ The step-9 q35/TCG runs measured about 1.5 seconds (BIOS) and 1.6 seconds
 path exceeded 60 seconds before completion. Host load affects these timings;
 pixel correctness, input progress and eventual final-frame flush are asserted
 separately.
+
+The step-10 shell suite checks built-in argument dispatch (`ps aux`), quoted
+command names/paths, whitespace, empty/escaped arguments, print joining, malformed
+syntax and count limits. Invalid power/file/process arguments must produce usage
+without performing their operation. It also checks the full 16-argument program
+limit through `user` and preserves the existing launch, history and wait checks.

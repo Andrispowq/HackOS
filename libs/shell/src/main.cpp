@@ -28,143 +28,356 @@ static void CollectBackground()
     for (auto& pid : backgroundTasks)
         if (pid && syscall_wait(pid, nullptr, HACKOS_WAIT_NOHANG) != 0) pid = 0;
 }
-static void Launch(char* command)
+
+static bool Arguments(int argc, int expected, const char* usage)
 {
-    char* args[HACKOS_MAX_ARGS];
-    bool background;
-    int argc = ParseArguments(command, args, HACKOS_MAX_ARGS, background);
-    if (argc <= 0) { Print("Invalid arguments (quotes, escapes, or too many arguments).\n"); return; }
+    if (argc == expected) return true;
+
+    Print("Usage: ");
+    Print(usage);
+    Print("\n");
+    return false;
+}
+
+static void Launch(int argc, char** args, bool background)
+{
     char path[256];
-    if (!PathFor(args[0], path)) return;
+    const char* name = Starts(args[0], "./") ? args[0] + 2 : args[0];
+    if (!PathFor(name, path)) return;
+
     args[0] = path;
     CollectBackground();
     uint64_t pid = background ? syscall_spawn_args(path, argc, args) : syscall_spawn_foreground(path, argc, args);
-    if (pid == HACKOS_ERROR) { Print("Cannot load user program: "); Print(path); Print("\n"); return; }
+    if (pid == HACKOS_ERROR)
+    {
+        Print("Cannot load user program: ");
+        Print(path);
+        Print("\n");
+        return;
+    }
+
     if (background)
     {
-        for (auto& slot : backgroundTasks) if (!slot) { slot = pid; return; }
+        for (auto& slot : backgroundTasks)
+        {
+            if (!slot)
+            {
+                slot = pid;
+                return;
+            }
+        }
     }
+
     int64_t status;
-    if (syscall_wait(pid, &status, 0) != pid) { Print("Wait failed.\n"); return; }
-    if (status == 130) { Print("^C\n"); return; }
+    if (syscall_wait(pid, &status, 0) != pid)
+    {
+        Print("Wait failed.\n");
+        return;
+    }
+
+    if (status == 130)
+    {
+        Print("^C\n");
+        return;
+    }
+
     if (status)
     {
         Print("Program exited with status ");
-        if (status < 0) { Print("-"); Number((uint64_t)(-status)); }
-        else Number(status);
+        if (status < 0)
+        {
+            Print("-");
+            Number((uint64_t)(-status));
+        }
+        else
+        {
+            Number(status);
+        }
+
         Print(".\n");
     }
 }
+
 static void Command(char* input)
 {
-    if (!*input) return;
-    if (Starts(input, "user ")) { Launch(input + 5); return; }
-    if (Starts(input, "./")) { Launch(input + 2); return; }
-    if (Equal(input, "help"))
+    // The optional user prefix is not part of the program argv limit.
+    char* args[HACKOS_MAX_ARGS + 1];
+    bool background;
+    int argc = ParseArguments(input, args, HACKOS_MAX_ARGS + 1, background);
+    if (argc < 0)
     {
-        Print("Commands: help, history, clear, print <text|tick|time|date>, ps, kill <pid>\n");
+        Print("Invalid arguments (quotes, escapes, or too many arguments).\n");
+        return;
+    }
+
+    if (!argc) return;
+
+    const char* command = args[0];
+    if (Equal(command, "user"))
+    {
+        if (argc < 2 || !*args[1])
+        {
+            Print("Usage: user <path> [args] [&]\n");
+            return;
+        }
+
+        Launch(argc - 1, args + 1, background);
+        return;
+    }
+
+    if (argc > HACKOS_MAX_ARGS)
+    {
+        Print("Invalid arguments (too many arguments).\n");
+        return;
+    }
+
+    if (Starts(command, "./"))
+    {
+        Launch(argc, args, background);
+        return;
+    }
+
+    if (background)
+    {
+        Print("Background execution requires user <path> or ./<program>.\n");
+        return;
+    }
+
+    if (Equal(command, "help"))
+    {
+        if (!Arguments(argc, 1, "help")) return;
+
+        Print("Commands: help, history, clear, print [text|tick|time|date], ps [aux], kill <pid>\n");
         Print("Files: ls, wd, cd <path>, open <path>, read, close, ./<program>\n");
         Print("User: user <path> [args] (foreground; append & for background). Power: shutdown, restart.\n");
     }
-    else if (Equal(input, "shutdown") || Equal(input, "restart"))
+    else if (Equal(command, "shutdown") || Equal(command, "restart"))
     {
-        if (syscall_power(Equal(input, "shutdown") ? 0 : 1) != 0)
+        if (!Arguments(argc, 1, command)) return;
+
+        if (syscall_power(Equal(command, "shutdown") ? 0 : 1) != 0)
+        {
             Print("Power request failed.\n");
+        }
     }
-    else if (Equal(input, "history"))
+    else if (Equal(command, "history"))
     {
+        if (!Arguments(argc, 1, "history")) return;
+
         for (uint64_t i = 0; i < history.Count(); ++i)
-        { Number(i+1); Print(" "); Print(history.At(i)); Print("\n"); }
+        {
+            Number(i + 1);
+            Print(" ");
+            Print(history.At(i));
+            Print("\n");
+        }
     }
-    else if (Equal(input, "clear")) syscall_console(1);
-    else if (Equal(input, "ps"))
+    else if (Equal(command, "clear"))
     {
+        if (!Arguments(argc, 1, "clear")) return;
+
+        syscall_console(1);
+    }
+    else if (Equal(command, "ps"))
+    {
+        // All processes are already listed. Accept the familiar spelling;
+        // ownership and CPU/memory accounting are not part of this ABI yet.
+        if (argc != 1 && !(argc == 2 && Equal(args[1], "aux")))
+        {
+            Print("Usage: ps [aux]\n");
+            return;
+        }
+
         HackosProcessInfo info;
         for (uint64_t i = 0; syscall_process_info(i, &info) == 1; ++i)
         {
-            Print("Process: "); Print(info.name); Print(" ("); Number(info.pid);
+            Print("Process: ");
+            Print(info.name);
+            Print(" (");
+            Number(info.pid);
             Print(info.state == 0 ? ") ALIVE\n" : info.state == 3 ? ") WAITING\n" : ") ZOMBIE\n");
         }
     }
-    else if (Starts(input, "kill "))
+    else if (Equal(command, "kill"))
     {
+        if (!Arguments(argc, 2, "kill <pid>")) return;
+
         uint64_t pid = 0;
-        if (!input[5]) { Print("Invalid PID.\n"); return; }
-        for (const char* digit = input + 5; *digit; ++digit)
+        if (!*args[1])
         {
-            if (*digit < '0' || *digit > '9' || pid > (~0ULL - 9) / 10)
-            { Print("Invalid PID.\n"); return; }
+            Print("Invalid PID.\n");
+            return;
+        }
+
+        for (const char* digit = args[1]; *digit; ++digit)
+        {
+            if (*digit < '0' || *digit > '9' || pid > (~0ULL - (*digit - '0')) / 10)
+            {
+                Print("Invalid PID.\n");
+                return;
+            }
+
             pid = pid * 10 + *digit - '0';
         }
+
         uint64_t result = syscall_kill(pid);
         Print(result == HACKOS_DENIED ? "Cannot stop the idle or shell task.\n" :
               result == HACKOS_ERROR ? "No running task with that PID.\n" : "Task stopped.\n");
     }
-    else if (Equal(input, "wd")) { Print(workingDirectory); Print("\n"); }
-    else if (Starts(input, "print "))
+    else if (Equal(command, "wd"))
     {
-        const char* text = input + 6;
-        HackosClock time;
-        if (Equal(text, "tick") || Equal(text, "time") || Equal(text, "date"))
-        {
-            if (syscall_clock(&time)) { Print("Clock unavailable.\n"); return; }
-            if (Equal(text, "tick")) { Print("Ticks: "); Number(time.ticks); }
-            else if (Equal(text, "time"))
-            { Print("Time: "); Number(time.hour,16); Print(":"); Number(time.minute,16); Print(":"); Number(time.second,16); }
-            else
-            { Print("Date: 20"); Number(time.year,16); Print("."); Number(time.month,16); Print("."); Number(time.day,16); }
-        }
-        else Print(text);
+        if (!Arguments(argc, 1, "wd")) return;
+
+        Print(workingDirectory);
         Print("\n");
     }
-    else if (Equal(input, "print")) Print("\n");
-    else
+    else if (Equal(command, "print"))
     {
-        char path[256];
-        if (Equal(input, "ls"))
+        const char* text = argc == 2 ? args[1] : "";
+        if (Equal(text, "tick") || Equal(text, "time") || Equal(text, "date"))
         {
-            HackosFileInfo info;
-            for (uint64_t i = 0; syscall_readdir(workingDirectory, i, &info) == 1; ++i)
-            { Print(info.name); Print(info.attributes & HACKOS_DIRECTORY ? "/ " : " "); }
-            Print("\n");
+            HackosClock time;
+            if (syscall_clock(&time))
+            {
+                Print("Clock unavailable.\n");
+                return;
+            }
+
+            if (Equal(text, "tick"))
+            {
+                Print("Ticks: ");
+                Number(time.ticks);
+            }
+            else if (Equal(text, "time"))
+            {
+                Print("Time: ");
+                Number(time.hour, 16);
+                Print(":");
+                Number(time.minute, 16);
+                Print(":");
+                Number(time.second, 16);
+            }
+            else
+            {
+                Print("Date: 20");
+                Number(time.year, 16);
+                Print(".");
+                Number(time.month, 16);
+                Print(".");
+                Number(time.day, 16);
+            }
         }
-        else if (Starts(input, "cd ") && PathFor(input + 3, path))
+        else
         {
-            if (Equal(input + 3, ".."))
+            for (int i = 1; i < argc; ++i)
+            {
+                if (i > 1) Print(" ");
+                Print(args[i]);
+            }
+        }
+
+        Print("\n");
+    }
+    else if (Equal(command, "ls"))
+    {
+        if (!Arguments(argc, 1, "ls")) return;
+
+        HackosFileInfo info;
+        for (uint64_t i = 0; syscall_readdir(workingDirectory, i, &info) == 1; ++i)
+        {
+            Print(info.name);
+            Print(info.attributes & HACKOS_DIRECTORY ? "/ " : " ");
+        }
+
+        Print("\n");
+    }
+    else if (Equal(command, "cd") || Equal(command, "open"))
+    {
+        bool directory = Equal(command, "cd");
+        const char* usage = directory ? "cd <path>" : "open <path>";
+        if (!Arguments(argc, 2, usage)) return;
+        if (!*args[1])
+        {
+            Print("Path must not be empty.\n");
+            return;
+        }
+
+        char path[256];
+        if (!PathFor(args[1], path)) return;
+
+        if (directory)
+        {
+            if (Equal(args[1], ".."))
             {
                 uint64_t length = Length(workingDirectory);
-                while (length && workingDirectory[length] != '/') --length;
+                while (length && workingDirectory[length] != '/')
+                {
+                    --length;
+                }
+
                 if (length) workingDirectory[length] = 0;
                 return;
             }
-            if (Equal(input + 3, ".")) return;
+
+            if (Equal(args[1], ".")) return;
+
             HackosFileInfo info;
-            if (syscall_stat(path, &info) != 0) Print("Directory not found.\n");
-            else if (!(info.attributes & HACKOS_DIRECTORY)) Print("Not a directory.\n");
-            else Copy(workingDirectory, path);
+            if (syscall_stat(path, &info) != 0)
+            {
+                Print("Directory not found.\n");
+            }
+            else if (!(info.attributes & HACKOS_DIRECTORY))
+            {
+                Print("Not a directory.\n");
+            }
+            else
+            {
+                Copy(workingDirectory, path);
+            }
         }
-        else if (Starts(input, "open ") && PathFor(input + 5, path))
+        else
         {
             if (openFile != HACKOS_ERROR) syscall_close(openFile);
             openFile = syscall_open(path);
             Print(openFile == HACKOS_ERROR ? "File not found.\n" : "File opened.\n");
         }
-        else if (Equal(input, "close"))
+    }
+    else if (Equal(command, "close"))
+    {
+        if (!Arguments(argc, 1, "close")) return;
+
+        if (openFile != HACKOS_ERROR) syscall_close(openFile);
+        openFile = HACKOS_ERROR;
+    }
+    else if (Equal(command, "read"))
+    {
+        if (!Arguments(argc, 1, "read")) return;
+        if (openFile == HACKOS_ERROR)
         {
-            if (openFile != HACKOS_ERROR) syscall_close(openFile);
-            openFile = HACKOS_ERROR;
+            Print("No open file.\n");
+            return;
         }
-        else if (Equal(input, "read"))
+
+        char buffer[512];
+        uint64_t length = syscall_read(openFile, buffer, sizeof(buffer));
+        if (length == HACKOS_ERROR)
         {
-            if (openFile == HACKOS_ERROR) { Print("No open file.\n"); return; }
-            char buffer[512];
-            uint64_t length = syscall_read(openFile, buffer, sizeof(buffer));
-            if (length == HACKOS_ERROR) Print("Read failed.\n");
-            else { syscall_user_write(buffer, length); Print("\n"); }
+            Print("Read failed.\n");
         }
-        else { Print("Unknown command: "); Print(input); Print("\n"); }
+        else
+        {
+            syscall_user_write(buffer, length);
+            Print("\n");
+        }
+    }
+    else
+    {
+        Print("Unknown command: ");
+        Print(command);
+        Print("\n");
     }
 }
+
 int main()
 {
     Print("\nHackOS ring-3 shell. Type 'help' for commands.\n");

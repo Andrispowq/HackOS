@@ -75,7 +75,7 @@ Console rendering and hardware operations remain kernel services.
 | `help`, `clear` | Show commands or clear the console |
 | `print <text>` | Print literal text, including percent signs |
 | `print tick`, `print time`, `print date` | Show monotonic ticks or RTC values |
-| `ps`, `kill <pid>` | List tasks or stop a user program; idle and boot shell are protected |
+| `ps [aux]`, `kill <pid>` | List tasks or stop a user program; idle and boot shell are protected |
 | `ls`, `wd`, `cd <path>` | Browse the first filesystem; `~` denotes its root |
 | `open <path>`, `read`, `close` | Open a read-only handle, read up to 512 bytes, close it |
 | `./<program> [args]`, `user <path> [args]` | Launch an isolated foreground program and wait; append a separate `&` for background execution |
@@ -86,12 +86,22 @@ Lines longer than 255 characters are discarded. Queue overflow discards input
 until Enter. There is no completion, pipelines, environment expansion, process
 group/job control or blocking terminal-read API yet. Program output shares the console with the shell.
 
-Program commands split arguments on spaces/tabs. Single or double quotes group
+All commands are parsed once into a command name and arguments. The parser
+splits on spaces/tabs (the interactive line editor accepts printable characters). Single or double quotes group
 words (including empty strings); a backslash escapes the next character, also
 inside quotes. Unmatched quotes, a trailing backslash or excessive arguments
-reject the command. This syntax applies to program launches; existing built-in
-commands retain their literal text/path handling. The shell resolves `argv[0]`
-to the executable path. For example:
+reject the command before execution. Built-ins dispatch on the first word and
+validate their remaining arguments. Unsupported counts/options print usage;
+`ps aux` lists the same all-task name/PID/state information as `ps`, without
+claiming Unix user/CPU/memory columns. `print` joins decoded arguments with single
+spaces; quote text to preserve internal spaces. Clock shortcuts apply only to
+one argument (`tick`, `time`, or `date`). Quoted/escaped paths work for `cd` and
+`open`; empty paths are rejected. Built-ins reject background `&`.
+
+Built-ins remain in the shell; there is no `/usr/bin` command search/migration
+in this step. The shell resolves program `argv[0]` to the executable path.
+The program limit remains 16 arguments including `argv[0]`; the optional `user`
+prefix does not consume a program argument. History retains the original line. For example:
 
 ```text
 ./USR/BIN/TEST alpha "two words" ""

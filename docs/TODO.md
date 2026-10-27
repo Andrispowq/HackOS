@@ -8,7 +8,8 @@ more devices.
 
 ## Follow-up plan from step 8
 
-Items 1 and 2 are addressed in step 9. Items 3–5 remain deferred; authentication
+Items 1 and 2 are addressed in step 9; built-in parsing in item 3 is addressed
+in step 10. Command-program migration and items 4–5 remain deferred; authentication
 and setup depend on persistent user storage and credential handling.
 
 1. **Slow drawing — addressed in step 9:** replace per-pixel compositor calls
@@ -20,12 +21,11 @@ and setup depend on persistent user storage and credential handling.
    input could postpone drawing indefinitely. Drain bounded event batches and
    repaint even while input continues; retry if geometry changed during upload.
    Verify large normal and maximized client pixels, including under mouse input.
-3. **Shell command/argument separation:** first tokenize built-ins into a command
-   name plus arguments, preserving quotes/escapes. Dispatch `ps aux` to `ps` with
-   `aux`, so `ps` validates/responds to its arguments rather than the shell
-   reporting an unknown whole line. Test empty/quoted/invalid arguments. In a
-   later migration, turn commands into programs launched from `/usr/bin` using
-   the existing argument and foreground-wait ABI.
+3. **Shell command/argument separation — built-ins addressed in step 10:**
+   parse command names and arguments once, with quotes/escapes and empty-argument
+   preservation. `ps aux` reaches `ps`; built-ins validate arguments and report
+   usage. History preserves original text. The later migration into programs
+   launched from `/usr/bin` remains deferred.
 4. **Users, groups, permissions and login:** define stable user/group IDs,
    process credential ownership/inheritance, and kernel-side privilege checks
    (including root-only shutdown/restart). Add persistent account/group storage,
