@@ -29,7 +29,7 @@ def boot(firmware, image, elf, timeout=60, self_test=False, variant="success"):
             raise RuntimeError("GDB missing; use the Linux test container")
         with tempfile.TemporaryDirectory(prefix="hackos-qemu-") as temporary:
             socket = Path(temporary)/"gdb.sock"
-            args = ["qemu-system-x86_64", "-machine", "q35", "-accel", "tcg", "-cpu", "qemu64",
+            args = ["qemu-system-x86_64", "-machine", "q35", "-accel", "tcg", "-cpu", "qemu64,+rdrand",
                     "-m", "1G", "-smp", "cores=4,threads=1,sockets=1", "-display", "none",
                     "-monitor", "none", "-serial", "none", "-net", "none", "-no-reboot",
                     "-snapshot", "-drive", f"file={image},format=raw", "-usb",
@@ -123,7 +123,7 @@ def harness_test():
         require_success(command([os.environ.get("TEST_LD","ld"),"-m","elf_x86_64","-Ttext","0x8000","-e","kernel_main","-o",elf,obj]),"link debugger probe")
         require_success(command([os.environ.get("TEST_OBJCOPY","objcopy"),"-O","binary",elf,payload]),"extract probe")
         with image.open("wb") as f:
-            f.truncate((334+93750)*512)
+            f.truncate((846+93750)*512)
             for offset,path in [(0,directory/"mbr.bin"),(512,directory/"bootloader.bin"),(1024,payload)]:
                 f.seek(offset); f.write(path.read_bytes())
         variant = "timeout" if stalled else "success"

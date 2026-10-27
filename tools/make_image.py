@@ -12,7 +12,7 @@ def package(firmware):
     output.mkdir(exist_ok=True)
     slots = [(0, 512, 'bin/mbr.bin'), (1, 512, 'bin/bootloader.bin'),
              (2, 32768, 'bin/second_stage.bin'), (66, 6144, 'util/fonts/zap-light16.psf'),
-             (78, 131072, 'bin/kernel.elf')]
+             (78, 393216, 'bin/kernel.elf')]
     if firmware == 'bios':
         for _, limit, name in slots:
             size = (ROOT / name).stat().st_size
@@ -33,10 +33,15 @@ def package(firmware):
                              ('libs/input/bin/input', 'USR/BIN/input'),
                              ('libs/window/bin/window', 'USR/BIN/window'),
                              ('libs/ring3/bin/ring3', 'USR/BIN/ring3'),
-                             ('libs/shell/bin/shell', 'USR/BIN/shell'), ('hello.txt', 'USR/hello.txt')]:
+                             ('libs/shell/bin/shell', 'USR/BIN/shell'), ('libs/login/bin/login', 'USR/BIN/login'), ('hello.txt', 'USR/hello.txt')]:
             mtool('mcopy', ROOT / source, '::/' + dest)
-        for name in ('help', 'clear', 'print', 'ps', 'kill', 'ls', 'wd', 'cat', 'read', 'shutdown', 'restart', 'id', 'whoami', 'users', 'groups', 'useradd', 'groupadd', 'usermod', 'runas'):
+        for name in ('help', 'clear', 'print', 'ps', 'kill', 'ls', 'wd', 'cat', 'read', 'shutdown', 'restart', 'id', 'whoami', 'users', 'groups', 'useradd', 'groupadd', 'usermod', 'runas', 'passwd'):
             mtool('mcopy', ROOT / 'libs/commands/bin' / name, '::/USR/BIN/' + name)
+        empty_accounts = Path(temporary) / 'accounts.dat'
+        empty_accounts.write_bytes(bytes(8192))
+        for slot in (0, 1):
+            mtool('mcopy', empty_accounts, f'::/SYSTEM/ACCT{slot}.DAT')
+            mtool('mattrib', '+h', '+s', f'::/SYSTEM/ACCT{slot}.DAT')
         image = Path(temporary) / 'HackOS.img'
         if firmware == 'uefi':
             mtool('mmd', '::/EFI', '::/EFI/BOOT')
@@ -47,11 +52,11 @@ def package(firmware):
             fat.rename(image)
         else:
             with image.open('wb') as f:
-                f.truncate((334 + 93750) * 512)
+                f.truncate((846 + 93750) * 512)
                 for lba, _, name in slots:
                     f.seek(lba * 512)
                     f.write((ROOT / name).read_bytes())
-                f.seek(334 * 512)
+                f.seek(846 * 512)
                 with fat.open('rb') as source:
                     while data := source.read(1024 * 1024):
                         f.write(data)

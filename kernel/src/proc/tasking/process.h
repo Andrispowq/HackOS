@@ -35,6 +35,8 @@ class Process
     UserAddressSpace* userSpace = nullptr;
     uint64_t userPreemptions = 0;
     bool systemShell = false;
+    bool authenticationAgent = false;
+    uint64_t sessionId = 0;
     HackosCredentials credentials = {};
     uint64_t terminalReturnPid = 0;
     uint64_t parentPid = 0, waitingFor = 0;

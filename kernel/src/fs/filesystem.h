@@ -71,6 +71,13 @@ class Filesystem
     virtual uint64_t GetDirectoryEntryCount(const char* path) = 0;
     virtual ActiveFile* GetFile(const char* path, uint64_t index) = 0;
 
+    // Kernel-only access to fixed, preallocated account-store sectors.
+    // Implementations must reject malformed, overlapping or short chains.
+    virtual bool AccountStorage(uint64_t (&sectors)[2][16], Device*& storage)
+    {
+        return false;
+    }
+
     virtual int Read(ActiveFile* file, void* buffer, uint64_t size) = 0;
     virtual int Write(ActiveFile* file, void* buffer, uint64_t size) = 0;
 

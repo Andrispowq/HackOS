@@ -165,7 +165,7 @@ repeated close, task listing and the monotonic clock. Console characters are
 captured through port `0xe9`; a framebuffer screenshot is saved as `screen.ppm`.
 
 GDB first stops the shell in the syscall dispatcher and checks its saved CS/SS,
-private CR3 and boot-shell privilege flag. This verifies actual automatic CPL3
+private CR3 and protected-session-shell flag after setup/login. This verifies actual automatic CPL3
 execution before keyboard commands begin. The runner builds guest programs
 against the active libc and copies them into a disposable image. The ABI probe
 checks read-only file metadata/read/EOF, malformed and read-only output pointers,
@@ -231,7 +231,7 @@ Nine separate tasks attempt kernel reads/writes, text writes, stack execution,
 port I/O, CLI, kernel-only software interrupts, disabled SYSCALL, and stack-guard
 access. Each must fault with the expected exception while the shell survives.
 Malformed ELF policies are rejected before task creation. Finally, GDB verifies
-all twelve test-task stacks were reaped and only the boot shell's private
+all twelve test-task stacks were reaped and only the login agent and shell's private
 frames/tables remain.
 Reports, console/GDB logs and a framebuffer screenshot are saved under
 `tests/out/qemu-user-bios/` or `qemu-user-uefi/`. These checks cover QEMU's
@@ -361,3 +361,47 @@ requirement. The BIOS stripped kernel is 128,984 bytes within the unchanged
 131,072-byte slot. ELF headers/load segments and both framebuffer captures were
 also checked. The touched account/dispatcher files use `-Os`; frame pointers,
 freestanding flags and interrupt ABI are preserved.
+
+
+## Persistent account and login regressions
+
+`python3 tests/qemu_accounts.py --firmware bios` (or `uefi`), also exposed as
+`make -C tests test-accounts FIRMWARE=bios`, uses a writable **disposable image**
+and copied OVMF VARS. It performs real PS/2 first-boot setup, rejects short,
+mismatched and invalid credentials, verifies hidden password input, tests wrong,
+unknown and locked logins, and authenticates root and non-root sessions. It
+creates users/groups/memberships, sets and changes passwords, stops QEMU and
+boots the same image to check persistence. Python independently checks the slot
+SHA-256 and full-cost PBKDF2 result. Repackaging must preserve exact slot bytes.
+
+The AUTHPROBE guest verifies that neither root nor non-root ordinary programs
+can call login/setup APIs or open account payloads, and checks root password
+copy bounds and non-root privilege rejection. Logout ends background processes
+under multiple UIDs and an open window; GDB verifies only idle/login remain,
+terminal ownership returns, and private-page/window counts match.
+
+Separate boots damage the newest generation (recover the older one), both
+slots (disable login), the first setup (disable login), or remove a slot
+(disable login). A CPU without RDRAND refuses setup without writing credentials.
+QEMU blkdebug injects write errors to check explicit failure and frozen login.
+No production image or firmware template is modified by these tests.
+
+Host tests cover SHA-256 and PBKDF2 vectors including long HMAC keys, account
+schema validation, alternating generations, sector-boundary torn writes,
+read-back corruption and flush failures. FAT fixtures check separate bounded
+slot mappings, duplicate chains, wrong file sizes and propagated read errors.
+Ordinary shell, isolated-program and window suites now perform setup/login first;
+the boot milestone test intentionally stops before authentication.
+
+Results, console logs, debugger state and setup/login screenshots are under
+`tests/out/qemu-accounts-{bios,uefi}`. Disposable test images contain published
+test credentials only. Native x86-64 CI retains ASan+UBSan; local translated
+ASan is incompatible on this host, so local host validation uses the documented
+UBSan fallback.
+
+Step 14 local validation passed 163 UBSan host checks, five boot-asset checks,
+the BIOS loader-chain probe, fresh BIOS/UEFI builds, and both firmware boot,
+account/login, shell, isolated-process and window suites. The stripped kernel is
+161,352 bytes in the 393,216-byte BIOS reservation. A real preserving rebuild
+retained both account slots byte for byte; a missing store aborted without
+replacing the original image. Formatting and Compose configuration checks passed.

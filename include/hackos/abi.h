@@ -59,6 +59,13 @@ static_assert(sizeof(HackosProcessInfo) == 288, "process ABI");
 static_assert(sizeof(HackosClock) == 16, "clock ABI");
 constexpr uint64_t HACKOS_ERROR = ~0ULL;
 constexpr uint64_t HACKOS_DENIED = ~1ULL;
+constexpr uint64_t HACKOS_RETRY = ~2ULL;
+constexpr uint64_t HACKOS_NO_ENTROPY = ~3ULL;
+constexpr uint32_t HACKOS_NO_UID = 0xffffffff;
+constexpr uint64_t HACKOS_AUTH_BROKEN = 0;
+constexpr uint64_t HACKOS_AUTH_SETUP = 1;
+constexpr uint64_t HACKOS_AUTH_LOGIN = 2;
+constexpr uint64_t HACKOS_PASSWORD_MAX = 128;
 constexpr uint64_t HACKOS_INPUT_OVERFLOW = 256;
 constexpr uint32_t HACKOS_DIRECTORY = 16;
 // console: 0 backspace, 1 clear. power: 0 shutdown, 1 restart.

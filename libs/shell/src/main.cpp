@@ -173,6 +173,16 @@ static void Command(char* input)
         return;
     }
 
+    if (Equal(command, "logout"))
+    {
+        if (background || !Arguments(argc, 1, "logout"))
+        {
+            return;
+        }
+
+        syscall_exit(0);
+    }
+
     if (Equal(command, "cd") || Equal(command, "history"))
     {
         if (background)

@@ -15,7 +15,8 @@ docker compose up --build bios
 ```
 
 Open [the console](http://localhost:6080/vnc.html?autoconnect=true&resize=scale).
-It shows initialization output followed by the standalone ring-3 shell. Click inside it
+It shows initialization output followed by first-boot setup. Choose an administrator
+name and confirm an 8–128 character password, then log in to the ring-3 shell. Click inside it
 and try `help`, `ls`, `ps` or `print tick`. Input uses the US keyboard layout.
 Use `test alpha "two words"` to see argument passing and read a file
 from ring 3, or `user USR/BIN/RING3` for
@@ -26,11 +27,14 @@ and type/click in the client. Close X, press Q, or use Ctrl-C. Program commands 
 completion before showing the prompt; a separate trailing `&` launches in the
 background. Try `input` for interactive text input; Ctrl-C returns to
 the shell. Up/Down browses the fixed 256-command history, and `history` lists it.
-Bare commands resolve in `/usr/bin`; only `cd` and `history` stay in the shell.
+Bare commands resolve in `/usr/bin`; only `cd`, `history` and `logout` stay in the shell.
 The command suite is built from `libs/commands` and packaged as separate ELF
-programs. The initial shell is root. Try `id`, `users`, `groups`, `groupadd staff`,
-`useradd alice staff`, and `runas alice id`. Account changes last only for this
-boot. `runas alice shutdown` is denied by the kernel. Login/setup remain deferred. Use `cat /usr/hello.txt` (or `read /usr/hello.txt`) instead of the old
+programs. The initial administrator has UID 0 regardless of its chosen name. Try `id`,
+`users`, `groups`, `groupadd staff`, `useradd alice staff`, `passwd alice`, and
+`runas alice id`. `logout` ends the whole session and returns to login. New users
+and the built-in `guest` stay locked until root sets their password. Account
+changes persist across stops/restarts and Docker rebuilds. `runas alice shutdown`
+is denied by the kernel. See [accounts and recovery](../system/accounts.md). Use `cat /usr/hello.txt` (or `read /usr/hello.txt`) instead of the old
 shell-owned open/read/close session. Explicit paths still work.
 The first image build compiles
 GCC and Binutils from source and takes considerably longer than later cached
@@ -45,7 +49,7 @@ docker compose --profile uefi up --build uefi
 
 Ctrl-C stops the foreground service. `docker compose down` removes its container
 and network but retains the build volume. `docker compose down --volumes` also
-removes those disposable build outputs.
+removes the images **and saved accounts**. BIOS and UEFI keep separate stores.
 
 To compile without starting the emulator:
 
@@ -72,7 +76,7 @@ do not install packages globally or require a manually prepared cross compiler.
 
 [compose.yaml](../../compose.yaml) builds a native Linux tool container on
 amd64 or arm64. GCC still emits x86-64 code on either host architecture. QEMU
-uses TCG software emulation with `q35`, `qemu64`, 1 GiB RAM, four virtual CPUs,
+uses TCG software emulation with `q35`, `qemu64,+rdrand`, 1 GiB RAM, four virtual CPUs,
 and the same USB controller configuration. KVM, host CPU passthrough, privileged
 containers, host displays, and physical disks are unnecessary. This follows
 Docker's [native cross-compilation approach](https://docs.docker.com/build/building/multi-platform/).
@@ -167,10 +171,19 @@ and only replaces the output after packaging succeeds. The boot copy of the
 kernel is stripped; `kernel/bin/kernel.elf` retains debug symbols. UEFI uses
 `EFI/BOOT/BOOTX64.EFI` and `UTIL/FONTS/zap-light16.psf`.
 
-The runner uses a temporary disk overlay and a fresh copy of OVMF VARS. Changes
-inside the guest disappear when it stops. Use a separate writable image for
-persistence experiments. Firmware templates and retained input assets stay
-unchanged.
+The runner writes to the selected image so accounts survive guest shutdown.
+Pass `--snapshot` to `tools/run_qemu.py` for a disposable run. OVMF VARS still
+uses a fresh copy, and firmware templates stay unchanged.
+
+Direct `make build*`/`buildimg` and `tools/build.py` create fresh account stores.
+Back up a used image before replacing it, or use `tools/build.py --preserve-accounts`
+with the same output directory. The Docker entry point enables preservation by
+default: it copies both opaque 8192-byte slots into the freshly built image,
+verifies the copy, and replaces the old image only after success. Corrupt slot
+contents are preserved for kernel recovery; missing or wrong-size files abort
+the build instead of silently resetting accounts. An image from before step 14
+must be moved aside explicitly before the first Docker rebuild. No other guest
+filesystem changes are preserved by rebuilding.
 
 For native debugging, run `make debug` (add `TARGET_BIOS=false` for UEFI), then:
 
@@ -188,8 +201,8 @@ framebuffer requires a graphical window or VNC: `-nographic` does not turn it
 into a text console.
 
 The kernel compiles the account registry and syscall dispatcher, plus `window.cpp`, `window_manager.cpp`, `proc/user/windows.cpp`
-and `mouse.cpp` with `-Os` to keep these services within the fixed BIOS
-kernel slot. Debug information,
+and `mouse.cpp` with `-Os`; password hashing uses `-O2` for its bounded work factor.
+The BIOS kernel reservation is now 384 KiB. Debug information,
 frame pointers, freestanding flags and the no-red-zone policy are retained.
 
 ## Source formatting

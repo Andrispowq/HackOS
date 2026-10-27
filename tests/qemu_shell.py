@@ -11,6 +11,7 @@ import subprocess
 import sys
 import tempfile
 import time
+from session import setup_and_login
 from common import ROOT, OUT, Report, command, require_success
 
 
@@ -94,7 +95,7 @@ def test(firmware, timeout):
         gate = int(re.search(r"^([0-9a-f]+) [A-Za-z] release_gate$", symbols, re.M)[1],16)
         image = directory/"HackOS.img"
         shutil.copy2(built/"HackOS.img", image)
-        fs_image = str(image) + ("@@"+str(334*512) if firmware == "bios" else "")
+        fs_image = str(image) + ("@@"+str(846*512) if firmware == "bios" else "")
         for program in programs:
             require_success(command(["mcopy", "-o", "-i", fs_image, program, "::/USR/BIN/"+program.name]), "install test program in disposable image")
         fixture = directory/"listing.txt"
@@ -107,7 +108,7 @@ def test(firmware, timeout):
         with tempfile.TemporaryDirectory(prefix="hackos-shell-") as temporary:
             temporary = Path(temporary)
             qmp_path, gdb_path = temporary/"qmp", temporary/"gdb"
-            args = ["qemu-system-x86_64", "-machine", "q35", "-accel", "tcg", "-cpu", "qemu64",
+            args = ["qemu-system-x86_64", "-machine", "q35", "-accel", "tcg", "-cpu", "qemu64,+rdrand",
                     "-m", "1G", "-smp", "cores=4,threads=1,sockets=1", "-display", "none",
                     "-monitor", "none", "-serial", "none", "-net", "none", "-no-reboot", "-snapshot",
                     "-drive", f"file={image},format=raw", "-usb", "-device", "usb-ehci,id=ehci",
@@ -140,7 +141,7 @@ def test(firmware, timeout):
                         wait_for(lambda: text in output()[offset:], repr(text))
                     wait_for(qmp_path.exists, "QMP socket")
                     qmp = QMP(qmp_path)
-                    wait_text("root@root:~$ ")
+                    setup_and_login(qmp, output, wait_for)
 
                     qmp.call("stop")
                     boot_script = directory/"shell-entry.gdb"
@@ -149,7 +150,7 @@ bp = gdb.Breakpoint("syscall_handler", type=gdb.BP_HARDWARE_BREAKPOINT)
 gdb.execute("continue")
 r = gdb.parse_and_eval("r").dereference()
 p = gdb.parse_and_eval("current_process")
-assert int(p["pid"]) == 2 and int(p["systemShell"]) and int(p["userSpace"])
+assert int(p["pid"]) == 3 and int(p["systemShell"]) and int(p["userSpace"])
 assert int(r["cs"]) == 0x1b and int(r["ss"]) == 0x23
 assert int(gdb.parse_and_eval("$cr3")) == int(p["pageTable"]["pml4"])
 print("SHELL_CPL3_OK")
@@ -172,8 +173,8 @@ bp.delete()
                     enter("print", "\nroot@root:")
                     enter("print tick", "Ticks: ")
                     first_tick = int(re.findall(r"Ticks: (\d+)", output())[-1])
-                    enter("ps", "~/USR/BIN/SHELL (2)")
-                    enter("ps aux", "~/USR/BIN/SHELL (2)")
+                    enter("ps", "~/USR/BIN/SHELL (3)")
+                    enter("ps aux", "~/USR/BIN/SHELL (3)")
                     assert re.search(r"Started user process \d+: ~/USR/BIN/PS", output())
                     assert re.search(r"Process: ~/USR/BIN/PS \(\d+\) ALIVE", output())
                     enter("clear", "root@root:~$ ")
@@ -191,7 +192,7 @@ bp.delete()
                     qmp.call("stop")
                     qmp.call("screendump", {"filename": str(directory/"quiet-console.ppm")})
                     qmp.call("cont")
-                    enter('  "ps"   "aux"  ', "~/USR/BIN/SHELL (2)")
+                    enter('  "ps"   "aux"  ', "~/USR/BIN/SHELL (3)")
                     enter("ps invalid", "Usage: ps [aux]")
                     enter("ps aux extra", "Usage: ps [aux]")
                     enter('ps ""', "Usage: ps [aux]")
@@ -320,13 +321,13 @@ print("FOREGROUND_WAIT_OK")
                         wait_text("PROBE_OK", offset)
                         wait_text("root@root:~$ ", offset)
                         assert "PROBE_FAIL" not in output()[offset:], "Guest ABI/context check failed"
-                        enter("ps", "~/USR/BIN/SHELL (2)")
+                        enter("ps", "~/USR/BIN/SHELL (3)")
                     enter("id", "uid=0(root) gid=0 groups=0")
                     enter("whoami", "\nroot\n")
                     enter("users", "guest uid=1000 gid=1000")
                     enter("groups", "users gid=1000")
-                    enter("groupadd staff", "Group created (this boot only).")
-                    enter("useradd alice staff", "User created (this boot only).")
+                    enter("groupadd staff", "Group created.")
+                    enter("useradd alice staff", "User created. Use passwd to enable login.")
                     enter("usermod alice users", "Group added")
                     enter("runas alice id", "uid=1001(alice) gid=1001 groups=1001,1000")
                     enter("runas alice whoami", "\nalice\n")
@@ -410,19 +411,19 @@ assert reaped == EXPECTED_REAPED, "Missing/duplicate task reclamation: " + str(r
 p = gdb.parse_and_eval("ready_queue")
 labels = []
 while int(p):
-    assert len(labels) < 3, "Leaked task or queue cycle"
-    assert int(p["state"]) == 0
-    if int(p["pid"]) == 2:
+    assert len(labels) < 4, "Leaked task or queue cycle"
+    assert int(p["state"]) == (3 if int(p["authenticationAgent"]) else 0)
+    if int(p["pid"]) == 3:
         assert int(p["userSpace"]) and int(p["systemShell"])
         assert int(p["pageTable"]) != int(gdb.parse_and_eval("&KernelDirectory"))
-        assert int(gdb.parse_and_eval("user_pages_live")) == int(p["userSpace"]["ownedCount"])
+        assert int(gdb.parse_and_eval("user_pages_live")) == int(p["userSpace"]["ownedCount"]) + int(gdb.parse_and_eval("ready_queue->next->userSpace->ownedCount"))
     else:
-        assert not int(p["userSpace"])
+        assert not int(p["userSpace"]) or int(p["authenticationAgent"])
     labels.append(p["name"].string())
     p = p["next"]
-assert labels == ["idle", "~/USR/BIN/SHELL"], labels
+assert labels == ["idle", "~/USR/BIN/LOGIN", "~/USR/BIN/SHELL"], labels
 assert int(gdb.parse_and_eval("user_files_live")) == 0
-assert int(gdb.parse_and_eval("terminalOwner")) == 2
+assert int(gdb.parse_and_eval("terminalOwner")) == 3
 assert int(gdb.parse_and_eval("pendingInterrupt")) == 0
 print("SHELL_REGRESSION_OK switches=%d reaped=%d" % (switches, reaped))
 end
@@ -431,7 +432,7 @@ quit
 ''')
                     started = re.findall(r"Started user process (\d+):", output())
                     assert len(started) == len(set(started)), "Duplicate process IDs"
-                    script.write_text(script.read_text().replace("EXPECTED_REAPED", str(len(started) - 1)))
+                    script.write_text(script.read_text().replace("EXPECTED_REAPED", str(len(started) - 2)))
                     env = os.environ.copy(); env["DEBUGINFOD_URLS"] = ""
                     result = command([os.environ.get("GDB", "gdb"), "--batch", "--nx", "-q",
                                       built/"kernel.elf", "-x", script], env=env, timeout=20)

@@ -8,6 +8,8 @@
 #include "proc/tasking/process.h"
 #include "proc/user/user.h"
 #include "proc/user/accounts.h"
+#include "proc/user/account_store.h"
+#include "security/crypto.h"
 #include "proc/user/windows.h"
 #include "proc/user/address_space.h"
 #include "drivers/keyboard/keyboard.h"
@@ -17,6 +19,7 @@
 #include "acpi/fadt.h"
 #include "lib/stdio.h"
 #include "lib/memory.h"
+#include "lib/string.h"
 
 extern Process* ready_queue;
 extern KernelInfo* kInfo;
@@ -35,8 +38,15 @@ static bool IsRoot()
 static bool Path(const char* address, char (&path)[256])
 {
     char input[256];
-    return Caller()->userSpace->CopyString(input, (uint64_t)address, sizeof(input)) && filesystems[0] &&
-           NormalizePath(input, Caller()->working_dir, path);
+    if (!Caller()->userSpace->CopyString(input, (uint64_t)address, sizeof(input)) || !filesystems[0] ||
+        !NormalizePath(input, Caller()->working_dir, path))
+    {
+        return false;
+    }
+
+    // Credential records are kernel-only even for UID 0. No file handle can
+    // expose a password verifier or a raw account-store slot to userspace.
+    return strcmp(path, (char*)"~/SYSTEM/ACCT0.DAT") != 0 && strcmp(path, (char*)"~/SYSTEM/ACCT1.DAT") != 0;
 }
 
 static bool Output(void* destination, const void* source, uint64_t length)
@@ -166,6 +176,11 @@ static uint64_t UserKill(uint64_t pid)
 
 static uint64_t UserSpawn(const char* name)
 {
+    if (Caller()->authenticationAgent)
+    {
+        return HACKOS_DENIED;
+    }
+
     char path[256];
     if (!Path(name, path))
     {
@@ -190,6 +205,11 @@ static uint64_t UserSpawn(const char* name)
 static uint64_t UserSpawnArgs(const char* name, uint64_t argc, const char* const* argv,
                               const HackosCredentials* credentials = nullptr)
 {
+    if (Caller()->authenticationAgent)
+    {
+        return HACKOS_DENIED;
+    }
+
     char path[256], strings[HACKOS_ARG_BYTES];
     uint64_t pointers[HACKOS_MAX_ARGS];
     const char* arguments[HACKOS_MAX_ARGS];
@@ -298,6 +318,22 @@ static uint64_t UserGroupInfo(uint64_t index, HackosGroupInfo* destination)
     return !value ? 0 : Output(destination, value, sizeof(*value)) ? 1 : HACKOS_ERROR;
 }
 
+static uint64_t SaveAccounts(uint64_t result, const AccountRegistry& previous)
+{
+    if (result == HACKOS_ERROR)
+    {
+        return result;
+    }
+
+    if (!accountStore.Commit(accounts))
+    {
+        accounts = previous;
+        return HACKOS_ERROR;
+    }
+
+    return result;
+}
+
 static uint64_t UserCreateAccount(const char* name, uint64_t gid)
 {
     if (!IsRoot())
@@ -306,8 +342,14 @@ static uint64_t UserCreateAccount(const char* name, uint64_t gid)
     }
 
     char copy[HACKOS_ACCOUNT_NAME];
-    return Caller()->userSpace->CopyString(copy, (uint64_t)name, sizeof(copy)) ? accounts.CreateUser(copy, gid)
-                                                                               : HACKOS_ERROR;
+    if (accountStore.Status() != AccountStore::Ready ||
+        !Caller()->userSpace->CopyString(copy, (uint64_t)name, sizeof(copy)))
+    {
+        return HACKOS_ERROR;
+    }
+
+    AccountRegistry previous = accounts;
+    return SaveAccounts(accounts.CreateUser(copy, gid), previous);
 }
 
 static uint64_t UserCreateGroup(const char* name)
@@ -318,13 +360,181 @@ static uint64_t UserCreateGroup(const char* name)
     }
 
     char copy[HACKOS_ACCOUNT_NAME];
-    return Caller()->userSpace->CopyString(copy, (uint64_t)name, sizeof(copy)) ? accounts.CreateGroup(copy)
-                                                                               : HACKOS_ERROR;
+    if (accountStore.Status() != AccountStore::Ready ||
+        !Caller()->userSpace->CopyString(copy, (uint64_t)name, sizeof(copy)))
+    {
+        return HACKOS_ERROR;
+    }
+
+    AccountRegistry previous = accounts;
+    return SaveAccounts(accounts.CreateGroup(copy), previous);
 }
 
 static uint64_t UserAddGroup(uint64_t uid, uint64_t gid)
 {
-    return IsRoot() ? accounts.AddGroup(uid, gid) : HACKOS_DENIED;
+    if (!IsRoot())
+    {
+        return HACKOS_DENIED;
+    }
+
+    if (accountStore.Status() != AccountStore::Ready)
+    {
+        return HACKOS_ERROR;
+    }
+
+    AccountRegistry previous = accounts;
+    return SaveAccounts(accounts.AddGroup(uid, gid), previous);
+}
+
+static bool CopyPassword(const char* source, char (&password)[HACKOS_PASSWORD_MAX + 1])
+{
+    if (!Caller()->userSpace->CopyString(password, (uint64_t)source, sizeof(password)))
+    {
+        return false;
+    }
+
+    uint64_t length = strlen(password);
+    if (length < 8 || length > HACKOS_PASSWORD_MAX)
+    {
+        return false;
+    }
+
+    for (unsigned i = 0; i < length; ++i)
+    {
+        if (password[i] < 32 || password[i] > 126)
+        {
+            return false;
+        }
+    }
+
+    return true;
+}
+
+static uint64_t NewPassword(const char* source, PasswordRecord& record)
+{
+    char password[HACKOS_PASSWORD_MAX + 1] = {};
+    bool valid = CopyPassword(source, password);
+    if (!valid || !RandomSalt(record.salt))
+    {
+        SecureErase(password, sizeof(password));
+        return valid ? HACKOS_NO_ENTROPY : HACKOS_ERROR;
+    }
+
+    record.enabled = 1;
+    record.iterations = PASSWORD_ITERATIONS;
+    Pbkdf2Sha256(password, strlen(password), record.salt, sizeof(record.salt), record.iterations, record.digest);
+    SecureErase(password, sizeof(password));
+    return 0;
+}
+
+static uint64_t UserAuthState()
+{
+    return Caller()->authenticationAgent ? (uint64_t)accountStore.Status() : HACKOS_DENIED;
+}
+
+static uint64_t UserAuthSetup(const char* username, const char* password)
+{
+    if (!Caller()->authenticationAgent || !OwnsTerminal(Caller()->pid) || accountStore.Status() != AccountStore::Empty)
+    {
+        return HACKOS_DENIED;
+    }
+
+    char name[HACKOS_ACCOUNT_NAME];
+    if (!Caller()->userSpace->CopyString(name, (uint64_t)username, sizeof(name)))
+    {
+        return HACKOS_ERROR;
+    }
+
+    PasswordRecord record = {};
+    uint64_t result = NewPassword(password, record);
+    if (result)
+    {
+        return result;
+    }
+
+    AccountRegistry previous = accounts;
+    bool prepared = accounts.Setup(name, record);
+    SecureErase(&record, sizeof(record));
+    return prepared ? SaveAccounts(0, previous) : HACKOS_ERROR;
+}
+
+static uint64_t UserPasswordSet(uint64_t uid, const char* password)
+{
+    if (!IsRoot())
+    {
+        return HACKOS_DENIED;
+    }
+
+    if (accountStore.Status() != AccountStore::Ready || !accounts.Credentials(uid))
+    {
+        return HACKOS_ERROR;
+    }
+
+    PasswordRecord record = {};
+    uint64_t result = NewPassword(password, record);
+    if (result)
+    {
+        return result;
+    }
+
+    AccountRegistry previous = accounts;
+    accounts.SetPassword(uid, record);
+    SecureErase(&record, sizeof(record));
+    return SaveAccounts(0, previous);
+}
+
+static uint64_t UserAuthLogin(const char* username, const char* source)
+{
+    static uint64_t retryAfter = 0;
+    if (!Caller()->authenticationAgent || !OwnsTerminal(Caller()->pid) || accountStore.Status() != AccountStore::Ready)
+    {
+        return HACKOS_DENIED;
+    }
+
+    if (tick < retryAfter)
+    {
+        return HACKOS_RETRY;
+    }
+
+    char name[HACKOS_ACCOUNT_NAME], password[HACKOS_PASSWORD_MAX + 1] = {};
+    if (!Caller()->userSpace->CopyString(name, (uint64_t)username, sizeof(name)) || !CopyPassword(source, password))
+    {
+        SecureErase(password, sizeof(password));
+        retryAfter = tick + TimerTicksForMilliseconds(1000);
+        return HACKOS_DENIED;
+    }
+
+    int index = accounts.FindUser(name);
+    PasswordRecord record = {};
+    if (index >= 0)
+    {
+        record = accounts.Data().passwords[index];
+    }
+
+    uint8_t digest[32];
+    Pbkdf2Sha256(password, strlen(password), record.salt, sizeof(record.salt), PASSWORD_ITERATIONS, digest);
+    bool accepted = record.enabled && ConstantEqual(digest, record.digest, 32);
+    SecureErase(password, sizeof(password));
+    SecureErase(&record, sizeof(record));
+    SecureErase(digest, sizeof(digest));
+    if (!accepted)
+    {
+        retryAfter = tick + TimerTicksForMilliseconds(1000);
+        return HACKOS_DENIED;
+    }
+
+    const auto& identity = accounts.User(index)->credentials;
+    uint64_t pid = LoadUserProgramTask("~/USR/BIN/SHELL", true, 0, nullptr, &identity);
+    for (auto p = ready_queue; p; p = p->next)
+    {
+        if (p->pid == pid)
+        {
+            p->sessionId = pid;
+            p->terminalReturnPid = Caller()->pid;
+        }
+    }
+
+    return pid ? pid : HACKOS_ERROR;
 }
 
 static uint64_t UserOpen(const char* name)
@@ -637,6 +847,18 @@ static void syscall_handler(Registers* r)
     case HACKOS_SYS_chdir:
         r->rax = UserChdir((const char*)r->rdi);
         break;
+    case HACKOS_SYS_auth_state:
+        r->rax = UserAuthState();
+        break;
+    case HACKOS_SYS_auth_setup:
+        r->rax = UserAuthSetup((const char*)r->rdi, (const char*)r->rsi);
+        break;
+    case HACKOS_SYS_auth_login:
+        r->rax = UserAuthLogin((const char*)r->rdi, (const char*)r->rsi);
+        break;
+    case HACKOS_SYS_password_set:
+        r->rax = UserPasswordSet(r->rdi, (const char*)r->rsi);
+        break;
     case HACKOS_SYS_identity:
         r->rax = UserIdentity((HackosCredentials*)r->rdi);
         break;
@@ -688,5 +910,6 @@ static void syscall_handler(Registers* r)
 void InitialiseSyscalls()
 {
     accounts.Initialise();
+    InitialiseAccountStorage();
     RegisterInterruptHandler(0x80, syscall_handler);
 }

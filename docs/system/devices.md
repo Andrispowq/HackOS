@@ -26,24 +26,26 @@ table address also does not mean an HPET timer driver is active.
 
 ## Block devices
 
-[Device](../../kernel/src/drivers/device/device.h) defines `Read`, `Write`, and
+[Device](../../kernel/src/drivers/device/device.h) defines checked `Read`, `Write`, `Flush` and
 `GetType`. Instances are stored in a fixed registry with room for 16 devices.
 The current implementations interpret the I/O `size` argument as a **sector
 count**, while filesystem-level sizes are byte counts.
 
 | Driver | Implementation |
 | --- | --- |
-| [ATA PIO](../../kernel/src/drivers/ata/) | Performs port-based sector I/O; the adapter narrows LBA/count values to its underlying API |
+| [ATA PIO](../../kernel/src/drivers/ata/) | Performs port-based sector I/O; rejects out-of-range LBA/count values; writes use 16-bit words and explicit cache flush |
 | [AHCI](../../kernel/src/drivers/ahci/) | Maps controller registers, discovers ports, prepares command/FIS buffers, and submits DMA requests |
 
 Kernel startup registers PCI-discovered devices, adds an ATA device, and mounts
 FAT32 using `devices[0]`. This makes enumeration order part of boot behavior;
 there is no general boot-volume selection mechanism yet.
 
-The interface returns `void`, so storage errors cannot be propagated cleanly
-to the filesystem. AHCI also needs careful treatment of physical address
-translation, buffer lifetime, and multi-page DMA requests. Virtually adjacent
-heap pages are not necessarily physically contiguous.
+Transfers return `bool`, with false meaning incomplete I/O; flush support defaults
+to failure. The account store propagates these results, while other filesystem
+callers still need auditing. AHCI splits transfers into at most eight sectors
+using one persistent physical bounce page per port, including the upper address
+bits in DMA descriptors. Polling is bounded; a timed-out port stops reusing its
+DMA memory. Device capacity reporting and broader hardware recovery remain TODO.
 
 ## PS/2 input
 
@@ -52,7 +54,7 @@ translated set-1 scancodes from port `0x60`. Its allocation-free decoder tracks
 both Shift keys and Caps Lock, bounds-checks make/break codes, and handles or
 ignores extended sequences. Decoded keys join the ordered input ingress queue.
 Idle routes them to the focused window, or a 255-character terminal FIFO. The
-terminal owner (boot shell or foreground program) drains it through the input
+terminal owner (login, authenticated shell or foreground program) drains it through the input
 syscall and edits a bounded line in ring 3,
 and dispatches commands on Enter. The kernel reads the queue with interrupts
 briefly disabled; background processes cannot consume terminal input. Extended Up/Down keys become

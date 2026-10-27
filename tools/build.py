@@ -5,14 +5,18 @@ import os
 from pathlib import Path
 import shutil
 import subprocess
+from account_image import read_accounts, write_accounts
 
 ROOT = Path(__file__).resolve().parents[1]
 
-def build(firmware, output):
+def build(firmware, output, preserve_accounts=False):
     directory = output.resolve() / firmware
     directory.mkdir(parents=True, exist_ok=True)
-    for name in ('HackOS.img', 'kernel.elf'):
-        (directory / name).unlink(missing_ok=True)
+    image = directory / 'HackOS.img'
+    accounts = read_accounts(image) if preserve_accounts and image.exists() else None
+    if not preserve_accounts:
+        image.unlink(missing_ok=True)
+    (directory / 'kernel.elf').unlink(missing_ok=True)
     work = directory / 'source'
     shutil.rmtree(work, ignore_errors=True)
     work.mkdir()
@@ -37,7 +41,13 @@ def build(firmware, output):
     (directory / 'toolchain.txt').write_text('\n'.join(versions))
     target = 'build_bios' if firmware == 'bios' else 'build_efi'
     subprocess.run(['make', '-j2', target, 'CROSS_COMPILE='+cross], cwd=work, env=env, check=True)
-    shutil.copy2(work / 'bin/HackOS.img', directory / 'HackOS.img')
+    if accounts is not None:
+        write_accounts(work / 'bin/HackOS.img', accounts)
+    replacement = directory / 'HackOS.img.new'
+    shutil.copy2(work / 'bin/HackOS.img', replacement)
+    with replacement.open('rb') as ready:
+        os.fsync(ready.fileno())
+    replacement.replace(image)
     shutil.copy2(work / 'kernel/bin/kernel.elf', directory / 'kernel.elf')
     if firmware == 'uefi': shutil.copy2(work / 'boot/UEFI/gnu-efi/x86_64/bootloader/main.efi', directory / 'BOOTX64.EFI')
     print(f'Image and debug symbols: {directory}', flush=True)
@@ -47,5 +57,6 @@ if __name__ == '__main__':
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--firmware', choices=('bios', 'uefi'), default='bios')
     parser.add_argument('--output', type=Path, default=ROOT / 'out')
+    parser.add_argument('--preserve-accounts', action='store_true')
     args = parser.parse_args()
-    build(args.firmware, args.output)
+    build(args.firmware, args.output, args.preserve_accounts)

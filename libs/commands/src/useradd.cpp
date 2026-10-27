@@ -14,5 +14,5 @@ int main(int argc, char** argv)
         return 1;
     }
 
-    return AccountResult(syscall_user_create(argv[1], group.gid), "User created (this boot only).");
+    return AccountResult(syscall_user_create(argv[1], group.gid), "User created. Use passwd to enable login.");
 }

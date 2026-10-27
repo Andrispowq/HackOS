@@ -153,13 +153,16 @@ class Port
 
     bool Read(uint64_t LBA, void* buffer, uint32_t sectorCount);
     bool Write(uint64_t LBA, void* buffer, uint32_t sectorCount);
+    bool Flush();
 
   private:
+    bool Transfer(uint8_t command, uint64_t lba, void* buffer, uint32_t sectors);
+    bool failed = false;
     void StartCMD();
     void StopCMD();
 
   public:
-    HBAPort* HBAPortPtr;
+    volatile HBAPort* HBAPortPtr;
     PortType AHCIPortType;
     uint8_t PortNumber;
 
@@ -176,8 +179,9 @@ class AHCIDevice : public Device
         return DeviceType::AHCI;
     };
 
-    virtual void Read(uint64_t LBA, void* buffer, uint64_t size) override;
-    virtual void Write(uint64_t LBA, void* buffer, uint64_t size) override;
+    virtual bool Read(uint64_t LBA, void* buffer, uint64_t size) override;
+    virtual bool Write(uint64_t LBA, void* buffer, uint64_t size) override;
+    bool Flush() override;
 
   private:
     Port* port;

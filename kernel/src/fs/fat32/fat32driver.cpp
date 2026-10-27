@@ -90,7 +90,10 @@ FAT32Driver::FAT32Driver(Device* device, uint32_t part_start) : device(device), 
     }
 
     BootSector = (FAT32_BootSector*)kmalloc(512);
-    device->Read(PartitionStart, BootSector, 1);
+    if (!device->Read(PartitionStart, BootSector, 1))
+    {
+        return;
+    }
     const auto& b = *BootSector;
     // Block devices currently expose 512-byte sectors only.
     uint64_t first = (uint64_t)b.NumberOfFATs * b.SectorsPerFAT32 + b.ReservedSectors;
@@ -117,8 +120,11 @@ FAT32Driver::FAT32Driver(Device* device, uint32_t part_start) : device(device), 
     temporaryBuffer = (uint8_t*)kmalloc(ClusterSize);
     FATcache = (uint32_t*)kmalloc((uint64_t)b.SectorsPerFAT32 * 512);
     unsigned active = b.Flags & 0x80 ? b.Flags & 0xf : 0;
-    device->Read((uint64_t)PartitionStart + b.ReservedSectors + (uint64_t)active * b.SectorsPerFAT32, FATcache,
-                 b.SectorsPerFAT32);
+    if (!device->Read((uint64_t)PartitionStart + b.ReservedSectors + (uint64_t)active * b.SectorsPerFAT32, FATcache,
+                      b.SectorsPerFAT32))
+    {
+        return;
+    }
     valid = true;
 }
 
@@ -202,10 +208,18 @@ void FAT32Driver::FlushFAT()
     dirty = false;
 }
 
-void FAT32Driver::ReadCluster(uint32_t cluster, void* buffer)
+bool FAT32Driver::ReadCluster(uint32_t cluster, void* buffer)
 {
-    device->Read((uint64_t)PartitionStart + FirstDataSector + (uint64_t)(cluster - 2) * BootSector->SectorsPerCluster,
-                 buffer, BootSector->SectorsPerCluster);
+    if (!ValidCluster(cluster) || !device->Read((uint64_t)PartitionStart + FirstDataSector +
+                                                    (uint64_t)(cluster - 2) * BootSector->SectorsPerCluster,
+                                                buffer, BootSector->SectorsPerCluster))
+    {
+        ioError = true;
+        memset(buffer, 0, ClusterSize);
+        return false;
+    }
+
+    return true;
 }
 
 void FAT32Driver::WriteCluster(uint32_t cluster, void* buffer)
@@ -1026,4 +1040,47 @@ int FAT32Driver::WriteFile(DirEntry& entry, uint64_t offset, void* buffer, uint6
     }
 
     return UpdateEntry(entry);
+}
+
+bool FAT32Driver::AccountStorage(uint64_t (&sectors)[2][16], Device*& storage)
+{
+    if (!valid || ioError)
+    {
+        return false;
+    }
+
+    const char* paths[] = {"~/SYSTEM/ACCT0.DAT", "~/SYSTEM/ACCT1.DAT"};
+    for (unsigned slot = 0; slot < 2; ++slot)
+    {
+        DirEntry entry;
+        if (OpenFile(paths[slot], &entry) != 0 || ioError || entry.size != 8192 ||
+            (entry.attributes & (FILE_DIRECTORY | FILE_VOLUME_ID)))
+        {
+            return false;
+        }
+
+        auto chain = GetClusterChain(entry.cluster);
+        if (chain.size() != (8192 + ClusterSize - 1) / ClusterSize)
+        {
+            return false;
+        }
+
+        for (unsigned sector = 0; sector < 16; ++sector)
+        {
+            uint32_t cluster = chain[sector / BootSector->SectorsPerCluster];
+            sectors[slot][sector] = (uint64_t)PartitionStart + FirstDataSector +
+                                    (uint64_t)(cluster - 2) * BootSector->SectorsPerCluster +
+                                    sector % BootSector->SectorsPerCluster;
+            for (unsigned previous = 0; previous < slot * 16 + sector; ++previous)
+            {
+                if (sectors[previous / 16][previous % 16] == sectors[slot][sector])
+                {
+                    return false;
+                }
+            }
+        }
+    }
+
+    storage = device;
+    return true;
 }

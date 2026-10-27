@@ -1,12 +1,19 @@
 #include "ata_device.h"
 #include "ata.h"
 
-void ATADevice::Read(uint64_t LBA, void* buffer, uint64_t size)
+bool ATADevice::Read(uint64_t LBA, void* buffer, uint64_t size)
 {
-    ReadSectorsATA((uint64_t)buffer, (uint32_t)LBA, (uint8_t)size);
+    return LBA < (1ULL << 28) && size && size <= 255 && size <= (1ULL << 28) - LBA &&
+           ReadSectorsATA((uint64_t)buffer, (uint32_t)LBA, (uint8_t)size);
 }
 
-void ATADevice::Write(uint64_t LBA, void* buffer, uint64_t size)
+bool ATADevice::Write(uint64_t LBA, void* buffer, uint64_t size)
 {
-    WriteSectorsATA((uint32_t)LBA, (uint8_t)size, (uint32_t*)buffer);
+    return LBA < (1ULL << 28) && size && size <= 255 && size <= (1ULL << 28) - LBA &&
+           WriteSectorsATA((uint32_t)LBA, (uint8_t)size, (uint16_t*)buffer);
+}
+
+bool ATADevice::Flush()
+{
+    return FlushATA();
 }

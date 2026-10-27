@@ -26,8 +26,8 @@ Elf64_Ehdr* LoadProgram(void* address, uint64_t* mem)
     *mem = memory;
 
     Elf64_Ehdr* header = (Elf64_Ehdr*)memory;
-    if (elf_check_file(header) != 0 && header->e_phentsize == sizeof(Elf64_Phdr) && header->e_phoff <= 512 * 256 &&
-        header->e_phnum && header->e_phnum <= (512 * 256 - header->e_phoff) / sizeof(Elf64_Phdr))
+    if (elf_check_file(header) != 0 && header->e_phentsize == sizeof(Elf64_Phdr) && header->e_phoff <= 512 * 768 &&
+        header->e_phnum && header->e_phnum <= (512 * 768 - header->e_phoff) / sizeof(Elf64_Phdr))
     {
         return header;
     }

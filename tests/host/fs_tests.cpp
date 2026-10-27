@@ -146,6 +146,7 @@ class MemoryDisk : public Device
   public:
     unsigned char* bytes;
     size_t size;
+    bool readError = false;
 
     MemoryDisk()
     {
@@ -162,16 +163,23 @@ class MemoryDisk : public Device
         return DeviceType::ATA_PIO;
     }
 
-    void Read(uint64_t lba, void* p, uint64_t count) override
+    bool Read(uint64_t lba, void* p, uint64_t count) override
     {
+        if (readError)
+        {
+            return false;
+        }
+
         bounds(lba, count);
         test_copy(p, bytes + lba * 512, count * 512);
+        return true;
     }
 
-    void Write(uint64_t lba, void* p, uint64_t count) override
+    bool Write(uint64_t lba, void* p, uint64_t count) override
     {
         bounds(lba, count);
         test_copy(bytes + lba * 512, p, count * 512);
+        return true;
     }
 
     void bounds(uint64_t lba, uint64_t count)
@@ -560,5 +568,76 @@ TEST(fat_rejects_invalid_bpb_without_writing)
         CHECK(test_equal(before, disk.bytes, 512));
     }
 
+    return 0;
+}
+
+TEST(fat_account_storage_maps_separate_bounded_sectors)
+{
+    MemoryDisk disk;
+    FAT32 fs(&disk, 0);
+    uint64_t sectors[2][16];
+    Device* device = nullptr;
+    CHECK(fs.AccountStorage(sectors, device) && device == &disk);
+    for (unsigned i = 0; i < 32; ++i)
+    {
+        uint64_t sector = sectors[i / 16][i % 16];
+        CHECK(sector > 0 && sector < disk.size / 512);
+        for (unsigned j = 0; j < i; ++j)
+        {
+            CHECK(sector != sectors[j / 16][j % 16]);
+        }
+    }
+
+    return 0;
+}
+
+TEST(fat_account_storage_rejects_bad_size_and_shared_chain)
+{
+    for (unsigned fault = 0; fault < 2; ++fault)
+    {
+        MemoryDisk disk;
+        uint8_t* entries[2] = {};
+        for (unsigned offset = 0; offset + 32 <= disk.size; offset += 32)
+        {
+            if (test_equal(disk.bytes + offset, "ACCT0   DAT", 11))
+            {
+                entries[0] = disk.bytes + offset;
+            }
+            else if (test_equal(disk.bytes + offset, "ACCT1   DAT", 11))
+            {
+                entries[1] = disk.bytes + offset;
+            }
+        }
+
+        CHECK(entries[0] && entries[1]);
+        if (fault == 0)
+        {
+            entries[0][28] = 1; // 8193 rather than 8192 bytes
+        }
+        else
+        {
+            test_copy(entries[1] + 20, entries[0] + 20, 2);
+            test_copy(entries[1] + 26, entries[0] + 26, 2);
+        }
+
+        FAT32 fs(&disk, 0);
+        uint64_t sectors[2][16];
+        Device* device = nullptr;
+        CHECK(!fs.AccountStorage(sectors, device));
+    }
+
+    return 0;
+}
+
+TEST(fat_account_storage_propagates_read_failure)
+{
+    MemoryDisk disk;
+    FAT32 fs(&disk, 0);
+    disk.readError = true;
+    uint64_t sectors[2][16];
+    Device* device = nullptr;
+    CHECK(!fs.AccountStorage(sectors, device));
+    FAT32 unreadable(&disk, 0);
+    CHECK(!unreadable.AccountStorage(sectors, device));
     return 0;
 }

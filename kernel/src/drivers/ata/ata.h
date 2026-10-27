@@ -3,7 +3,9 @@
 
 #include "lib/stdint.h"
 
-void ReadSectorsATA(uint64_t target_address, uint32_t LBA, uint8_t sector_count);
-void WriteSectorsATA(uint32_t LBA, uint8_t sector_count, uint32_t* bytes);
+bool ReadSectorsATA(uint64_t target_address, uint32_t LBA, uint8_t sector_count);
+bool WriteSectorsATA(uint32_t LBA, uint8_t sector_count, uint16_t* bytes);
+
+bool FlushATA();
 
 #endif

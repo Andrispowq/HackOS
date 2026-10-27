@@ -196,6 +196,7 @@ uint64_t LoadUserProgramTask(const char* path, bool systemShell, uint64_t argc, 
     space->CopyToUser(cursor, userArgv, (argc + 1) * sizeof(uint64_t));
     auto process = new Process(path, (void*)header->e_entry);
     process->systemShell = systemShell;
+    process->sessionId = parent ? parent->sessionId : 0;
     process->credentials = credentials ? *credentials : parent ? parent->credentials : HackosCredentials{};
     if (parent && parent->userSpace)
     {

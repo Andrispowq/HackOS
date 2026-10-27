@@ -175,9 +175,21 @@ void InitialiseKernel(struct KernelInfo* info)
     InitialiseSyscalls();
 
     InitialiseTasking();
-    if (!LoadUserProgramTask("~/USR/BIN/SHELL", true))
+    HackosCredentials anonymous = {};
+    anonymous.uid = anonymous.gid = HACKOS_NO_UID;
+    uint64_t login = LoadUserProgramTask("~/USR/BIN/LOGIN", true, 0, nullptr, &anonymous);
+    extern Process* ready_queue;
+    for (auto p = ready_queue; p; p = p->next)
     {
-        kprintf("BOOT ERROR: cannot start ring-3 shell.\n");
+        if (p->pid == login)
+        {
+            p->authenticationAgent = true;
+        }
+    }
+
+    if (!login)
+    {
+        kprintf("BOOT ERROR: cannot start login agent.\n");
     }
 
     InitialiseIRQ();

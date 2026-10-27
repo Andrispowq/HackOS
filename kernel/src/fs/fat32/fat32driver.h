@@ -11,6 +11,8 @@ class FAT32Driver
     FAT32Driver(Device* device, uint32_t part_start);
     ~FAT32Driver();
 
+    bool AccountStorage(uint64_t (&sectors)[2][16], Device*& storage);
+
     bool IsValid() const
     {
         return valid;
@@ -34,7 +36,7 @@ class FAT32Driver
     uint32_t ReadFAT(uint32_t cluster) const;
     void WriteFAT(uint32_t cluster, uint32_t value);
     void FlushFAT();
-    void ReadCluster(uint32_t cluster, void* buffer);
+    bool ReadCluster(uint32_t cluster, void* buffer);
     void WriteCluster(uint32_t cluster, void* buffer);
     vector<uint32_t> GetClusterChain(uint32_t start);
     uint32_t AllocateClusterChain(uint32_t count);
@@ -54,5 +56,6 @@ class FAT32Driver
     uint32_t TotalClusters = 0;
     bool valid = false;
     bool dirty = false;
+    bool ioError = false;
 };
 #endif

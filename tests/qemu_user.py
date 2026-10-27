@@ -10,6 +10,7 @@ import subprocess
 import sys
 import tempfile
 import time
+from session import setup_and_login
 from common import ROOT, OUT, Report, command, require_success
 from qemu_shell import QMP
 
@@ -63,13 +64,13 @@ def test(firmware, timeout):
         programs, addresses = build_probes(directory)
         image = directory/"HackOS.img"
         shutil.copy2(built/"HackOS.img", image)
-        fs_image = str(image) + ("@@"+str(334*512) if firmware == "bios" else "")
+        fs_image = str(image) + ("@@"+str(846*512) if firmware == "bios" else "")
         for p in programs:
             require_success(command(["mcopy", "-o", "-i", fs_image, p, "::/USR/BIN/"+p.name]), "install " + p.name)
         with tempfile.TemporaryDirectory(prefix="hackos-user-") as temporary:
             temporary = Path(temporary)
             qmp_path, gdb_path = temporary/"qmp", temporary/"gdb"
-            args = ["qemu-system-x86_64", "-machine", "q35", "-accel", "tcg", "-cpu", "qemu64",
+            args = ["qemu-system-x86_64", "-machine", "q35", "-accel", "tcg", "-cpu", "qemu64,+rdrand",
                     "-m", "1G", "-smp", "cores=4,threads=1,sockets=1", "-display", "none",
                     "-monitor", "none", "-serial", "none", "-net", "none", "-no-reboot", "-snapshot",
                     "-drive", f"file={image},format=raw", "-usb", "-device", "usb-ehci,id=ehci",
@@ -112,7 +113,7 @@ def test(firmware, timeout):
                         qmp.call("cont")
                     wait(qmp_path.exists, "QMP")
                     qmp = QMP(qmp_path)
-                    wait(lambda: "root@root:~$ " in output(), "shell prompt")
+                    setup_and_login(qmp, output, wait)
                     enter("user USR/BIN/RING3", "exited 0; preemptions")
                     assert "RING3: hello from isolated userspace" in output()
                     assert "RING3: finished; requesting exit" in output()
@@ -178,14 +179,14 @@ assert int(gdb.parse_and_eval("tasks_reaped")) == 13, "User task stacks not recl
 p = gdb.parse_and_eval("ready_queue")
 labels = []
 while int(p):
-    assert len(labels) < 3
-    if int(p["systemShell"]):
-        assert int(gdb.parse_and_eval("user_pages_live")) == int(p["userSpace"]["ownedCount"])
+    assert len(labels) < 4
+    if int(p["pid"]) == 3:
+        assert int(gdb.parse_and_eval("user_pages_live")) == int(p["userSpace"]["ownedCount"]) + int(gdb.parse_and_eval("ready_queue->next->userSpace->ownedCount"))
     else:
-        assert not int(p["userSpace"])
+        assert not int(p["userSpace"]) or int(p["authenticationAgent"])
     labels.append(p["name"].string())
     p = p["next"]
-assert labels == ["idle", "~/USR/BIN/SHELL"]
+assert labels == ["idle", "~/USR/BIN/LOGIN", "~/USR/BIN/SHELL"]
 assert int(gdb.parse_and_eval("$cr3")) == int(gdb.parse_and_eval("KernelDirectory.pml4"))
 print("USER_RECLAIM_OK")
 ''')

@@ -7,5 +7,5 @@ int main(int argc, char** argv)
         return 2;
     }
 
-    return AccountResult(syscall_group_create(argv[1]), "Group created (this boot only).");
+    return AccountResult(syscall_group_create(argv[1]), "Group created.");
 }

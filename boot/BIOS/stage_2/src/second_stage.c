@@ -78,7 +78,7 @@ void loader_main(struct FramebufferInfo* info)
     kprintf("Welcome to the HackOS!\n");
     kprintf("[%x:%x:%x]: Starting the initialisation!\n", start_time.hour, start_time.minute, start_time.second);
 
-    //Read the kernel, which is 128 sectors long (now), and starts at the 130th sector
+    // The entry stub stages up to 768 kernel sectors from LBA 78 at 0x20000.
     uint64_t kernelMemory;
     Elf64_Ehdr* header = LoadProgram((void*)0x20000, &kernelMemory);
     if (!header)

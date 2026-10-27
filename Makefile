@@ -28,6 +28,7 @@ kernel:
 userspace:
 	$(MAKE) -C libs/libc
 	$(MAKE) -C libs/shell
+	$(MAKE) -C libs/login
 	$(MAKE) -C libs/commands
 	$(MAKE) -C libs/test
 	$(MAKE) -C libs/input
@@ -48,6 +49,7 @@ clean:
 	$(MAKE) -C boot/BIOS/stage_2 clean
 	$(MAKE) -C libs/libc clean
 	$(MAKE) -C libs/shell clean
+	$(MAKE) -C libs/login clean
 	$(MAKE) -C libs/commands clean
 	$(MAKE) -C libs/test clean
 	$(MAKE) -C libs/input clean

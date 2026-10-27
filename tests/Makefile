@@ -26,3 +26,7 @@ test-user:
 .PHONY: test-windows
 test-windows:
 	$(PYTHON) qemu_windows.py --firmware $(FIRMWARE)
+
+.PHONY: test-accounts
+test-accounts:
+	$(PYTHON) qemu_accounts.py --firmware $(FIRMWARE)

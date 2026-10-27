@@ -17,38 +17,22 @@ _start:
 section .text
 
 _start_text:
-	; Load the kernel to 0x20000, which is 256 sectors long
-	push 	es
-
-	mov 	cx, 64
-	mov 	eax, 78
-	mov 	bx, 0x2000
-	mov 	es, bx
-	xor 	bx, bx
-	call 	ReadDisk
-	
-	mov 	cx, 64
-	mov 	eax, 142
-	mov 	bx, 0x2800
-	mov 	es, bx
-	xor 	bx, bx
-	call 	ReadDisk
-
-	mov 	cx, 64
-	mov 	eax, 206
-	mov 	bx, 0x3000
-	mov 	es, bx
-	xor 	bx, bx
-	call 	ReadDisk
-
-	mov 	cx, 64
-	mov 	eax, 270
-	mov 	bx, 0x3800
-	mov 	es, bx
-	xor 	bx, bx
-	call 	ReadDisk
-
-	pop 	es
+    ; Read 768 sectors in BIOS-safe 32 KiB chunks to 0x20000..0x80000.
+    push es
+    mov eax, 78
+    mov bp, 0x2000
+    mov di, 12
+.kernel_chunk:
+    mov es, bp
+    xor bx, bx
+    mov cx, 64
+    call ReadDisk
+    movzx eax, ax ; some BIOSes clobber upper register halves
+    add eax, 64
+    add bp, 0x0800
+    dec di
+    jnz .kernel_chunk
+    pop es
 
 	; Load the font to 0x6000
 	mov 	cx, 12

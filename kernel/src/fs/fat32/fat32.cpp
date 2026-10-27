@@ -241,3 +241,8 @@ int FAT32::Write(ActiveFile* file, void* buffer, uint64_t nBytes)
 
     return result;
 }
+
+bool FAT32::AccountStorage(uint64_t (&sectors)[2][16], Device*& storage)
+{
+    return driver->AccountStorage(sectors, storage);
+}

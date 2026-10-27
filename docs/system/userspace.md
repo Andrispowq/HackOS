@@ -2,11 +2,13 @@
 
 [System index](index.md) · [Memory](memory.md) · [Interrupts](interrupts.md)
 
-HackOS boots directly as UID 0 (root) into the standalone ring-3 shell at `~/USR/BIN/SHELL`.
-`InitialiseKernel` initializes filesystems and syscalls, creates idle, loads the
-shell, then enables IRQs. The first scheduling pass enters userspace. A missing
-or invalid shell produces an explicit boot error; there is no kernel-shell
-fallback. `kernel_main` remains idle, refreshes the console and reaps dead tasks.
+HackOS boots into the ring-3 login agent at `~/USR/BIN/LOGIN`, with no root
+credentials. `InitialiseKernel` initializes filesystems, validates the account
+store, creates idle, loads LOGIN, then enables IRQs. Setup creates the initial
+administrator on an empty store; successful password verification starts
+`~/USR/BIN/SHELL` with the selected credentials. A missing or invalid login
+program produces an explicit boot error; there is no unauthenticated shell fallback.
+See [persistent accounts and recovery](accounts.md). `kernel_main` remains idle, refreshes the console and reaps dead tasks.
 
 ## Isolated programs
 
@@ -54,7 +56,7 @@ a result. Normal exit stores the signed 32-bit program status; faults store
 Completion records live in the parent, separately from the child resources.
 Idle can therefore reclaim a child's files, pages and stack before the parent
 calls wait. A parent that exits discards its results; live children continue as
-orphans and are still reclaimed by idle. No PID is reused during a boot.
+orphans and are still reclaimed by idle. No PID is reused across boots.
 
 The old trusted ELF helpers remain internal code. The binary-only `USERTEST.ELF`
 asset is retained but no longer called during boot. Neither shell launch syntax
@@ -65,7 +67,7 @@ incompatible with the active ABI and must be ported and rebuilt.
 
 [libs/shell/src/main.cpp](../../libs/shell/src/main.cpp) owns command parsing,
 line editing, working-directory state, formatting and its current file handle.
-Keyboard IRQs only decode and enqueue characters. The boot shell reads those
+Keyboard IRQs only decode and enqueue characters. The authenticated shell reads those
 characters through the input syscall and yields when the queue is empty.
 Console rendering and hardware operations remain kernel services.
 
@@ -75,14 +77,16 @@ Console rendering and hardware operations remain kernel services.
 | `help`, `clear` | Show commands or clear the console |
 | `print <text>` | Print literal text, including percent signs |
 | `print tick`, `print time`, `print date` | Show monotonic ticks or RTC values |
-| `ps [aux]`, `kill <pid>` | List tasks or stop a user program; idle and boot shell are protected |
+| `ps [aux]`, `kill <pid>` | List tasks or stop a user program; idle, login and session shell are protected |
 | `ls [-la] [path]`, `wd`, `cd <path>` | Browse the first filesystem; `~` denotes its root |
 | `cat <path>`, `read <path>` | Read a complete file in bounded chunks; close its owned handle on completion |
 | `<name> [args]`, `./<program> [args]`, `user <path> [args]` | Launch an isolated foreground program and wait; append a separate `&` for background execution |
 | `id`, `whoami` | Show the process credentials or username |
-| `users`, `groups` | List this boot's account/group registry |
-| `useradd <name> [group]`, `groupadd <name>` | Root creates an account (default group `users`) or group for this boot |
+| `users`, `groups` | List the persistent account/group registry |
+| `useradd <name> [group]`, `groupadd <name>` | Root creates a locked account (default group `users`) or group and persists it |
 | `usermod <user> <group>` | Root adds a supplementary group for future `runas` launches |
+| `passwd [user]` | Root sets a confirmed password; defaults to its own account |
+| `logout` | End this shell session and its background descendants, then return to login |
 | `runas <user> <command> [args]` | Root launches a program with the selected account's credentials and waits |
 | `shutdown`, `restart` | Root requests kernel ACPI power-off or platform restart |
 
@@ -104,7 +108,7 @@ one argument (`tick`, `time`, or `date`). Quoted/escaped paths work for `cd` and
 background `&`. The old shell-owned `open`/`read`/`close` session is retired;
 file handles remain process-owned and commands read/close their own files.
 
-Only `cd` and `history` execute inside the shell. Other names resolve in
+Only `cd`, `history` and `logout` execute inside the shell. Other names resolve in
 `/usr/bin` (the FAT image's `USR/BIN` directory), without searching the current
 directory or an environment PATH. Paths containing `/`, or beginning with `~`,
 are explicit; `user <path>` remains an explicit-launch compatibility spelling.
@@ -135,7 +139,7 @@ access; the shell collects background results with nonblocking waits.
 Any current terminal owner can delegate foreground input to a child. Ownership
 returns to that launcher automatically on exit, fault, kill or Ctrl-C. If a
 launcher exits first, return links are redirected to its own launcher (ultimately
-the boot shell), before the dead task is reclaimed. The keyboard
+the session shell, then login), before the dead task is reclaimed. The keyboard
 queue is cleared at each handoff so child input cannot accidentally execute as
 shell commands. `input()` remains nonblocking: a foreground program reads events
 and yields on zero. Echo and line editing are program responsibilities. Try
@@ -167,27 +171,25 @@ the retained commands from oldest to newest (including that `history` invocation
 
 ## Users, groups and permissions
 
-The kernel owns a bounded boot-session registry: 32 users and 32 groups, with
-names of 1–31 ASCII characters matching `[a-z][a-z0-9_-]*`. It starts with
-`root` (UID/GID 0), `guest` (UID/GID 1000), and groups `root` (0) and `users`
-(1000). New user and group IDs are allocated independently from 1001, never
-reused during a boot. Duplicate names, unknown groups, invalid names and full
+The kernel owns a bounded persistent registry: 32 users and 32 groups, with
+names of 1–31 ASCII characters matching `[a-z][a-z0-9_-]*`. Setup names the UID/GID-0 administrator. It also contains a locked
+`guest` (UID/GID 1000), and groups `root` (0) and `users` (1000). New user and group IDs are allocated independently from 1001, never
+reused across boots. Duplicate names, unknown groups, invalid names and full
 registries fail without consuming IDs. No delete/rename operation is provided.
-**Account changes are in memory only and disappear on reboot.** Persistent
-accounts, passwords, login, logout and first-boot setup are deferred. The machine
-still starts an unauthenticated root shell, so this is a permission foundation,
-not a secured multi-user login environment.
+Account and password changes return success only after a checked write, cache
+flush and read-back. New users cannot log in until root runs `passwd <user>`.
+The [account store](accounts.md) defines persistence and failure recovery.
 
 Each process owns a value copy of its UID, primary GID and up to eight distinct
 supplementary GIDs. Ordinary spawn, spawn-with-arguments and foreground spawn
 inherit that exact snapshot, including through grandchildren. Account membership
-changes affect later `spawn_as` launches only; existing processes and their
+changes affect later logins and `spawn_as` launches; existing processes and their
 ordinary children retain their credentials. There are no effective/saved IDs,
 setuid executables, or user-writable credential pointers. Membership in GID 0
 does **not** grant root privilege: privileged checks compare UID to zero.
 
 The kernel requires UID 0 for power operations, creating users/groups, adding
-group membership, and `spawn_as`. Root may launch any registered identity with
+group membership, password changes, and `spawn_as`. Root may launch any registered identity with
 `runas`; this command is an administrative launcher, not authentication or
 `sudo`. A non-root process cannot select any identity, including its own, through
 `spawn_as`. No executable path or `argv[0]` grants privilege. An arbitrary root
@@ -196,7 +198,7 @@ are denied when run as a non-root user. Root privilege is inherited by ordinary
 children just like any other credential.
 
 `kill` permits the same UID or UID 0 to stop a user process. Kernel tasks, the
-boot shell and the calling task remain protected by this API. Wait results still
+login agent, authenticated shell and the calling task remain protected by this API. Wait results still
 belong exclusively to the parent PID, and file/window handles remain scoped to
 the owning process; sharing a UID never transfers handles or wait rights.
 Terminal backspace/clear and foreground handoff depend on terminal ownership,
@@ -208,12 +210,15 @@ For example, `groupadd staff`, `useradd alice staff`, `usermod alice users`, the
 `runas alice id` displays the selected UID, primary GID and supplementary group.
 `runas alice shutdown` is denied by the kernel. `runas alice input` supports
 normal foreground editing and Ctrl-C; appending `&` starts without terminal
-input. The shell prompt resolves its actual UID to a username. Nested shell
-sessions/login/logout are not implemented.
+input. The shell prompt resolves its actual UID to a username. `logout` returns
+to the protected login agent and ends all descendants, including background
+programs launched under another UID. A manually launched nested shell can exit
+to its parent; only the authenticated session shell owns session teardown.
 
 Filesystem access remains read-only through the user ABI and has no UID/GID or
 mode metadata. FAT attributes are not Unix file permissions. No filesystem
-ownership, write authorization or persistent account protection is claimed.
+ownership or general file-write authorization is claimed. The two account files
+are reserved kernel storage and cannot be opened through the user ABI.
 
 ## Syscall ABI
 
@@ -232,7 +237,7 @@ return an error rather than being reinterpreted as new operations.
 | 16 | `console(operation)` | 0 backspace, 1 clear; terminal owner only |
 | 17 | `clock(out)` | Copies ticks and RTC fields; RTC retains existing BCD representation |
 | 18 | `process_info(index, out)` | Copies one process record; 1 found, 0 end |
-| 19 | `kill(pid)` | Stops another user task owned by the same UID, or any user task as root; idle/boot shell/self protected |
+| 19 | `kill(pid)` | Stops another user task owned by the same UID, or any user task as root; idle/login/session shell/self protected |
 | 20 | `spawn(path)` | Copies a bounded path and loads an isolated ELF; returns PID |
 | 21 | `open(path)` | Returns an opaque read-only file handle |
 | 22 | `read(handle, out, length)` | At most 512 bytes; returns bytes read, 0 at EOF |
@@ -260,11 +265,18 @@ return an error rather than being reinterpreted as new operations.
 | 44 | `group_create(name)` | Root creates a group; returns new GID |
 | 45 | `user_add_group(uid, gid)` | Root adds a known supplementary group; 0, including existing membership |
 | 46 | `spawn_as(path, argc, argv, uid, flags)` | Root selects a registered identity; returns PID; flag 1 requests foreground handoff and requires terminal ownership, 0 background |
+| 47 | `auth_state()` | Boot login agent only: broken (0), setup (1), login (2) |
+| 48 | `auth_setup(name, password)` | Boot login agent with terminal ownership only; save initial administrator to an empty store |
+| 49 | `auth_login(name, password)` | Boot login agent with terminal ownership only; verify and create a shell session, returning its PID |
+| 50 | `password_set(uid, password)` | Root sets a registered account password and commits the store; 0 on success |
 
 Calls use `int 0x80`: RAX is the number, RDI/RSI/RDX/RCX/R8 hold arguments,
 and saved RAX receives the result. Successful operations without another result
 return zero. `HACKOS_ERROR` (`UINT64_MAX`) denotes failure;
-`HACKOS_DENIED` (`UINT64_MAX-1`) denotes insufficient permission. Unknown and
+`HACKOS_DENIED` (`UINT64_MAX-1`) denotes insufficient permission.
+`HACKOS_RETRY` (`UINT64_MAX-2`) asks the login agent to yield until the retry
+deadline; `HACKOS_NO_ENTROPY` (`UINT64_MAX-3`) rejects password creation when
+RDRAND is unavailable or repeatedly fails. Unknown and
 retired calls return `HACKOS_ERROR`. The fast `syscall` instruction remains
 disabled; vector `0x81` remains kernel-only.
 
@@ -282,7 +294,7 @@ a path relative to the caller's working directory. Copy-in validates mapped user
 also requires writable pages and validates the whole range before touching it.
 Read validates the destination before advancing a file offset. Input events
 include `HACKOS_KEY_UP` (128), `HACKOS_KEY_DOWN` (129), and
-`HACKOS_KEY_INTERRUPT` (3, shell only). No syscall
+`HACKOS_KEY_INTERRUPT` (3, protected shell/login prompt). No syscall
 returns kernel addresses, virtual objects, format strings or `va_list` objects.
 
 Each process can own eight file handles. Monotonically allocated opaque tokens

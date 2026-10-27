@@ -18,7 +18,7 @@ flowchart TD
     Heap --> Devices[ACPI, PCI and storage]
     Devices --> FS[FAT32 and VFS]
     FS --> Services[Windows and user syscall services]
-    Services --> Tasks[Create idle and load ring-3 shell]
+    Services --> Tasks[Create idle and load ring-3 login]
     Tasks --> IRQ[Enable timer and PS/2 IRQs]
 ```
 
@@ -55,15 +55,16 @@ into two phases:
 2. `InitialiseKernel` creates the heap, initializes device/filesystem registries,
    discovers ACPI/PCI devices, adds an ATA device, locates FAT32 on `devices[0]`,
    creates window state, registers syscalls, creates idle, loads the standalone
-   ring-3 shell and enables IRQs.
+   ring-3 login agent and enables IRQs.
 
 `kernel_main` remains idle, refreshes the dirty console and reaps exited tasks.
 The standalone `~/USR/BIN/SHELL` owns command parsing and PS/2 line editing in
 ring 3. Its checked syscall interface supplies terminal, file, process and power
 services, plus inherited working directories and UID/GID/group credentials.
-The shell starts as root; account administration and power require UID 0, while
-kill permits the same UID or root. Accounts are in memory for this boot only;
-login and setup are deferred. Only `cd` and `history` remain
+The shell starts after authentication; account administration and power require
+UID 0, while kill permits the same UID or root. Accounts persist in two FAT32
+slots, and first-boot setup creates the administrator. See [accounts](accounts.md).
+Only `cd`, `history` and `logout` remain
 built-ins; bare names resolve to standalone programs in `/usr/bin`. Explicit
 paths and the `user` compatibility prefix also launch isolated programs; no interactive command
 executes a ring-0 ELF. The binary-only `USERTEST.ELF` input remains packaged but

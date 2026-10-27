@@ -8,7 +8,8 @@ static_assert(HACKOS_SYS_exit == 0 && HACKOS_SYS_user_write == 14 && HACKOS_SYS_
                   HACKOS_SYS_window_mode == 37 && HACKOS_SYS_getcwd == 38 && HACKOS_SYS_chdir == 39 &&
                   HACKOS_SYS_identity == 40 && HACKOS_SYS_user_info == 41 && HACKOS_SYS_group_info == 42 &&
                   HACKOS_SYS_user_create == 43 && HACKOS_SYS_group_create == 44 && HACKOS_SYS_user_add_group == 45 &&
-                  HACKOS_SYS_spawn_as == 46 && HACKOS_SYSCALL_COUNT == 47,
+                  HACKOS_SYS_spawn_as == 46 && HACKOS_SYS_auth_state == 47 && HACKOS_SYS_auth_setup == 48 &&
+                  HACKOS_SYS_auth_login == 49 && HACKOS_SYS_password_set == 50 && HACKOS_SYSCALL_COUNT == 51,
               "User syscall ABI changed");
 
 TEST(syscall_record_layout)

@@ -64,6 +64,7 @@ def build(firmware):
     make("userspace_library", "libs/libc", ["all"])
     make("command_programs", "libs/commands", ["all"])
     make("userspace_shell", "libs/shell", ["all"])
+    make("login_program", "libs/login", ["all"])
     make("userspace_test", "libs/test", ["all"])
     make("input_program", "libs/input", ["all"])
     make("window_program", "libs/window", ["all"])
@@ -78,7 +79,7 @@ def build(firmware):
         validate_elf(kernel)
         if firmware == "bios":
             for name, limit in [("mbr.bin",512),("bootloader.bin",512),
-                                ("second_stage.bin",32768),("kernel.elf",131072)]:
+                                ("second_stage.bin",32768),("kernel.elf",393216)]:
                 size = (work/"bin"/name).stat().st_size
                 assert 0 < size <= limit, f"{name}: {size} bytes exceeds its {limit}-byte slot"
             assert (work/"util/fonts/zap-light16.psf").stat().st_size <= 6144
@@ -89,12 +90,12 @@ def build(firmware):
         image = work/"bin/HackOS.img"
         if firmware == "bios":
             data = image.read_bytes()
-            assert len(data) == (334+93750)*512, "BIOS image extent mismatch"
+            assert len(data) == (846+93750)*512, "BIOS image extent mismatch"
             for start, path in [(0,"bin/mbr.bin"),(1,"bin/bootloader.bin"),(2,"bin/second_stage.bin"),
                                 (66,"util/fonts/zap-light16.psf"),(78,"bin/kernel.elf")]:
                 payload = (work/path).read_bytes()
                 assert data[start*512:start*512+len(payload)] == payload, f"wrong payload at LBA {start}"
-            fs_image = str(image) + "@@" + str(334*512)
+            fs_image = str(image) + "@@" + str(846*512)
         else:
             fs_image = str(image)
             efi = (work/"boot/UEFI/gnu-efi/x86_64/bootloader/main.efi").read_bytes()
@@ -102,9 +103,9 @@ def build(firmware):
             pe = struct.unpack_from("<I", efi, 0x3c)[0]
             assert efi[pe:pe+4] == b"PE\0\0" and struct.unpack_from("<H",efi,pe+4)[0] == 0x8664
             for name in ("/kernel.elf", "/EFI/BOOT/BOOTX64.EFI", "/startup.nsh"):
-                require_success(command(["mdir","-i",fs_image,"::"+name]), "image file " + name)
-        for name in ("/UTIL/FONTS/zap-light16.psf", "/USR/BIN/usertest.elf", "/USR/BIN/test", "/USR/BIN/shell", "/USR/BIN/ring3", "/USR/BIN/input", "/USR/BIN/window", *["/USR/BIN/" + name for name in ("help", "clear", "print", "ps", "kill", "ls", "wd", "cat", "read", "shutdown", "restart", "id", "whoami", "users", "groups", "useradd", "groupadd", "usermod", "runas")]):
-            require_success(command(["mdir","-i",fs_image,"::"+name]), "image file " + name)
+                require_success(command(["mdir","-a","-i",fs_image,"::"+name]), "image file " + name)
+        for name in ("/UTIL/FONTS/zap-light16.psf", "/USR/BIN/usertest.elf", "/USR/BIN/test", "/USR/BIN/shell", "/USR/BIN/login", "/SYSTEM/ACCT0.DAT", "/SYSTEM/ACCT1.DAT", "/USR/BIN/ring3", "/USR/BIN/input", "/USR/BIN/window", *["/USR/BIN/" + name for name in ("help", "clear", "print", "ps", "kill", "ls", "wd", "cat", "read", "shutdown", "restart", "id", "whoami", "users", "groups", "useradd", "groupadd", "usermod", "runas", "passwd")]):
+            require_success(command(["mdir","-a","-i",fs_image,"::"+name]), "image file " + name)
         shutil.copy2(image, directory/"HackOS.img")
         shutil.copy2(work/"kernel/bin/kernel.elf", directory/"kernel.elf")
         return "Payload formats, slot limits, image offsets, and packaged inputs checked."

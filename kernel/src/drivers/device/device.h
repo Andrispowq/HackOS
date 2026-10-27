@@ -23,8 +23,14 @@ class Device
 
     virtual DeviceType GetType() const = 0;
 
-    virtual void Read(uint64_t LBA, void* buffer, uint64_t size) = 0;
-    virtual void Write(uint64_t LBA, void* buffer, uint64_t size) = 0;
+    // Counts are 512-byte sectors. False means the transfer did not complete.
+    virtual bool Read(uint64_t LBA, void* buffer, uint64_t size) = 0;
+    virtual bool Write(uint64_t LBA, void* buffer, uint64_t size) = 0;
+
+    virtual bool Flush()
+    {
+        return false;
+    }
 };
 
 extern Device* devices[MAX_DEVICE_COUNT];

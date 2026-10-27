@@ -75,11 +75,16 @@ FSInfo free-space hints unknown. The destructor flushes any remaining dirty FAT;
 read-only mounts do not rewrite boot sectors. Host mutation tests save the image
 and read it with mtools to check the persisted representation independently.
 
-There is no journal, transaction rollback after device failure, or device cache
-flush command. `Device::Read` and `Write` return `void`, so hardware errors still
-cannot reach FAT32 or VFS. Open handles also cache metadata; concurrent opens,
-writes and deletion need explicit ownership and synchronization rules.
+`Device::Read`/`Write` now return completion status, and `Flush` reports cache
+flush success. The account store checks every operation, validates separate
+preallocated FAT chains, and alternates two checksummed generations; see
+[accounts](accounts.md). BPB/FAT reads and account directory reads propagate
+failures. General FAT mutation still lacks a journal or device-failure rollback,
+and remaining FAT/VFS operations do not consistently propagate errors. Open
+handles also cache metadata; concurrent opens, writes and deletion need explicit
+ownership and synchronization rules.
 
-Use disposable images for write experiments. The normal Docker/QEMU runner
-uses a snapshot overlay, so its guest writes do not persist after shutdown.
+Use disposable images for write experiments. Normal Docker/QEMU runs save guest
+writes; pass `--snapshot` for an ephemeral overlay. Docker rebuilds preserve only
+the two account files, while direct packaging produces a fresh filesystem.
 See [testing](../development/testing.md) and [TODO](../TODO.md).

@@ -15,5 +15,5 @@ int main(int argc, char** argv)
     }
 
     return AccountResult(syscall_user_add_group(user.credentials.uid, group.gid),
-                         "Group added (applies to future runas launches).");
+                         "Group added (applies to future logins and runas launches).");
 }

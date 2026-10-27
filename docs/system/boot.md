@@ -35,13 +35,16 @@ the second contains the FAT32 filesystem.
 | Stage 1 | 1 | 1 | 512 |
 | Stage 2 | 2 | 64 | 32,768 |
 | PSF font | 66 | 12 | 6,144 |
-| Stripped kernel ELF | 78 | 256 | 131,072 |
-| FAT32 data | 334 | 93,750 | 48,000,000 |
+| Stripped kernel ELF | 78 | 768 | 393,216 |
+| FAT32 data | 846 | 93,750 | 48,000,000 |
 
 These numbers appear in [make_image.py](../../tools/make_image.py), the MBR
 partition table, and the stage-1/stage-2 assembly. Changing only one breaks the
 image contract. Packaging rejects oversized payloads and writes complete files.
 The boot kernel has all symbols stripped; a separate ELF retains debug symbols.
+Stage 2 reads twelve 64-sector chunks into `0x20000..0x7ffff`, below the
+VGA/firmware region. Step 14 expanded this reservation from 128 KiB to 384 KiB.
+A bounded FAT32 kernel-file loader remains a follow-up in TODO.
 
 The relocated MBR at `0x0600` is also used later by the kernel's FAT32 discovery.
 That memory must stay intact while the filesystem is initialized.

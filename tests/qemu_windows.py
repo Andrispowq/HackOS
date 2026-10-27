@@ -10,6 +10,7 @@ import sys
 import tempfile
 import time
 import threading
+from session import setup_and_login
 from common import ROOT, OUT, Report, command, require_success
 from qemu_shell import QMP, build_probe
 
@@ -27,13 +28,13 @@ def test(firmware, timeout):
         gate = int(re.search(r"^([0-9a-f]+) [A-Za-z] event_gate$", symbols, re.M)[1], 16)
         image = directory/"HackOS.img"
         shutil.copy2(built/"HackOS.img", image)
-        fs_image = str(image) + ("@@"+str(334*512) if firmware == "bios" else "")
+        fs_image = str(image) + ("@@"+str(846*512) if firmware == "bios" else "")
         for program in programs:
             require_success(command(["mcopy", "-o", "-i", fs_image, program, "::/USR/BIN/"+program.name]), "install test program in disposable image")
         with tempfile.TemporaryDirectory(prefix="hackos-windows-") as temporary:
             temporary = Path(temporary)
             qmp_path, gdb_path = temporary/"qmp", temporary/"gdb"
-            args = ["qemu-system-x86_64", "-machine", "q35", "-accel", "tcg", "-cpu", "qemu64",
+            args = ["qemu-system-x86_64", "-machine", "q35", "-accel", "tcg", "-cpu", "qemu64,+rdrand",
                     "-m", "1G", "-smp", "cores=4,threads=1,sockets=1", "-display", "none",
                     "-monitor", "none", "-serial", "none", "-net", "none", "-no-reboot", "-snapshot",
                     "-drive", f"file={image},format=raw", "-usb", "-device", "usb-ehci,id=ehci",
@@ -66,7 +67,7 @@ def test(firmware, timeout):
                         wait_for(lambda: text in output()[offset:], repr(text), allowance)
                     wait_for(qmp_path.exists, "QMP socket")
                     qmp = QMP(qmp_path)
-                    wait_text("root@root:~$ ")
+                    setup_and_login(qmp, output, wait_for)
 
                     qmp.call("stop")
                     boot_script = directory/"shell-entry.gdb"
@@ -75,7 +76,7 @@ bp = gdb.Breakpoint("syscall_handler", type=gdb.BP_HARDWARE_BREAKPOINT)
 gdb.execute("continue")
 r = gdb.parse_and_eval("r").dereference()
 p = gdb.parse_and_eval("current_process")
-assert int(p["pid"]) == 2 and int(p["systemShell"]) and int(p["userSpace"])
+assert int(p["pid"]) == 3 and int(p["systemShell"]) and int(p["userSpace"])
 assert int(r["cs"]) == 0x1b and int(r["ss"]) == 0x23
 assert int(gdb.parse_and_eval("$cr3")) == int(p["pageTable"]["pml4"])
 print("SHELL_CPL3_OK")
@@ -407,7 +408,7 @@ assert int(gdb.parse_and_eval("KernelWindowManager->focused->startX")) == 450
                     inspect("background-interrupt", """
 assert int(gdb.parse_and_eval("user_windows_live")) == 0
 assert int(gdb.parse_and_eval("KernelWindowManager->focused")) == 0
-assert int(gdb.parse_and_eval("terminalOwner")) == 2
+assert int(gdb.parse_and_eval("terminalOwner")) == 3
 """)
                     enter("print focus_returned", "\nfocus_returned\n")
 
@@ -453,11 +454,11 @@ p = gdb.parse_and_eval("ready_queue")
 labels = []
 while int(p):
     labels.append(p["name"].string())
-    if int(p["systemShell"]):
-        assert int(gdb.parse_and_eval("user_pages_live")) == int(p["userSpace"]["ownedCount"])
+    if int(p["pid"]) == 3:
+        assert int(gdb.parse_and_eval("user_pages_live")) == int(p["userSpace"]["ownedCount"]) + int(gdb.parse_and_eval("ready_queue->next->userSpace->ownedCount"))
     assert all(int(h) == 0 for h in [p["windows"][i] for i in range(4)])
     p = p["next"]
-assert labels == ["idle", "~/USR/BIN/SHELL"]
+assert labels == ["idle", "~/USR/BIN/LOGIN", "~/USR/BIN/SHELL"]
 assert int(fb["address"][245 * int(fb["pitch"]) + 215]) == int(back["address"][245 * int(back["pitch"]) + 215])
 """)
                     qmp.call("stop")

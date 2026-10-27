@@ -14,8 +14,8 @@ experimental code, not a claim that every device or boot path currently works.
 The [documentation index](docs/index.md) links to the system and development
 guides. Keep those pages consistent with changes to component contracts.
 
-Tasking supports idle plus isolated ring-3 programs. The standalone shell at
-`~/USR/BIN/SHELL` starts automatically; idle refreshes the console and reaps
+Tasking supports idle plus isolated ring-3 programs. The standalone login agent at
+`~/USR/BIN/LOGIN` starts automatically and authenticates before launching `SHELL`; idle refreshes the console and reaps
 exited tasks. User programs own private frames and page tables, with shared
 supervisor-only kernel mappings. Both `./` and `user` launch ring-3 programs with bounded `argc`/`argv` and
 foreground waits by default; a separate trailing `&` requests background mode.
@@ -23,8 +23,9 @@ Exit results belong to the parent independently of idle resource reclamation.
 All active syscalls are user interfaces; kernel code calls internal functions
 directly. Terminal owners can delegate foreground input and receive it back on child exit.
 Processes inherit UID/GID/group credentials; UID 0 alone grants power and account
-administration, and kill requires the same owner UID or root. The boot shell
-still starts as root; accounts are boot-session only, with login/setup deferred. Ctrl-C is deferred from
+administration, and kill requires the same owner UID or root. Persistent accounts use two preallocated FAT32 slots; first boot creates the chosen
+UID-0 administrator. Passwords use PBKDF2-HMAC-SHA256 and RDRAND salts.
+`logout` terminates the session and its descendants before returning to login. Ctrl-C is deferred from
 IRQ context to a safe scheduler point. Shell history is a static 256-command ring.
 Userspace windows use process-owned handles and bounded pixel uploads; idle
 reclaims them on exit and composites them over the console. `USR/BIN/WINDOW`
@@ -50,6 +51,7 @@ and pointer capture; window events use fixed queues and copied state records. Se
 | Graphics, console, windows | `kernel/src/drivers/screen/`; packed RGB colour macro is `COLOUR` in `screen.h`, PSF1 font rendering is in `screen.cpp` |
 | Filesystems | `kernel/src/fs/filesystem.*`, `vfs.*`, `fat32/`; low-level FAT operations are in `fat32driver.*` |
 | Program loading and scheduling | `kernel/src/proc/{elf,tasking}/` |
+| Accounts and login | `kernel/src/proc/user/accounts.*`, `account_store.*`, `account_disk.cpp`, `kernel/src/security/`, `libs/login/`; see `docs/system/accounts.md` |
 | Standalone shell | `libs/shell/src/main.cpp`; shared line editing in `common/include/hackos/runtime/line_buffer.h` |
 | Userspace runtime and programs | `libs/libc/`, `libs/shell/`, `libs/test/`; root Makefile builds them and `tools/make_image.py` packages their outputs |
 | Minimal support routines | `kernel/src/lib/`; similar code also exists in BIOS stage 2 and `libs/libc/`, with independent build rules |
@@ -77,8 +79,8 @@ The BIOS image uses 512-byte sectors and fixed offsets shared by
 | Stage 1 | 1 | 1 | 512 |
 | Stage 2 | 2 | 64 | 32,768 |
 | PSF font | 66 | 12 | 6,144 |
-| Stripped kernel ELF | 78 | 256 | 131,072 |
-| FAT32 data partition | 334 | 93,750 | 48,000,000 |
+| Stripped kernel ELF | 78 | 768 | 393,216 |
+| FAT32 data partition | 846 | 93,750 | 48,000,000 |
 
 The image packager in `tools/make_image.py` rejects oversized payloads. Any
 change to these limits must update all readers, writers and image assertions.
@@ -98,7 +100,7 @@ framebuffer/font/memory-map layouts across all three. The BIOS/EFI memory type
 numbers differ; the kernel uses `booted_from_BIOS` to select interpretation.
 
 `kernel_main` initializes display/GDT/IDT/paging, then heap, devices/filesystems,
-ACPI/PCI, windows, syscalls and tasking. It loads the standalone shell before
+ACPI/PCI, windows, syscalls and tasking. It validates account storage and loads the unprivileged login agent before
 enabling IRQs. `kernel_main` becomes idle, refreshes the console and reclaims
 zombie stacks, private user pages and file handles. Keyboard decoding remains
 in the kernel; command parsing and line editing run in the ring-3 shell.
@@ -120,7 +122,8 @@ in the kernel; command parsing and line editing run in the ring-3 shell.
   Source is read-only, build output uses a named volume, and OVMF VARS is copied.
 - Bare `make` builds BIOS. `make build_bios` / `make build_efi` build the selected
   loaders, kernel and programs. `make all` also runs QEMU; use `TARGET_BIOS=false`
-  for UEFI run/debug. Both direct builds replace `bin/HackOS.img`.
+  for UEFI run/debug. Both direct builds replace `bin/HackOS.img` with a fresh account store; the Docker
+  entry point preserves account slots across builds in its named volume.
 - `CROSS_COMPILE=x86_64-elf-` selects CC/CXX/LD/AR/OBJCOPY consistently. GCC 15.2.0
   and Binutils 2.47 are bootstrapped by `tests/build_toolchain.sh`; PE support is
   required for UEFI. `boot/UEFI/include/elf.h` supplies freestanding ELF types.
@@ -134,7 +137,8 @@ in the kernel; command parsing and line editing run in the ring-3 shell.
 - For boot changes, test BIOS and UEFI separately in QEMU using the existing
   `q35` device topology. Check ELF class, machine, entry point, and load segments
   with target `readelf`, and compare BIOS payload sizes to the table above.
-  Run `tests/qemu_shell.py --firmware bios` and `--firmware uefi` after fresh
+  Run `tests/qemu_accounts.py`, `tests/qemu_shell.py`, `tests/qemu_user.py` and
+  `tests/qemu_windows.py` with `--firmware bios` and `--firmware uefi` after fresh
   image builds for interactive input, ABI, register-state and task-lifecycle checks.
   Use a disposable image for FAT32 write tests and a copied OVMF VARS file.
 - Screen output is graphical; `-nographic` alone does not expose the framebuffer

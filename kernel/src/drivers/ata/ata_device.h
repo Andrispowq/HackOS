@@ -19,8 +19,9 @@ class ATADevice : public Device
         return DeviceType::ATA_PIO;
     };
 
-    void Read(uint64_t LBA, void* buffer, uint64_t size);
-    void Write(uint64_t LBA, void* buffer, uint64_t size);
+    bool Read(uint64_t LBA, void* buffer, uint64_t size);
+    bool Write(uint64_t LBA, void* buffer, uint64_t size);
+    bool Flush() override;
 };
 
 #endif

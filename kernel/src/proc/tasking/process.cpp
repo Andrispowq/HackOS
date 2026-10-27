@@ -27,7 +27,7 @@ void SetTerminalOwner(uint64_t pid)
     InterruptGuard guard;
     if (!terminalShell)
     {
-        terminalShell = pid; // first owner is the boot shell
+        terminalShell = pid; // first owner is the login agent
     }
 
     if (pendingInterrupt == terminalOwner)
@@ -44,11 +44,24 @@ bool OwnsTerminal(uint64_t pid)
     return pid && pid == terminalOwner;
 }
 
+static bool ProtectedTerminal(uint64_t pid)
+{
+    for (auto p = ready_queue; p; p = p->next)
+    {
+        if (p->pid == pid)
+        {
+            return p->systemShell;
+        }
+    }
+
+    return false;
+}
+
 void RequestTerminalInterrupt()
 {
     // Input dispatch latches a target only. Do not kill/yield while a
     // PreemptionGuard is active. Ctrl-C at the shell stays an event.
-    if (terminalOwner && terminalOwner != terminalShell)
+    if (terminalOwner && !ProtectedTerminal(terminalOwner))
     {
         pendingInterrupt = terminalOwner;
         ClearKeyboard();
@@ -57,7 +70,7 @@ void RequestTerminalInterrupt()
 
 void RequestUserInterrupt(uint64_t pid)
 {
-    if (pid && pid != terminalShell)
+    if (pid && !ProtectedTerminal(pid))
     {
         pendingInterrupt = pid;
     }
@@ -201,6 +214,20 @@ static void CompleteProcess(Process* child)
     }
 
     child->state = PROCESS_STATE_ZOMBIE;
+    if (child->systemShell && !child->authenticationAgent && child->sessionId)
+    {
+        // Include detached/background descendants and runas identities. The
+        // session ID is kernel-owned and cannot be changed by a user program.
+        for (auto p = ready_queue; p; p = p->next)
+        {
+            if (p != child && p->sessionId == child->sessionId && p->state != PROCESS_STATE_ZOMBIE)
+            {
+                p->exitStatus = 137;
+                CompleteProcess(p);
+            }
+        }
+    }
+
     // A foreground launcher can die before its delegated terminal owner.
     // Redirect the return link before idle reclaims that launcher's record.
     uint64_t returnPid = child->terminalReturnPid ? child->terminalReturnPid : terminalShell;
@@ -342,7 +369,7 @@ Registers* Schedule(Registers* frame)
     {
         uint64_t target = pendingInterrupt;
         pendingInterrupt = 0;
-        if (target != terminalShell)
+        if (!ProtectedTerminal(target))
         {
             for (auto p = ready_queue; p; p = p->next)
             {

@@ -20,8 +20,8 @@ SOURCES = [
     "kernel/src/fs/fat32/fat32driver.cpp",
     "boot/BIOS/stage_2/src/libc/memory.c", "boot/BIOS/stage_2/src/libc/string.c",
     "libs/libc/src/string.cpp",
-    "common/src/split.c", "kernel/src/proc/user/address_space.cpp", "kernel/src/proc/user/accounts.cpp",
-    *[f"tests/host/{s}.cpp" for s in ("adapters", "main", "library_tests", "graphics_tests", "fs_tests", "elf_tests", "bios_tests", "user_tests", "input_tests", "file_abi_provider", "file_abi_consumer", "syscall_tests", "split_tests", "user_address_tests", "argument_tests", "history_tests", "event_queue_tests", "mouse_packet_tests", "path_tests", "account_tests")],
+    "common/src/split.c", "kernel/src/proc/user/address_space.cpp", "kernel/src/proc/user/accounts.cpp", "kernel/src/proc/user/account_store.cpp", "kernel/src/security/crypto.cpp",
+    *[f"tests/host/{s}.cpp" for s in ("adapters", "main", "library_tests", "graphics_tests", "fs_tests", "elf_tests", "bios_tests", "user_tests", "input_tests", "file_abi_provider", "file_abi_consumer", "syscall_tests", "split_tests", "user_address_tests", "argument_tests", "history_tests", "event_queue_tests", "mouse_packet_tests", "path_tests", "account_tests", "account_store_tests")],
 ]
 
 
@@ -108,6 +108,11 @@ def fat_fixture(directory):
         source = directory/name
         source.write_bytes(data)
         require_success(command(["mcopy","-i",image,source,f"::/TESTS/{name}"]), "copy fixture")
+    require_success(command(["mmd", "-i", image, "::/SYSTEM"]), "create account fixture directory")
+    source = directory / "accounts.dat"
+    source.write_bytes(bytes(8192))
+    for slot in (0, 1):
+        require_success(command(["mcopy", "-i", image, source, f"::/SYSTEM/ACCT{slot}.DAT"]), "account fixture")
     return image
 
 
@@ -217,9 +222,9 @@ def images(args):
     def partitions():
         data=(directory/"mbr.bin").read_bytes()
         assert data[446]==0x80,"boot partition inactive"
-        assert struct.unpack_from("<II",data,454)==(1,333),"boot partition extent mismatch"
+        assert struct.unpack_from("<II",data,454)==(1,845),"boot partition extent mismatch"
         assert data[466]==0x0b,"data partition is not FAT32"
-        assert struct.unpack_from("<II",data,470)==(334,93750),"data partition extent mismatch"
+        assert struct.unpack_from("<II",data,470)==(846,93750),"data partition extent mismatch"
     report.check("bios_partition_contract",partitions)
     def font():
         data=(ROOT/"util/fonts/zap-light16.psf").read_bytes()
@@ -239,10 +244,10 @@ def bios_chain(args):
         require_success(command(["nasm","-f","bin",ROOT/"tests/fixtures/bios_probe.asm","-o",probe]),"assemble probe")
         image=directory/"probe.img"
         with image.open("wb") as f:
-            f.truncate((334+93750)*512)
+            f.truncate((846+93750)*512)
             for offset,path in [(0,directory/"mbr.bin"),(512,directory/"bootloader.bin"),(1024,probe)]:
                 f.seek(offset); f.write(path.read_bytes())
-        result=command(["qemu-system-x86_64","-machine","q35","-accel","tcg","-cpu","qemu64",
+        result=command(["qemu-system-x86_64","-machine","q35","-accel","tcg","-cpu","qemu64,+rdrand",
                         "-m","128M","-display","none","-monitor","none","-serial","none","-net","none",
                         "-no-reboot","-snapshot","-drive",f"file={image},format=raw",
                         "-device","isa-debug-exit,iobase=0xf4,iosize=0x04"],timeout=30)

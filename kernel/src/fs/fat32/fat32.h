@@ -34,6 +34,7 @@ class FAT32 : public Filesystem
     virtual uint64_t GetDirectoryEntryCount(const char* path) override;
     virtual ActiveFile* GetFile(const char* path, uint64_t index) override;
 
+    bool AccountStorage(uint64_t (&sectors)[2][16], Device*& storage) override;
     virtual int Read(ActiveFile* file, void* buffer, uint64_t size) override;
     virtual int Write(ActiveFile* file, void* buffer, uint64_t size) override;
 

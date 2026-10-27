@@ -26,7 +26,9 @@ and mouse drivers, framebuffer graphics and a console, ACPI/PCI discovery,
 ATA/AHCI storage, FAT32, and a small VFS. There are also window primitives,
 an ELF loader, a scheduler, and an experimental userspace library.
 
-An automatically started standalone ring-3 PS/2 shell runs on both boot paths.
+Both boot paths start a ring-3 login agent. First-boot setup creates the chosen
+administrator; successful login starts the standalone PS/2 shell. Accounts persist
+across boots, and `logout` ends the session. See [accounts and recovery](docs/system/accounts.md).
 Try `help`, `ls`, `ps` or `print tick`. Run `user USR/BIN/RING3` for the minimal
 isolated ring-3 print/preemption/exit demo. Both `./` and `user` accept arguments and wait for isolated programs to exit
 (append `&` for background execution); `shutdown` requests kernel ACPI

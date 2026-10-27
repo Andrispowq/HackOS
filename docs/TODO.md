@@ -9,8 +9,8 @@ more devices.
 ## Follow-up plan from step 8
 
 Items 1 and 2 are addressed in step 9; built-in parsing in item 3 is addressed
-in step 10, and command-program migration in step 11. The credential/permission part of item 4 is addressed in step 13. Authentication
-and setup remain deferred and depend on persistent user storage and credential handling.
+in step 10, and command-program migration in step 11. The credential/permission part of item 4 is addressed in step 13; persistent
+accounts, authentication and setup are addressed in step 14.
 
 1. **Slow drawing — addressed in step 9:** replace per-pixel compositor calls
    and byte framebuffer copies with clipped, pitch-aware pixel row copies.
@@ -67,24 +67,30 @@ and setup remain deferred and depend on persistent user storage and credential h
   this boot only; the initial shell still runs as root. No file permission or
   persistent credential security claim is made.
 
-## Proposed continuation after step 13
+## Step 14 — persistent accounts, login and setup
 
-Steps 1–13 are complete. The order below is a proposal for future iterations,
+- [x] Store versioned account/group/password records in alternating, checksummed
+  FAT32 slots with checked writes, flushes and read-back before success.
+- [x] Add RDRAND salt generation, PBKDF2-HMAC-SHA256, hidden confirmed password
+  entry, root-only `passwd`, first-boot administrator setup and login.
+- [x] Start the shell only after authentication and clean up all session
+  descendants, windows and file handles on logout.
+- [x] Preserve account slots across Docker rebuilds; make normal QEMU runs
+  persistent and keep disposable snapshots opt-in.
+- [x] Expand the BIOS kernel slot to 384 KiB and move FAT32 to LBA 846.
+- [x] Add host crypto/storage fault tests and BIOS/UEFI setup, reboot, password,
+  permission, session cleanup and damaged-store regressions.
+
+## Proposed continuation after step 14
+
+Steps 1–14 are complete. The order below is a proposal for future iterations,
 not authorization to implement them automatically. A fresh chat should read
 `AGENTS.md`, this file, `docs/system/userspace.md`, and the build/testing guides
 before starting. Preserve the root `.clang-format` style, leave vendored code
 alone, and verify both BIOS and UEFI for each implementation step.
 
-14. **Login and first-boot setup (next requested iteration):** replace the
-    temporary boot-session account registry with a recoverable persistent format
-    and checked storage writes/flushes before storing credentials. Establish an
-    entropy source, a suitable salted password KDF and non-echoing password input.
-    Add credential verification and session cleanup, start the shell only after
-    authentication, and define logout. Setup must distinguish empty storage from
-    corrupt/interrupted state, confirm the first account's chosen password and
-    require login on later boots. Test first boot, persistence/reboot, failed
-    login, successful login, interrupted setup and privilege isolation on BIOS
-    and UEFI. This is a proposed next step, not authorization to implement it now.
+14. **Login and first-boot setup — implemented:** see [accounts and recovery](system/accounts.md)
+    for the persistence format, authentication/session contract and limits.
 
 15. **Basic file utilities and a minimal text editor:**
     package these as standalone ring-3 programs in `/usr/bin`, keeping the shell
@@ -125,13 +131,13 @@ alone, and verify both BIOS and UEFI for each implementation step.
     a user heap, remaining runtime helpers and shell completion. Split this into
     smaller iterations as needed.
 
-The remaining subsystem lists below are the broader hardening backlog. Persistent accounts,
-login and setup remain deferred until the user requests the next iteration.
-Step 13 passed 151 host checks under UBSan, boot-asset and BIOS-chain checks,
-fresh BIOS/UEFI builds, and both firmware boot, shell/credentials, isolated
-ring-3 and window suites. The local translated ASan runtime failed even its
-empty-program preflight, so this does not claim ASan coverage. These are the
-baseline to rerun, not a substitute for testing future changes.
+The remaining subsystem lists below are the broader hardening backlog. Step 15
+and later work require a new request.
+Step 14 host validation passed 163 checks under UBSan, plus boot-asset and
+BIOS-chain checks. The local translated ASan runtime fails its empty-program
+preflight, so this does not claim ASan coverage. Rerun fresh BIOS/UEFI builds and
+boot, account/login, shell/credentials, isolated ring-3 and window suites for
+future changes; prior results are not a substitute.
 
 ## Boot and memory
 
@@ -140,7 +146,7 @@ baseline to rerun, not a substitute for testing future changes.
 - [ ] Centralize BIOS slot constants across assembly, image construction and
   tests. Reconcile the unused EFI linker script with the active kernel entry.
 - [ ] Remove the fixed BIOS kernel slot as a growth bottleneck. Increasing the
-  current 128 KiB reservation is explicitly acceptable; do not distort otherwise
+  reservation beyond the current 384 KiB is explicitly acceptable; do not distort otherwise
   sensible kernel changes just to retain that limit. When increasing it, update
   loader read counts/offsets and ELF size bounds, partition extents, image-packaging
   assertions and the documented layout together; check staging-buffer/memory-map limits.
@@ -153,8 +159,7 @@ baseline to rerun, not a substitute for testing future changes.
   the ELF-loading/handoff contract, validate file size and cluster chains, and
   handle fragmented, missing, truncated and corrupt kernel files explicitly.
   Test a kernel larger than the old slot, packaging/partition bounds and fresh
-  BIOS/UEFI boots. This is deferred boot work, not part of step 13 or a reason
-  to change the loader now.
+  BIOS/UEFI boots. Step 14 enlarged the fixed reservation; the FAT32-file loader remains deferred.
 - [ ] Strengthen BIOS ELF validation and both loaders' malformed-input cleanup.
   Extend firmware tests to missing files, unsupported GOP formats and map overflow.
 - [ ] Add a serial/debug reporting path for failures before graphics is available.
@@ -170,8 +175,9 @@ baseline to rerun, not a substitute for testing future changes.
 
 ## Storage and filesystems
 
-- [ ] Give `Device` a capacity query, explicit I/O result and flush operation;
-  propagate failures through FAT32 and VFS, including resize/delete results.
+- [ ] Add a `Device` capacity query and propagate its checked I/O/flush results
+  through all FAT32/VFS operations, including resize/delete. Step 14 checks the
+  narrow preallocated account-storage path; general FAT mutation remains incomplete.
 - [ ] Discover partitions from each selected device rather than relying on the
   boot MBR, a fixed device index or an unpartitioned UEFI volume.
 - [ ] Test media faults, full volumes, fragmented files, remounts and dirty

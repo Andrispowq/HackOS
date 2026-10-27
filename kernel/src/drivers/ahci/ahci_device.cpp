@@ -139,170 +139,146 @@ void Port::StartCMD()
     HBAPortPtr->CommandStatus |= HBA_PxCMD_ST;
 }
 
-//THIS IS PROBLEMATIC!!!!!!!!!!!
-//These two functions need a continous amount of physical pages. The long-term solution will be to allocate 1 page, load 8 sectors, and repeat!!!!
-bool Port::Read(uint64_t Sector, void* Buffer, uint32_t SectorCount)
+// One physical page per port bounds DMA to contiguous memory. Every data
+// command is at most eight sectors; flush commands have no PRDT.
+bool Port::Transfer(uint8_t command, uint64_t lba, void* buffer, uint32_t sectors)
 {
-    HBAPortPtr->InterruptStatus = (uint32_t)-1; // Clear pending interrupt bits
-
-    HBACommandHeader* CommandHeader = (HBACommandHeader*)HBAPortPtr->CommandListBase;
-    CommandHeader->CommandFISLength = sizeof(FIS_REG_H2D) / sizeof(uint32_t); //command FIS size;
-    CommandHeader->Write = 0;                                                 //this is a read
-    CommandHeader->PRDTLength = 1;
-
-    HBACommandTable* CommandTable = (HBACommandTable*)(CommandHeader->CommandTableBaseAddress);
-    memset(CommandTable, 0, sizeof(HBACommandTable) + (CommandHeader->PRDTLength - 1) * sizeof(HBAPRDTEntry));
-
-    tempBuffer = (uint64_t)0x200000000000;
-    for (uint32_t i = 0; i < (SectorCount / 8) + 1; i++)
-    {
-        KernelDirectory.MapMemory(tempBuffer + i * 0x1000,
-                                  (uint64_t)PageFrameAllocator::SharedAllocator()->RequestPage());
-    }
-
-    uint64_t physTempBuffer = KernelDirectory.PhysicalAddress(tempBuffer);
-
-    CommandTable->PRDTEntry[0].DataBaseAddress = (uint32_t)physTempBuffer;
-    CommandTable->PRDTEntry[0].DataBaseAddressUpper = (uint32_t)(physTempBuffer >> 32);
-    CommandTable->PRDTEntry[0].ByteCount = (SectorCount << 9) - 1; // 512 bytes per sector
-    CommandTable->PRDTEntry[0].InterruptOnCompletion = 1;
-
-    FIS_REG_H2D* CommandFIS = (FIS_REG_H2D*)(&CommandTable->CommandFIS);
-
-    CommandFIS->FISType = FIS_TYPE_REG_H2D;
-    CommandFIS->CommandControl = 1; // command
-    CommandFIS->Command = ATA_CMD_READ_DMA_EX;
-
-    CommandFIS->LBA0 = (uint8_t)(Sector);
-    CommandFIS->LBA1 = (uint8_t)(Sector >> 8);
-    CommandFIS->LBA2 = (uint8_t)(Sector >> 16);
-    CommandFIS->LBA3 = (uint8_t)(Sector >> 24);
-    CommandFIS->LBA4 = (uint8_t)(Sector >> 32);
-    CommandFIS->LBA5 = (uint8_t)(Sector >> 40);
-
-    CommandFIS->DeviceRegister = 1 << 6; //LBA mode
-
-    CommandFIS->CountLow = SectorCount & 0xFF;
-    CommandFIS->CountHigh = (SectorCount >> 8) & 0xFF;
-
-    uint64_t Spin = 0;
-
-    while ((HBAPortPtr->TaskFileData & (ATA_DEV_BUSY | ATA_DEV_DRQ)) && Spin < 1000000)
-    {
-        Spin++;
-    }
-
-    if (Spin == 1000000)
+    if (failed || sectors > 8 || lba >= (1ULL << 48) || sectors > (1ULL << 48) - lba)
     {
         return false;
     }
 
-    HBAPortPtr->CommandIssue = 1;
-
-    while (true)
+    if (!tempBuffer)
     {
-        if ((HBAPortPtr->CommandIssue == 0))
+        tempBuffer = (uint64_t)PageFrameAllocator::SharedAllocator()->RequestPage();
+        if (!tempBuffer)
         {
-            break;
+            return false;
         }
 
-        if (HBAPortPtr->InterruptStatus & HBA_PxIS_TFES)
+        KernelDirectory.MapMemory(tempBuffer, tempBuffer);
+    }
+
+    unsigned spin = 0;
+    while ((HBAPortPtr->TaskFileData & (ATA_DEV_BUSY | ATA_DEV_DRQ)) || HBAPortPtr->CommandIssue)
+    {
+        if (++spin == 10000000)
         {
+            failed = true;
             return false;
         }
     }
 
-    memcpy(Buffer, (const void*)tempBuffer, SectorCount * 512);
-
-    for (uint32_t i = 0; i < (SectorCount / 8) + 1; i++)
+    HBAPortPtr->InterruptStatus = ~0U;
+    auto header =
+        (HBACommandHeader*)((uint64_t)HBAPortPtr->CommandListBase | (uint64_t)HBAPortPtr->CommandListBaseUpper << 32);
+    header->CommandFISLength = sizeof(FIS_REG_H2D) / 4;
+    header->Write = command == ATA_CMD_WRITE_DMA_EX;
+    header->PRDTLength = sectors ? 1 : 0;
+    header->PRDBCount = 0;
+    auto table = (HBACommandTable*)((uint64_t)header->CommandTableBaseAddress |
+                                    (uint64_t)header->CommandTableBaseAddressUpper << 32);
+    memset(table, 0, sizeof(HBACommandTable) + sizeof(HBAPRDTEntry));
+    if (sectors)
     {
-        PageFrameAllocator::SharedAllocator()->FreePages(
-            (void*)KernelDirectory.PhysicalAddress(tempBuffer + i * 0x1000), 1);
+        if (header->Write)
+        {
+            memcpy((void*)tempBuffer, buffer, sectors * 512);
+        }
+
+        table->PRDTEntry[0].DataBaseAddress = tempBuffer;
+        table->PRDTEntry[0].DataBaseAddressUpper = tempBuffer >> 32;
+        table->PRDTEntry[0].ByteCount = sectors * 512 - 1;
+    }
+
+    auto fis = (FIS_REG_H2D*)table->CommandFIS;
+    fis->FISType = FIS_TYPE_REG_H2D;
+    fis->CommandControl = 1;
+    fis->Command = command;
+    fis->LBA0 = lba;
+    fis->LBA1 = lba >> 8;
+    fis->LBA2 = lba >> 16;
+    fis->LBA3 = lba >> 24;
+    fis->LBA4 = lba >> 32;
+    fis->LBA5 = lba >> 40;
+    fis->DeviceRegister = 1 << 6;
+    fis->CountLow = sectors;
+    asm volatile("" ::: "memory");
+    HBAPortPtr->CommandIssue = 1;
+    spin = 0;
+    while (HBAPortPtr->CommandIssue & 1)
+    {
+        if (++spin == 10000000)
+        {
+            // Do not reuse DMA storage while a timed-out command may own it.
+            failed = true;
+            return false;
+        }
+    }
+
+    asm volatile("" ::: "memory");
+    if ((HBAPortPtr->InterruptStatus & HBA_PxIS_TFES) || (HBAPortPtr->TaskFileData & 0x21))
+    {
+        return false;
+    }
+
+    if (sectors && command == ATA_CMD_READ_DMA_EX)
+    {
+        memcpy(buffer, (void*)tempBuffer, sectors * 512);
     }
 
     return true;
 }
 
-bool Port::Write(uint64_t Sector, void* Buffer, uint32_t SectorCount)
+bool Port::Read(uint64_t lba, void* buffer, uint32_t sectors)
 {
-    HBAPortPtr->InterruptStatus = (uint32_t)-1; // Clear pending interrupt bits
-
-    HBACommandHeader* CommandHeader = (HBACommandHeader*)HBAPortPtr->CommandListBase;
-    CommandHeader->CommandFISLength = sizeof(FIS_REG_H2D) / sizeof(uint32_t); //command FIS size;
-    CommandHeader->Write = 1;                                                 //this is a write
-    CommandHeader->PRDTLength = 1;
-
-    HBACommandTable* CommandTable = (HBACommandTable*)(CommandHeader->CommandTableBaseAddress);
-    memset(CommandTable, 0, sizeof(HBACommandTable) + (CommandHeader->PRDTLength - 1) * sizeof(HBAPRDTEntry));
-
-    tempBuffer = (uint64_t)0x200000000000;
-    for (uint32_t i = 0; i < (SectorCount / 8) + 1; i++)
-    {
-        KernelDirectory.MapMemory(tempBuffer + i * 0x1000,
-                                  (uint64_t)PageFrameAllocator::SharedAllocator()->RequestPage());
-    }
-
-    uint64_t physTempBuffer = KernelDirectory.PhysicalAddress(tempBuffer);
-
-    memcpy((void*)tempBuffer, Buffer, SectorCount * 512);
-
-    CommandTable->PRDTEntry[0].DataBaseAddress = (uint32_t)physTempBuffer;
-    CommandTable->PRDTEntry[0].DataBaseAddressUpper = (uint32_t)(physTempBuffer >> 32);
-    CommandTable->PRDTEntry[0].ByteCount = (SectorCount << 9) - 1; // 512 bytes per sector
-    CommandTable->PRDTEntry[0].InterruptOnCompletion = 1;
-
-    FIS_REG_H2D* CommandFIS = (FIS_REG_H2D*)(&CommandTable->CommandFIS);
-
-    CommandFIS->FISType = FIS_TYPE_REG_H2D;
-    CommandFIS->CommandControl = 1; // command
-    CommandFIS->Command = ATA_CMD_WRITE_DMA_EX;
-
-    CommandFIS->LBA0 = (uint8_t)(Sector);
-    CommandFIS->LBA1 = (uint8_t)(Sector >> 8);
-    CommandFIS->LBA2 = (uint8_t)(Sector >> 16);
-    CommandFIS->LBA3 = (uint8_t)(Sector >> 24);
-    CommandFIS->LBA4 = (uint8_t)(Sector >> 32);
-    CommandFIS->LBA5 = (uint8_t)(Sector >> 40);
-
-    CommandFIS->DeviceRegister = 1 << 6; //LBA mode
-
-    CommandFIS->CountLow = SectorCount & 0xFF;
-    CommandFIS->CountHigh = (SectorCount >> 8) & 0xFF;
-
-    uint64_t Spin = 0;
-
-    while ((HBAPortPtr->TaskFileData & (ATA_DEV_BUSY | ATA_DEV_DRQ)) && Spin < 1000000)
-    {
-        Spin++;
-    }
-
-    if (Spin == 1000000)
+    if (!sectors)
     {
         return false;
     }
 
-    HBAPortPtr->CommandIssue = 1;
-
-    while (true)
+    while (sectors)
     {
-        if ((HBAPortPtr->CommandIssue == 0))
-        {
-            break;
-        }
-
-        if (HBAPortPtr->InterruptStatus & HBA_PxIS_TFES)
+        uint32_t count = sectors < 8 ? sectors : 8;
+        if (!Transfer(ATA_CMD_READ_DMA_EX, lba, buffer, count))
         {
             return false;
         }
-    }
 
-    for (uint32_t i = 0; i < (SectorCount / 8) + 1; i++)
-    {
-        PageFrameAllocator::SharedAllocator()->FreePages(
-            (void*)KernelDirectory.PhysicalAddress(tempBuffer + i * 0x1000), 1);
+        lba += count;
+        sectors -= count;
+        buffer = (uint8_t*)buffer + count * 512;
     }
 
     return true;
+}
+
+bool Port::Write(uint64_t lba, void* buffer, uint32_t sectors)
+{
+    if (!sectors)
+    {
+        return false;
+    }
+
+    while (sectors)
+    {
+        uint32_t count = sectors < 8 ? sectors : 8;
+        if (!Transfer(ATA_CMD_WRITE_DMA_EX, lba, buffer, count))
+        {
+            return false;
+        }
+
+        lba += count;
+        sectors -= count;
+        buffer = (uint8_t*)buffer + count * 512;
+    }
+
+    return true;
+}
+
+bool Port::Flush()
+{
+    return Transfer(0xea, 0, nullptr, 0); // ATA FLUSH CACHE EXT
 }
 
 AHCIDriver::AHCIDriver(PCI::PCIDeviceHeader* PCIBaseAddress) : PCIBaseAddress(PCIBaseAddress)
@@ -318,13 +294,18 @@ AHCIDevice::AHCIDevice(Port* port) : port(port)
     port->Configure();
 }
 
-void AHCIDevice::Read(uint64_t LBA, void* buffer, uint64_t size)
+bool AHCIDevice::Read(uint64_t LBA, void* buffer, uint64_t size)
 {
-    port->Read(LBA, buffer, (uint32_t)size);
+    return size <= 0xffffffff && port->Read(LBA, buffer, (uint32_t)size);
 }
 
-void AHCIDevice::Write(uint64_t LBA, void* buffer, uint64_t size)
+bool AHCIDevice::Write(uint64_t LBA, void* buffer, uint64_t size)
 {
-    port->Write(LBA, buffer, (uint32_t)size);
+    return size <= 0xffffffff && port->Write(LBA, buffer, (uint32_t)size);
+}
+
+bool AHCIDevice::Flush()
+{
+    return port->Flush();
 }
 };
