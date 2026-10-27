@@ -34,6 +34,12 @@ class FAT32 : public Filesystem
     virtual uint64_t GetDirectoryEntryCount(const char* path) override;
     virtual ActiveFile* GetFile(const char* path, uint64_t index) override;
 
+    int Lookup(const char* path, ActiveFile*& file) override;
+    int MakeDirectory(const char* path) override;
+    int RemoveFile(const char* path) override;
+    int MoveFile(const char* source, const char* destination) override;
+    int SaveFile(const char* path, const void* data, uint32_t size, bool create) override;
+
     bool AccountStorage(uint64_t (&sectors)[2][16], Device*& storage) override;
     virtual int Read(ActiveFile* file, void* buffer, uint64_t size) override;
     virtual int Write(ActiveFile* file, void* buffer, uint64_t size) override;

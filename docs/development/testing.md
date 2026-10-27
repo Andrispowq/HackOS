@@ -411,3 +411,34 @@ actions using QMP guest power events and a second boot into the menu after
 restart, rejects unknown menu actions, and shuts
 down after logout. These controls work before setup without modifying the empty
 store; ordinary non-root power calls remain denied by AUTHPROBE.
+
+## File utilities and editor regressions
+
+`python3 tests/qemu_files.py --firmware bios` (or `uefi`), also available through
+`make -C tests test-files FIRMWARE=bios`, uses a writable disposable image and
+fresh copied OVMF VARS. It tests the standalone utilities, hex/binary output,
+32 KiB limits, empty/binary/read-only files, invalid paths, destination conflicts,
+protected account paths, invalid buffers/flags, closed and cross-process open
+handles, and cleanup after exit. Real PS/2 input exercises multiline editing,
+arrows, Delete, Ctrl+S and Ctrl+X. Independent mtools reads and another guest boot
+check exact saved bytes, truncation, rename and deletion. QEMU blkdebug injects
+real write failures; the editor must report the failed save, keep its buffer,
+and return to the shell. Console logs, GDB cleanup checks and framebuffer captures
+are stored in `tests/out/qemu-files-{bios,uefi}`.
+
+Host tests use the production text buffer and keyboard decoder, remount mutated
+FAT images, inspect them independently with mtools, and inject read/write/flush
+failures, including directory-capacity failures after staging a save. Staged
+clusters must be released when publication cannot start. Save failures at
+successive write phases must leave the original or
+complete replacement payload, never a partial buffer. These checks do not claim
+power-loss atomicity or journal recovery.
+
+Step 15 local validation passed 171 UBSan host checks, five boot-asset checks,
+the BIOS loader-chain probe, fresh BIOS/UEFI builds and boot, account/login,
+shell/credentials, isolated-process, window and file/editor suites on both
+firmware paths. The final file suite also saves as an ordinary non-root user and
+checks every byte of a 32 KiB file independently. Both editor framebuffer captures
+and ELF headers/load segments were inspected. The stripped BIOS kernel is
+171,528 bytes within the unchanged 393,216-byte reservation. Formatting and
+workflow lint checks passed. Full ASan remains a native x86-64 CI requirement.

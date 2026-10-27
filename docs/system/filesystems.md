@@ -79,10 +79,30 @@ and read it with mtools to check the persisted representation independently.
 flush success. The account store checks every operation, validates separate
 preallocated FAT chains, and alternates two checksummed generations; see
 [accounts](accounts.md). BPB/FAT reads and account directory reads propagate
-failures. General FAT mutation still lacks a journal or device-failure rollback,
-and remaining FAT/VFS operations do not consistently propagate errors. Open
-handles also cache metadata; concurrent opens, writes and deletion need explicit
-ownership and synchronization rules.
+failures. The step-15 `Lookup`, `SaveFile`, `MakeDirectory`, `RemoveFile` and
+`MoveFile` interfaces return checked status through the userspace ABI. Directory,
+data, FAT and FSInfo I/O failures are latched; subsequent filesystem operations
+fail until remount, preventing continued use of uncertain cached metadata.
+Successful mutations require a device flush. The older void resize/delete and
+raw VFS interfaces are still internal and require further hardening.
+
+Whole-file saves allocate and populate a fresh chain, flush it, publish its
+metadata, flush again, and only then release the old chain. Allocation and
+payload-write failures do not truncate the existing file. A failure after
+publication can leave either complete version visible and can leak clusters;
+an error is never reported as a successful save. File deletion removes the
+short entry before its long-name records and flushes before freeing data.
+Rename publishes and flushes the new name before removing the old one and
+never overwrites a destination. It is not an atomic transaction: interruption
+or a metadata I/O failure can leave both names referencing the same chain.
+Such a volume needs offline checking/repair before further writes. Torn sectors,
+crash recovery, journaling and general rollback remain deferred to storage
+hardening.
+
+The syscall dispatcher serializes mutations and rejects paths held by any
+process-owned read handle, avoiding stale cluster/size snapshots. Kernel users
+of raw `ActiveFile` objects must still manage their own lifetime. No filesystem
+UID/GID permissions are introduced.
 
 Use disposable images for write experiments. Normal Docker/QEMU runs save guest
 writes; pass `--snapshot` for an ephemeral overlay. Docker rebuilds preserve only

@@ -146,7 +146,8 @@ class MemoryDisk : public Device
   public:
     unsigned char* bytes;
     size_t size;
-    bool readError = false;
+    bool readError = false, writeError = false, flushError = false;
+    unsigned writes = 0, failWrite = 0;
 
     MemoryDisk()
     {
@@ -177,9 +178,20 @@ class MemoryDisk : public Device
 
     bool Write(uint64_t lba, void* p, uint64_t count) override
     {
+        ++writes;
+        if (writeError || (failWrite && writes == failWrite))
+        {
+            return false;
+        }
+
         bounds(lba, count);
         test_copy(bytes + lba * 512, p, count * 512);
         return true;
+    }
+
+    bool Flush() override
+    {
+        return !flushError;
     }
 
     void bounds(uint64_t lba, uint64_t count)
@@ -639,5 +651,204 @@ TEST(fat_account_storage_propagates_read_failure)
     CHECK(!fs.AccountStorage(sectors, device));
     FAT32 unreadable(&disk, 0);
     CHECK(!unreadable.AccountStorage(sectors, device));
+    return 0;
+}
+
+TEST(fat_checked_mutations_survive_remount)
+{
+    MemoryDisk disk;
+    const char data[] = "Saved across a remount\n";
+    {
+        FAT32 fs(&disk, 0);
+        CHECK(fs.MakeDirectory("~/WORK") == 0);
+        CHECK(fs.MakeDirectory("~/WORK") != 0);
+        CHECK(fs.MakeDirectory("~/ABSENT/CHILD") != 0);
+        CHECK(fs.SaveFile("~/WORK/NEW.TXT", data, sizeof(data) - 1, true) == 0);
+        CHECK(fs.SaveFile("~/WORK/NEW.TXT", "bad", 3, true) != 0);
+        CHECK(fs.SaveFile("~/WORK/MISSING", "bad", 3, false) != 0);
+        CHECK(fs.SaveFile("~/WORK", "bad", 3, false) != 0);
+        CHECK(fs.RemoveFile("~/WORK") != 0);
+        CHECK(fs.MoveFile("~/WORK", "~/OTHER") != 0);
+        CHECK(fs.MoveFile("~/WORK/NEW.TXT", "~/TESTS/HELLO.TXT") != 0);
+        CHECK(fs.MoveFile("~/WORK/NEW.TXT", "~/Moved long file.txt") == 0);
+        CHECK(fs.OpenFile("~/WORK/NEW.TXT") == nullptr);
+    }
+
+    {
+        FAT32 fs(&disk, 0);
+        auto file = fs.OpenFile("~/Moved long file.txt");
+        CHECK(file && file->GetSize() == sizeof(data) - 1);
+        char buffer[64] = {};
+        CHECK(fs.Read(file, buffer, sizeof(buffer)) == 0);
+        CHECK(test_equal(buffer, data, sizeof(data) - 1));
+        fs.CloseFile(file);
+        CHECK(fs.SaveFile("~/Moved long file.txt", "short", 5, false) == 0);
+    }
+
+    {
+        FAT32 fs(&disk, 0);
+        auto file = fs.OpenFile("~/Moved long file.txt");
+        char buffer[8] = {};
+        CHECK(file && file->GetSize() == 5 && fs.Read(file, buffer, 8) == 0);
+        CHECK(test_equal(buffer, "short", 5));
+        fs.CloseFile(file);
+        CHECK(fs.RemoveFile("~/Moved long file.txt") == 0);
+        CHECK(fs.SaveFile("~/WORK/EMPTY", nullptr, 0, true) == 0);
+        CHECK(fs.SaveFile("~/WORK/RESULT.TXT", data, sizeof(data) - 1, true) == 0);
+    }
+
+    FAT32 fs(&disk, 0);
+    CHECK(fs.OpenFile("~/Moved long file.txt") == nullptr);
+    auto empty = fs.OpenFile("~/WORK/EMPTY");
+    CHECK(empty && empty->GetSize() == 0);
+    fs.CloseFile(empty);
+    test_disk_save(disk.bytes, disk.size);
+    return 0;
+}
+
+TEST(fat_checked_mutations_reject_bad_names_and_readonly)
+{
+    MemoryDisk disk;
+    FAT32 fs(&disk, 0);
+    const char* names[] = {
+        "~", "~/", "~/.", "~/..", "~/BAD.", "~/BAD ", "~/B?D", "~/BAD:NAME", "~/TESTS/HELLO.TXT/CHILD"};
+    for (const char* path : names)
+    {
+        CHECK(fs.MakeDirectory(path) != 0);
+        CHECK(fs.SaveFile(path, "x", 1, true) != 0);
+        CHECK(fs.MoveFile("~/TESTS/HELLO.TXT", path) != 0);
+    }
+
+    auto file = fs.CreateFile("~", "LOCKED", READ_ONLY);
+    CHECK(file);
+    fs.CloseFile(file);
+    CHECK(fs.SaveFile("~/LOCKED", "x", 1, false) != 0);
+    CHECK(fs.RemoveFile("~/LOCKED") != 0);
+    CHECK(fs.MoveFile("~/LOCKED", "~/OTHER") != 0);
+    return 0;
+}
+
+TEST(fat_save_write_failures_keep_old_or_complete_new_data)
+{
+    // Fail each write phase, then remount the actual bytes. No partial payload
+    // may replace the old file, and a failed driver must not keep mutating.
+    for (unsigned fail = 1; fail <= 18; ++fail)
+    {
+        MemoryDisk disk;
+        unsigned char original[64] = {};
+        uint64_t originalSize;
+        int status;
+        {
+            FAT32 fs(&disk, 0);
+            auto file = fs.OpenFile("~/TESTS/HELLO.TXT");
+            CHECK(file && file->GetSize() < sizeof(original));
+            originalSize = file->GetSize();
+            CHECK(fs.Read(file, original, originalSize) == 0);
+            fs.CloseFile(file);
+            disk.failWrite = fail;
+            status = fs.SaveFile("~/TESTS/HELLO.TXT", "replacement", 11, false);
+            if (status)
+            {
+                unsigned writes = disk.writes;
+                CHECK(fs.MakeDirectory("~/AFTER") != 0);
+                CHECK(disk.writes == writes);
+            }
+        }
+
+        disk.failWrite = 0;
+        FAT32 reopened(&disk, 0);
+        auto file = reopened.OpenFile("~/TESTS/HELLO.TXT");
+        unsigned char actual[64] = {};
+        CHECK(file && reopened.Read(file, actual, sizeof(actual)) == 0);
+        bool old = file->GetSize() == originalSize && test_equal(actual, original, originalSize);
+        bool replaced = file->GetSize() == 11 && test_equal(actual, "replacement", 11);
+        CHECK(old || replaced);
+        if (!status)
+        {
+            CHECK(replaced);
+        }
+        reopened.CloseFile(file);
+    }
+
+    return 0;
+}
+
+TEST(fat_mutations_report_device_failures)
+{
+    for (unsigned operation = 0; operation < 4; ++operation)
+    {
+        for (unsigned fault = 0; fault < 3; ++fault)
+        {
+            MemoryDisk disk;
+            FAT32 fs(&disk, 0);
+            disk.readError = fault == 0;
+            disk.writeError = fault == 1;
+            disk.flushError = fault == 2;
+            int result = operation == 0   ? fs.MakeDirectory("~/NEW")
+                         : operation == 1 ? fs.RemoveFile("~/TESTS/HELLO.TXT")
+                         : operation == 2 ? fs.MoveFile("~/TESTS/HELLO.TXT", "~/NEW")
+                                          : fs.SaveFile("~/TESTS/HELLO.TXT", "new", 3, false);
+            CHECK(result != 0);
+        }
+    }
+
+    return 0;
+}
+
+TEST(fat_full_directory_save_returns_staged_clusters)
+{
+    MemoryDisk disk;
+    auto& boot = *(FAT32_BootSector*)disk.bytes;
+    uint32_t dataSector = boot.ReservedSectors + boot.NumberOfFATs * boot.SectorsPerFAT32;
+    uint32_t clusterCount = (boot.LargeTotalSectors - dataSector) / boot.SectorsPerCluster;
+    uint32_t remaining = 0;
+    // Leave exactly one free cluster for the payload, so a full directory
+    // cannot grow after staging it. Mark other free clusters allocated.
+    for (unsigned copy = 0; copy < boot.NumberOfFATs; ++copy)
+    {
+        auto* fat = (uint32_t*)(disk.bytes + (boot.ReservedSectors + copy * boot.SectorsPerFAT32) * 512);
+        for (uint32_t cluster = 2; cluster < clusterCount + 2; ++cluster)
+        {
+            if ((fat[cluster] & 0x0fffffff) == 0)
+            {
+                if (!remaining)
+                {
+                    remaining = cluster;
+                }
+                if (cluster != remaining)
+                {
+                    fat[cluster] = END_CLUSTER;
+                }
+            }
+        }
+    }
+
+    CHECK(remaining);
+    uint8_t* root = disk.bytes + (dataSector + (boot.RootDirStart - 2) * boot.SectorsPerCluster) * 512;
+    unsigned slots = boot.SectorsPerCluster * 512 / 32;
+    for (unsigned slot = 0; slot < slots; ++slot)
+    {
+        auto& entry = ((DirectoryEntry*)root)[slot];
+        if (!entry.name[0] || (uint8_t)entry.name[0] == ENTRY_FREE)
+        {
+            test_fill(&entry, 0, sizeof(entry));
+            test_fill(&entry, ' ', 11);
+            entry.name[0] = 'A' + slot % 26;
+            entry.attributes = FILE_ARCHIVE;
+        }
+    }
+
+    {
+        FAT32 fs(&disk, 0);
+        for (unsigned attempt = 0; attempt < 3; ++attempt)
+        {
+            CHECK(fs.SaveFile("~/NO_ROOM.TXT", "x", 1, true) != 0);
+            auto* fat = (uint32_t*)(disk.bytes + boot.ReservedSectors * 512);
+            CHECK((fat[remaining] & 0x0fffffff) == 0);
+        }
+    }
+
+    FAT32 fs(&disk, 0);
+    CHECK(fs.OpenFile("~/NO_ROOM.TXT") == nullptr);
     return 0;
 }

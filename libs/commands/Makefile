@@ -3,7 +3,7 @@ CXX = $(CROSS_COMPILE)g++
 LD = $(CROSS_COMPILE)ld
 CFLAGS = -std=gnu++17 -O2 -g -ffreestanding -mno-red-zone -mcmodel=large -fno-pie -fno-stack-protector -fno-omit-frame-pointer -fno-exceptions -fno-rtti -MMD -MP -I ../../include -I ../../common/include
 
-PROGRAMS = help clear print ps kill ls wd cat read shutdown restart id whoami users groups useradd groupadd usermod runas passwd
+PROGRAMS = help clear print ps kill ls wd cat read shutdown restart id whoami users groups useradd groupadd usermod runas passwd xxd mkdir rm mv edit
 .DEFAULT_GOAL := all
 .PHONY: all clean
 all: $(addprefix bin/,$(PROGRAMS))

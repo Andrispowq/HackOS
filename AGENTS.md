@@ -28,6 +28,11 @@ logged-out terminal), and kill requires the same owner UID or root. Persistent a
 UID-0 administrator. Passwords use PBKDF2-HMAC-SHA256 and RDRAND salts.
 `logout` terminates the session and its descendants before returning to login. Ctrl-C is deferred from
 IRQ context to a safe scheduler point. Shell history is a static 256-command ring.
+Step-15 `xxd`, `mkdir`, `rm`, `mv` and `edit` are standalone programs. Whole-file
+reads/editor saves are bounded to 32 KiB; Ctrl+S saves and Ctrl+X exits without
+saving. Mutations use checked filesystem methods, reject open/read-only paths
+and protect `/SYSTEM`; `mv` never overwrites and handles files only. FAT updates
+are not journaled or crash-atomic; see `docs/system/filesystems.md`.
 Userspace windows use process-owned handles and bounded pixel uploads; idle
 reclaims them on exit and composites them over the console. `USR/BIN/WINDOW`
 is the standalone demo. Idle dispatches ordered keyboard/mouse ingress, focus

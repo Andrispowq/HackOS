@@ -206,3 +206,43 @@ TEST(keyboard_arrows_control_and_full_queue_interrupt)
     CHECK(keys.Pop(c) && c == 'C');
     return 0;
 }
+
+TEST(keyboard_editor_controls_left_right_ctrl_and_breaks)
+{
+    KeyboardInput keys;
+    char c;
+    for (unsigned side = 0; side < 2; ++side)
+    {
+        if (side)
+        {
+            keys.PushScancode(0xe0);
+        }
+        keys.PushScancode(0x1d);
+        keys.PushScancode(0x1f);
+        CHECK(keys.Pop(c) && c == 19);
+        keys.PushScancode(0x9f);
+        CHECK(!keys.Pop(c));
+        keys.PushScancode(0x2d);
+        CHECK(keys.Pop(c) && c == 24);
+        if (side)
+        {
+            keys.PushScancode(0xe0);
+        }
+        keys.PushScancode(0x9d);
+        keys.PushScancode(0x1f);
+        CHECK(keys.Pop(c) && c == 's');
+    }
+
+    const uint8_t scans[] = {0x4b, 0x4d, 0x53};
+    for (unsigned i = 0; i < 3; ++i)
+    {
+        keys.PushScancode(0xe0);
+        keys.PushScancode(scans[i]);
+        CHECK(keys.Pop(c) && (uint8_t)c == 130 + i);
+        keys.PushScancode(0xe0);
+        keys.PushScancode(scans[i] | 0x80);
+        CHECK(!keys.Pop(c));
+    }
+
+    return 0;
+}

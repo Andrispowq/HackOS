@@ -35,7 +35,7 @@ def package(firmware):
                              ('libs/ring3/bin/ring3', 'USR/BIN/ring3'),
                              ('libs/shell/bin/shell', 'USR/BIN/shell'), ('libs/login/bin/login', 'USR/BIN/login'), ('hello.txt', 'USR/hello.txt')]:
             mtool('mcopy', ROOT / source, '::/' + dest)
-        for name in ('help', 'clear', 'print', 'ps', 'kill', 'ls', 'wd', 'cat', 'read', 'shutdown', 'restart', 'id', 'whoami', 'users', 'groups', 'useradd', 'groupadd', 'usermod', 'runas', 'passwd'):
+        for name in ('help', 'clear', 'print', 'ps', 'kill', 'ls', 'wd', 'cat', 'read', 'shutdown', 'restart', 'id', 'whoami', 'users', 'groups', 'useradd', 'groupadd', 'usermod', 'runas', 'passwd', 'xxd', 'mkdir', 'rm', 'mv', 'edit'):
             mtool('mcopy', ROOT / 'libs/commands/bin' / name, '::/USR/BIN/' + name)
         empty_accounts = Path(temporary) / 'accounts.dat'
         empty_accounts.write_bytes(bytes(8192))

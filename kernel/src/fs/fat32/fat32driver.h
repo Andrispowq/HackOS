@@ -25,6 +25,10 @@ class FAT32Driver
     int ReadFile(DirEntry entry, uint64_t offset, void* buffer, uint64_t bytes);
     int WriteFile(DirEntry& entry, uint64_t offset, void* buffer, uint64_t bytes);
     int ResizeFile(DirEntry& entry, uint32_t size);
+    int MakeDirectory(const char* path);
+    int RemoveFile(const char* path);
+    int MoveFile(const char* source, const char* destination);
+    int SaveFile(const char* path, const void* data, uint32_t size, bool create);
 
     uint32_t GetRootDirStart() const
     {
@@ -32,6 +36,8 @@ class FAT32Driver
     }
 
   private:
+    bool Sync();
+    int Destination(const char* path, DirEntry& parent, DirEntry& file);
     bool ValidCluster(uint32_t cluster) const;
     uint32_t ReadFAT(uint32_t cluster) const;
     void WriteFAT(uint32_t cluster, uint32_t value);

@@ -136,6 +136,15 @@ jobs:
             --mount "type=bind,source=$PWD,target=/work,readonly" \
             --mount "type=bind,source=$PWD/tests/out,target=/work/tests/out" \
             hackos-tests:toolchain python3 tests/qemu_shell.py --firmware "$FIRMWARE"
+      - name: Exercise file utilities, editor and reboot persistence
+        if: ${{ !cancelled() && steps.build.outcome == 'success' }}
+        env:
+          FIRMWARE: ${{ matrix.firmware }}
+        run: |
+          docker run --rm --network none --user "$(id -u):$(id -g)" \
+            --mount "type=bind,source=$PWD,target=/work,readonly" \
+            --mount "type=bind,source=$PWD/tests/out,target=/work/tests/out" \
+            hackos-tests:toolchain python3 tests/qemu_files.py --firmware "$FIRMWARE"
       - name: Exercise isolated ring-3 programs
         if: ${{ !cancelled() && steps.build.outcome == 'success' }}
         env:
@@ -175,5 +184,6 @@ jobs:
             tests/out/qemu-${{ matrix.firmware }}/
             tests/out/qemu-accounts-${{ matrix.firmware }}/
             tests/out/qemu-shell-${{ matrix.firmware }}/
+            tests/out/qemu-files-${{ matrix.firmware }}/
             tests/out/qemu-user-${{ matrix.firmware }}/
             tests/out/qemu-windows-${{ matrix.firmware }}/

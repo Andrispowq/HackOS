@@ -21,7 +21,7 @@ SOURCES = [
     "boot/BIOS/stage_2/src/libc/memory.c", "boot/BIOS/stage_2/src/libc/string.c",
     "libs/libc/src/string.cpp",
     "common/src/split.c", "kernel/src/proc/user/address_space.cpp", "kernel/src/proc/user/accounts.cpp", "kernel/src/proc/user/account_store.cpp", "kernel/src/security/crypto.cpp",
-    *[f"tests/host/{s}.cpp" for s in ("adapters", "main", "library_tests", "graphics_tests", "fs_tests", "elf_tests", "bios_tests", "user_tests", "input_tests", "file_abi_provider", "file_abi_consumer", "syscall_tests", "split_tests", "user_address_tests", "argument_tests", "history_tests", "event_queue_tests", "mouse_packet_tests", "path_tests", "account_tests", "account_store_tests")],
+    *[f"tests/host/{s}.cpp" for s in ("adapters", "main", "library_tests", "graphics_tests", "fs_tests", "elf_tests", "bios_tests", "user_tests", "input_tests", "file_abi_provider", "file_abi_consumer", "syscall_tests", "split_tests", "user_address_tests", "argument_tests", "history_tests", "event_queue_tests", "mouse_packet_tests", "path_tests", "text_buffer_tests", "account_tests", "account_store_tests")],
 ]
 
 
@@ -171,6 +171,12 @@ def host(args):
                 read = command(["mtype","-i",env["HACKOS_FAT_RESULT"],"::/TESTS/"+filename])
                 ok = read.returncode==0 and read.stdout==expected
                 detail += "\nIndependent mtype read:\n"+read.stdout
+            if ok and name == "fat_checked_mutations_survive_remount":
+                read = command(["mtype", "-i", env["HACKOS_FAT_RESULT"], "::/WORK/RESULT.TXT"])
+                removed = command(["mdir", "-i", env["HACKOS_FAT_RESULT"], "::/Moved long file.txt"])
+                empty = command(["mtype", "-i", env["HACKOS_FAT_RESULT"], "::/WORK/EMPTY"])
+                ok = read.returncode == 0 and read.stdout == "Saved across a remount\n" and removed.returncode != 0 and empty.returncode == 0 and empty.stdout == ""
+                detail += "\nIndependent mtools mutation checks:\n" + read.stdout + removed.stdout + empty.stdout
             if ok and name=="fat_delete_and_flush":
                 read = command(["mdir","-i",env["HACKOS_FAT_RESULT"],"::/TESTS/HELLO.TXT"])
                 intact = command(["mtype","-i",env["HACKOS_FAT_RESULT"],"::/TESTS/Long file name.txt"])

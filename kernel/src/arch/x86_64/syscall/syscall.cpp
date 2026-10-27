@@ -102,7 +102,7 @@ static uint64_t UserConsole(uint64_t operation)
     {
         clrscr();
     }
-    else
+    else if (operation != 2) // Query foreground ownership without consuming input.
     {
         return HACKOS_ERROR;
     }
@@ -639,10 +639,11 @@ static uint64_t UserStat(const char* name, HackosFileInfo* destination)
     }
     else
     {
-        auto file = filesystems[0]->OpenFile(path);
-        if (!file)
+        ActiveFile* file = nullptr;
+        int status = filesystems[0]->Lookup(path, file);
+        if (status)
         {
-            return HACKOS_ERROR;
+            return status == -2 ? HACKOS_NOT_FOUND : HACKOS_ERROR;
         }
 
         Info(info, file);
@@ -737,6 +738,73 @@ static uint64_t UserChdir(const char* name)
     return 0;
 }
 
+static bool MutationPath(const char* name, char (&path)[256])
+{
+    if (!Path(name, path) || !path[1] || Caller()->authenticationAgent || strcmp(path, (char*)"~/SYSTEM") == 0 ||
+        strncmp(path, (char*)"~/SYSTEM/", 9) == 0)
+    {
+        return false;
+    }
+
+    // Read handles contain a metadata snapshot. Reject mutation while any
+    // process holds the path, including unreaped zombies, instead of making
+    // their cluster/size records stale. Handles are never transferred.
+    for (auto process = ready_queue; process; process = process->next)
+    {
+        for (unsigned i = 0; i < 8; ++i)
+        {
+            if (process->files[i] && strcmp((char*)process->files[i]->GetPath(), path) == 0)
+            {
+                return false;
+            }
+        }
+    }
+
+    return true;
+}
+
+static uint64_t UserFileSave(const char* name, const void* data, uint64_t size, uint64_t flags)
+{
+    char path[256];
+    if (size > HACKOS_FILE_LIMIT || (flags & ~HACKOS_SAVE_CREATE) || !MutationPath(name, path))
+    {
+        return HACKOS_ERROR;
+    }
+
+    // Copy the entire payload before any storage mutation. No userspace heap
+    // or writable handle is needed for this bounded whole-file operation.
+    void* copy = (void*)kmalloc(size ? size : 1);
+    if (!copy)
+    {
+        return HACKOS_ERROR;
+    }
+
+    bool copied = Caller()->userSpace->CopyFromUser(copy, (uint64_t)data, size);
+    int status = copied ? filesystems[0]->SaveFile(path, copy, size, flags & HACKOS_SAVE_CREATE) : -1;
+    kfree(copy);
+    return status ? HACKOS_ERROR : 0;
+}
+
+static uint64_t UserMkdir(const char* name)
+{
+    char path[256];
+    return MutationPath(name, path) && !filesystems[0]->MakeDirectory(path) ? 0 : HACKOS_ERROR;
+}
+
+static uint64_t UserUnlink(const char* name)
+{
+    char path[256];
+    return MutationPath(name, path) && !filesystems[0]->RemoveFile(path) ? 0 : HACKOS_ERROR;
+}
+
+static uint64_t UserRename(const char* source, const char* destination)
+{
+    char from[256], to[256];
+    return MutationPath(source, from) && MutationPath(destination, to) && !filesystems[0]->MoveFile(from, to)
+               ? 0
+               : HACKOS_ERROR;
+}
+
 static uint64_t UserPower(uint64_t operation)
 {
     // Only the boot login agent may offer physical-console power controls
@@ -824,6 +892,18 @@ static void syscall_handler(Registers* r)
         break;
     case HACKOS_SYS_spawn_foreground:
         r->rax = UserSpawnForeground((const char*)r->rdi, r->rsi, (const char* const*)r->rdx);
+        break;
+    case HACKOS_SYS_file_save:
+        r->rax = UserFileSave((const char*)r->rdi, (const void*)r->rsi, r->rdx, r->rcx);
+        break;
+    case HACKOS_SYS_mkdir:
+        r->rax = UserMkdir((const char*)r->rdi);
+        break;
+    case HACKOS_SYS_unlink:
+        r->rax = UserUnlink((const char*)r->rdi);
+        break;
+    case HACKOS_SYS_rename:
+        r->rax = UserRename((const char*)r->rdi, (const char*)r->rsi);
         break;
     case HACKOS_SYS_open:
         r->rax = UserOpen((const char*)r->rdi);

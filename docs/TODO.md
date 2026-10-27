@@ -83,7 +83,7 @@ accounts, authentication and setup are addressed in step 14.
 
 ## Proposed continuation after step 14
 
-Steps 1–14 are complete. The order below is a proposal for future iterations,
+Steps 1–15 are complete. The order below is a proposal for future iterations,
 not authorization to implement them automatically. A fresh chat should read
 `AGENTS.md`, this file, `docs/system/userspace.md`, and the build/testing guides
 before starting. Preserve the root `.clang-format` style, leave vendored code
@@ -92,34 +92,28 @@ alone, and verify both BIOS and UEFI for each implementation step.
 14. **Login and first-boot setup — implemented:** see [accounts and recovery](system/accounts.md)
     for the persistence format, authentication/session contract and limits.
 
-15. **Basic file utilities and a minimal text editor:**
-    package these as standalone ring-3 programs in `/usr/bin`, keeping the shell
-    lightweight. Do not implement them until this iteration is requested.
+15. **Basic file utilities and a minimal text editor — implemented:**
+    Standalone ring-3 programs in `/usr/bin` keep the shell lightweight.
 
-    - `xxd <file>`: print file contents in hexadecimal and binary forms. Read the
-      whole file into memory with a checked size/allocation limit; no streaming
-      or complex buffering is required. Zero-run suppression is optional, not a
-      prerequisite. Keep the command's options minimal.
-    - `mkdir <path>`: create one directory; recursive parent creation is outside
-      this iteration's scope.
-    - `rm <file>`: remove one file; directory removal and recursion are outside
-      this iteration's scope.
-    - `mv <source> <destination>`: rename or move one file. Directory moves and
-      cross-filesystem copying are outside this iteration's scope. Define
-      destination-conflict behavior explicitly and avoid silent data loss.
-    - `edit <file>`: open a very simple text editor with basic text entry and
-      editing, Ctrl+S to save, and Ctrl+X to exit. No extra editor features are
-      requested. Define a bounded file-size policy and report failed saves.
+    - `xxd <file>` loads at most 32 KiB into private storage and displays offset,
+      hexadecimal, binary and ASCII columns.
+    - `mkdir <path>` creates one directory with an existing parent.
+    - `rm <file>` removes one regular file, without recursion.
+    - `mv <source> <destination>` renames/moves one regular file on the first
+      filesystem. The destination must be a new full file path; existing files
+      and directories are never overwritten. Directory moves and copying
+      between filesystems remain unsupported.
+    - `edit <file>` edits at most 32 KiB of ASCII/LF/tab text with arrows,
+      Backspace/Delete, Ctrl+S to save and Ctrl+X to exit without saving.
+      Failed saves keep the buffer and report an error.
 
-    Add only the safe, checked userspace filesystem mutation and keyboard/control
-    input interfaces needed by these programs. Keep handles process-owned,
-    validate user buffers/paths, and report unsupported operations or I/O errors.
-    This necessarily brings basic write/create/delete/rename support forward
-    from the storage backlog; broader persistence hardening remains there.
-    Test the utilities and editor on disposable images under both BIOS and UEFI,
-    including saved contents after reboot, invalid paths, destination conflicts,
-    and Ctrl+S/Ctrl+X returning cleanly to the shell. Preserve the spacing style
-    and keep account/authentication work in its own iteration.
+    The bounded mutation ABI validates paths and user buffers, protects account
+    storage, rejects open/read-only files, and checks writes/flushes. Read handles
+    remain process-owned. BIOS/UEFI disposable-image tests cover invalid paths,
+    conflicts, editor input, exact bytes after reboot, disk errors and cleanup.
+    See [userspace](system/userspace.md), [filesystems](system/filesystems.md) and
+    [testing](development/testing.md). Journaling, interrupted-update recovery,
+    general descriptor writes and filesystem permissions remain in step 16.
 
 16. **Storage and filesystem permissions:** harden checked write/create APIs,
     process-owned handles and access-mode enforcement. Propagate device, FAT32
@@ -131,7 +125,7 @@ alone, and verify both BIOS and UEFI for each implementation step.
     a user heap, remaining runtime helpers and shell completion. Split this into
     smaller iterations as needed.
 
-The remaining subsystem lists below are the broader hardening backlog. Step 15
+The remaining subsystem lists below are the broader hardening backlog. Step 16
 and later work require a new request.
 Step 14 host validation passed 163 checks under UBSan, plus boot-asset and
 BIOS-chain checks. The local translated ASan runtime fails its empty-program
@@ -176,8 +170,9 @@ future changes; prior results are not a substitute.
 ## Storage and filesystems
 
 - [ ] Add a `Device` capacity query and propagate its checked I/O/flush results
-  through all FAT32/VFS operations, including resize/delete. Step 14 checks the
-  narrow preallocated account-storage path; general FAT mutation remains incomplete.
+  through all FAT32/VFS operations, including legacy resize/delete. Step 15
+  checks the bounded user mutation path; crash recovery, general rollback and
+  the older raw VFS interfaces remain incomplete.
 - [ ] Discover partitions from each selected device rather than relying on the
   boot MBR, a fixed device index or an unpartitioned UEFI volume.
 - [ ] Test media faults, full volumes, fragmented files, remounts and dirty
@@ -199,8 +194,9 @@ future changes; prior results are not a substitute.
   foreground waits, with explicit background launches.
 - [x] Add foreground input ownership, safe Ctrl-C termination, and a fixed
   256-command shell history with Up/Down draft navigation.
-- [ ] Add blocking input, process-group/job control, a user heap, file writes and
-  raw-key events to the safe ABI.
+- [x] Add bounded whole-file saves, file/directory creation, file deletion/moves,
+  and editor controls to the safe ABI (step 15).
+- [ ] Add blocking input, process-group/job control, a user heap and raw-key events.
   Port remaining legacy runtime helpers.
 - [x] Add minimize/maximize/restore, a restore bar, and signed mouse-wheel
   events to the owned window API and standalone demo.

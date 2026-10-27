@@ -70,12 +70,19 @@ FAT32::~FAT32()
 
 ActiveFile* FAT32::OpenFile(const char* path)
 {
+    ActiveFile* file = nullptr;
+    Lookup(path, file);
+    return file;
+}
+
+int FAT32::Lookup(const char* path, ActiveFile*& result)
+{
+    result = nullptr;
     DirEntry entry;
     int ret = driver->OpenFile(path, &entry);
-
     if (ret != 0)
     {
-        return nullptr;
+        return ret;
     }
 
     char* ptr = new char[strlen((char*)path) + 1];
@@ -86,7 +93,28 @@ ActiveFile* FAT32::OpenFile(const char* path)
     file->path = ptr;
     file->entry = entry;
 
-    return (ActiveFile*)file;
+    result = file;
+    return 0;
+}
+
+int FAT32::MakeDirectory(const char* path)
+{
+    return driver->MakeDirectory(path);
+}
+
+int FAT32::RemoveFile(const char* path)
+{
+    return driver->RemoveFile(path);
+}
+
+int FAT32::MoveFile(const char* source, const char* destination)
+{
+    return driver->MoveFile(source, destination);
+}
+
+int FAT32::SaveFile(const char* path, const void* data, uint32_t size, bool create)
+{
+    return driver->SaveFile(path, data, size, create);
 }
 
 void FAT32::CloseFile(ActiveFile* file)

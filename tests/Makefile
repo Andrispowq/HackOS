@@ -30,3 +30,7 @@ test-windows:
 .PHONY: test-accounts
 test-accounts:
 	$(PYTHON) qemu_accounts.py --firmware $(FIRMWARE)
+
+.PHONY: test-files
+test-files:
+	$(PYTHON) qemu_files.py --firmware $(FIRMWARE)

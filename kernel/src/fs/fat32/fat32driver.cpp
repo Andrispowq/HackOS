@@ -90,7 +90,7 @@ FAT32Driver::FAT32Driver(Device* device, uint32_t part_start) : device(device), 
     }
 
     BootSector = (FAT32_BootSector*)kmalloc(512);
-    if (!device->Read(PartitionStart, BootSector, 1))
+    if (!BootSector || !device->Read(PartitionStart, BootSector, 1))
     {
         return;
     }
@@ -119,6 +119,11 @@ FAT32Driver::FAT32Driver(Device* device, uint32_t part_start) : device(device), 
     RootDirStart = b.RootDirStart;
     temporaryBuffer = (uint8_t*)kmalloc(ClusterSize);
     FATcache = (uint32_t*)kmalloc((uint64_t)b.SectorsPerFAT32 * 512);
+    if (!temporaryBuffer || !FATcache)
+    {
+        return;
+    }
+
     unsigned active = b.Flags & 0x80 ? b.Flags & 0xf : 0;
     if (!device->Read((uint64_t)PartitionStart + b.ReservedSectors + (uint64_t)active * b.SectorsPerFAT32, FATcache,
                       b.SectorsPerFAT32))
@@ -159,7 +164,7 @@ uint32_t FAT32Driver::ReadFAT(uint32_t cluster) const
 
 void FAT32Driver::WriteFAT(uint32_t cluster, uint32_t value)
 {
-    if (!ValidCluster(cluster))
+    if (ioError || !ValidCluster(cluster))
     {
         return;
     }
@@ -170,7 +175,7 @@ void FAT32Driver::WriteFAT(uint32_t cluster, uint32_t value)
 
 void FAT32Driver::FlushFAT()
 {
-    if (!valid || !dirty)
+    if (!valid || ioError || !dirty)
     {
         return;
     }
@@ -182,9 +187,13 @@ void FAT32Driver::FlushFAT()
             continue;
         }
 
-        device->Write((uint64_t)PartitionStart + BootSector->ReservedSectors +
-                          (uint64_t)i * BootSector->SectorsPerFAT32,
-                      FATcache, BootSector->SectorsPerFAT32);
+        if (!device->Write((uint64_t)PartitionStart + BootSector->ReservedSectors +
+                               (uint64_t)i * BootSector->SectorsPerFAT32,
+                           FATcache, BootSector->SectorsPerFAT32))
+        {
+            ioError = true;
+            return;
+        }
     }
 
     // Allocation changed: invalidate optional cached free-space hints, including the backup.
@@ -192,15 +201,27 @@ void FAT32Driver::FlushFAT()
     if (infoSector && infoSector < BootSector->ReservedSectors)
     {
         FSInfo info;
-        device->Read((uint64_t)PartitionStart + infoSector, &info, 1);
+        if (!device->Read((uint64_t)PartitionStart + infoSector, &info, 1))
+        {
+            ioError = true;
+            return;
+        }
         if (info.LeadSignature == 0x41615252 && info.StructSignature == 0x61417272 && info.TrailSignature == 0xaa550000)
         {
             info.FreeSpace = info.LastWritten = 0xffffffff;
-            device->Write((uint64_t)PartitionStart + infoSector, &info, 1);
+            if (!device->Write((uint64_t)PartitionStart + infoSector, &info, 1))
+            {
+                ioError = true;
+                return;
+            }
             uint32_t backup = BootSector->BackupBootSector;
             if (backup && backup + infoSector < BootSector->ReservedSectors)
             {
-                device->Write((uint64_t)PartitionStart + backup + infoSector, &info, 1);
+                if (!device->Write((uint64_t)PartitionStart + backup + infoSector, &info, 1))
+                {
+                    ioError = true;
+                    return;
+                }
             }
         }
     }
@@ -210,9 +231,10 @@ void FAT32Driver::FlushFAT()
 
 bool FAT32Driver::ReadCluster(uint32_t cluster, void* buffer)
 {
-    if (!ValidCluster(cluster) || !device->Read((uint64_t)PartitionStart + FirstDataSector +
-                                                    (uint64_t)(cluster - 2) * BootSector->SectorsPerCluster,
-                                                buffer, BootSector->SectorsPerCluster))
+    if (ioError || !ValidCluster(cluster) ||
+        !device->Read((uint64_t)PartitionStart + FirstDataSector +
+                          (uint64_t)(cluster - 2) * BootSector->SectorsPerCluster,
+                      buffer, BootSector->SectorsPerCluster))
     {
         ioError = true;
         memset(buffer, 0, ClusterSize);
@@ -224,8 +246,13 @@ bool FAT32Driver::ReadCluster(uint32_t cluster, void* buffer)
 
 void FAT32Driver::WriteCluster(uint32_t cluster, void* buffer)
 {
-    device->Write((uint64_t)PartitionStart + FirstDataSector + (uint64_t)(cluster - 2) * BootSector->SectorsPerCluster,
-                  buffer, BootSector->SectorsPerCluster);
+    if (ioError || !ValidCluster(cluster) ||
+        !device->Write((uint64_t)PartitionStart + FirstDataSector +
+                           (uint64_t)(cluster - 2) * BootSector->SectorsPerCluster,
+                       buffer, BootSector->SectorsPerCluster))
+    {
+        ioError = true;
+    }
 }
 
 vector<uint32_t> FAT32Driver::GetClusterChain(uint32_t start)
@@ -298,7 +325,7 @@ uint32_t FAT32Driver::AllocateClusterChain(uint32_t count)
         --count;
     }
 
-    if (!count)
+    if (!count && !ioError)
     {
         return first;
     }
@@ -320,6 +347,12 @@ vector<DirEntry> FAT32Driver::GetDirectories(uint32_t cluster, uint32_t filter, 
 {
     vector<DirEntry> entries;
     auto chain = GetClusterChain(cluster);
+    if (!chain.size())
+    {
+        ioError = true;
+        return entries;
+    }
+
     char longName[128] = {};
     unsigned expected = 0, count = 0;
     uint8_t checksum = 0;
@@ -327,7 +360,11 @@ vector<DirEntry> FAT32Driver::GetDirectories(uint32_t cluster, uint32_t filter, 
     unsigned perCluster = ClusterSize / sizeof(DirectoryEntry);
     for (size_t c = 0; c < chain.size(); ++c)
     {
-        ReadCluster(chain[c], temporaryBuffer);
+        if (!ReadCluster(chain[c], temporaryBuffer))
+        {
+            return {};
+        }
+
         for (unsigned i = 0; i < perCluster; ++i)
         {
             const auto& raw = ((DirectoryEntry*)temporaryBuffer)[i];
@@ -424,6 +461,11 @@ int FAT32Driver::DirectorySearch(const char* name, uint32_t cluster, DirEntry* e
     }
 
     auto entries = GetDirectories(cluster, 0, false);
+    if (ioError)
+    {
+        return -1;
+    }
+
     for (size_t i = 0; i < entries.size(); ++i)
     {
         if (SameName(entries[i].name, name))
@@ -442,7 +484,7 @@ int FAT32Driver::DirectorySearch(const char* name, uint32_t cluster, DirEntry* e
 
 int FAT32Driver::OpenFile(const char* path, DirEntry* entry)
 {
-    if (!valid || !path || !entry || path[0] != '~' || (path[1] && path[1] != '/'))
+    if (!valid || ioError || !path || !entry || path[0] != '~' || (path[1] && path[1] != '/'))
     {
         return -1;
     }
@@ -510,7 +552,7 @@ int FAT32Driver::OpenFile(const char* path, DirEntry* entry)
 
 int FAT32Driver::UpdateEntry(const DirEntry& entry, bool remove)
 {
-    if (!ValidCluster(entry.parentCluster) || entry.offsetInParentCluster >= ClusterSize / 32)
+    if (ioError || !ValidCluster(entry.parentCluster) || entry.offsetInParentCluster >= ClusterSize / 32)
     {
         return -1;
     }
@@ -525,8 +567,10 @@ int FAT32Driver::UpdateEntry(const DirEntry& entry, bool remove)
             return -1;
         }
 
-        for (uint64_t i = entry.firstDirectoryIndex; i < end; ++i)
+        // Remove the owning short entry first; never free data while it is live.
+        for (uint64_t cursor = end; cursor > entry.firstDirectoryIndex;)
         {
+            uint64_t i = --cursor;
             ReadCluster(chain[i / perCluster], temporaryBuffer);
             temporaryBuffer[(i % perCluster) * 32] = ENTRY_FREE;
             WriteCluster(chain[i / perCluster], temporaryBuffer);
@@ -543,7 +587,7 @@ int FAT32Driver::UpdateEntry(const DirEntry& entry, bool remove)
         WriteCluster(entry.parentCluster, temporaryBuffer);
     }
 
-    return 0;
+    return ioError ? -1 : 0;
 }
 
 int FAT32Driver::DirectoryAdd(uint32_t cluster, DirEntry& file)
@@ -716,6 +760,10 @@ int FAT32Driver::DirectoryAdd(uint32_t cluster, DirEntry& file)
 
         WriteFAT(chain[chain.size() - 1], added);
         chain = GetClusterChain(cluster);
+        if (!Sync())
+        {
+            return -1;
+        }
     }
 
     for (unsigned j = 0; j < needed; ++j)
@@ -771,7 +819,7 @@ int FAT32Driver::DirectoryAdd(uint32_t cluster, DirEntry& file)
     file.directoryCluster = cluster;
     file.firstDirectoryIndex = first;
     file.directoryEntryCount = needed;
-    return 0;
+    return ioError ? -1 : 0;
 }
 
 int FAT32Driver::CreateFile(const char* parentPath, DirEntry* file)
@@ -840,19 +888,23 @@ int FAT32Driver::CreateFile(const char* parentPath, DirEntry* file)
         WriteCluster(file->cluster, temporaryBuffer);
     }
 
+    if (!Sync())
+    {
+        return -1;
+    }
+
     int result = DirectoryAdd(parent.cluster, *file);
     if (result)
     {
         FreeClusterChain(file->cluster);
     }
 
-    FlushFAT();
-    return result;
+    return Sync() ? result : -1;
 }
 
 int FAT32Driver::DeleteFile(DirEntry entry)
 {
-    if (!valid || !entry.parentCluster || (entry.attributes & FILE_READ_ONLY))
+    if (!valid || ioError || !entry.parentCluster || (entry.attributes & FILE_READ_ONLY))
     {
         return -1;
     }
@@ -870,19 +922,18 @@ int FAT32Driver::DeleteFile(DirEntry entry)
         }
     }
 
-    if (UpdateEntry(entry, true))
+    if (UpdateEntry(entry, true) || !Sync())
     {
         return -1;
     }
 
     FreeClusterChain(entry.cluster);
-    FlushFAT();
-    return 0;
+    return Sync() ? 0 : -1;
 }
 
 int FAT32Driver::ReadFile(DirEntry entry, uint64_t offset, void* buffer, uint64_t bytes)
 {
-    if (!valid || (entry.attributes & FILE_DIRECTORY) || (!buffer && bytes))
+    if (!valid || ioError || (entry.attributes & FILE_DIRECTORY) || (!buffer && bytes))
     {
         return -1;
     }
@@ -913,7 +964,11 @@ int FAT32Driver::ReadFile(DirEntry entry, uint64_t offset, void* buffer, uint64_
             count = bytes;
         }
 
-        ReadCluster(chain[offset / ClusterSize], temporaryBuffer);
+        if (!ReadCluster(chain[offset / ClusterSize], temporaryBuffer))
+        {
+            return -1;
+        }
+
         memcpy(dest, temporaryBuffer + within, count);
         dest += count;
         offset += count;
@@ -925,7 +980,7 @@ int FAT32Driver::ReadFile(DirEntry entry, uint64_t offset, void* buffer, uint64_
 
 int FAT32Driver::ResizeFile(DirEntry& entry, uint32_t size)
 {
-    if (!valid || (entry.attributes & (FILE_DIRECTORY | FILE_READ_ONLY)) || !entry.parentCluster)
+    if (!valid || ioError || (entry.attributes & (FILE_DIRECTORY | FILE_READ_ONLY)) || !entry.parentCluster)
     {
         return -1;
     }
@@ -994,7 +1049,7 @@ int FAT32Driver::ResizeFile(DirEntry& entry, uint32_t size)
 
 int FAT32Driver::WriteFile(DirEntry& entry, uint64_t offset, void* buffer, uint64_t bytes)
 {
-    if (!valid || (entry.attributes & (FILE_DIRECTORY | FILE_READ_ONLY)) || (!buffer && bytes))
+    if (!valid || ioError || (entry.attributes & (FILE_DIRECTORY | FILE_READ_ONLY)) || (!buffer && bytes))
     {
         return -1;
     }
@@ -1083,4 +1138,216 @@ bool FAT32Driver::AccountStorage(uint64_t (&sectors)[2][16], Device*& storage)
 
     storage = device;
     return true;
+}
+
+bool FAT32Driver::Sync()
+{
+    FlushFAT();
+    if (!valid || ioError)
+    {
+        return false;
+    }
+
+    if (!device->Flush())
+    {
+        ioError = true;
+        return false;
+    }
+
+    return true;
+}
+
+int FAT32Driver::Destination(const char* path, DirEntry& parent, DirEntry& file)
+{
+    if (!valid || ioError || !path)
+    {
+        return -1;
+    }
+
+    unsigned length = strlen((char*)path), split = length;
+    if (length >= 256)
+    {
+        return -1;
+    }
+
+    while (split && path[split - 1] != '/')
+    {
+        --split;
+    }
+
+    if (split < 2 || split == length || length - split >= sizeof(file.name))
+    {
+        return -1;
+    }
+
+    char directory[256];
+    memcpy(directory, path, split - 1);
+    directory[split - 1] = 0;
+    if (OpenFile(directory, &parent) || !(parent.attributes & FILE_DIRECTORY) || (parent.attributes & FILE_READ_ONLY))
+    {
+        return -1;
+    }
+
+    const char* name = path + split;
+    if (SameName(name, ".") || SameName(name, "..") || name[length - split - 1] == '.' ||
+        name[length - split - 1] == ' ')
+    {
+        return -1;
+    }
+
+    for (unsigned i = 0; name[i]; ++i)
+    {
+        char ch = name[i];
+        if (ch < 32 || ch > 126 || ch == '\\' || ch == ':' || ch == '*' || ch == '?' || ch == '"' || ch == '<' ||
+            ch == '>' || ch == '|')
+        {
+            return -1;
+        }
+    }
+
+    strcpy(file.name, name);
+    return DirectorySearch(name, parent.cluster, nullptr) == FAT32_ERROR_FILE_NOT_FOUND ? 0 : -1;
+}
+
+int FAT32Driver::MakeDirectory(const char* path)
+{
+    DirEntry parent, file;
+    if (Destination(path, parent, file))
+    {
+        return -1;
+    }
+
+    char directory[256];
+    unsigned length = strlen((char*)path) - strlen(file.name) - 1;
+    memcpy(directory, path, length);
+    directory[length] = 0;
+    file.attributes = FILE_DIRECTORY;
+    return CreateFile(directory, &file);
+}
+
+int FAT32Driver::RemoveFile(const char* path)
+{
+    DirEntry file;
+    if (OpenFile(path, &file) || (file.attributes & FILE_DIRECTORY))
+    {
+        return -1;
+    }
+
+    return DeleteFile(file);
+}
+
+int FAT32Driver::MoveFile(const char* source, const char* destination)
+{
+    DirEntry original, parent, moved;
+    if (OpenFile(source, &original) || (original.attributes & (FILE_DIRECTORY | FILE_READ_ONLY)) ||
+        Destination(destination, parent, moved))
+    {
+        return -1;
+    }
+
+    moved.cluster = original.cluster;
+    moved.size = original.size;
+    moved.attributes = original.attributes;
+    if (DirectoryAdd(parent.cluster, moved) || !Sync())
+    {
+        return -1;
+    }
+
+    // The destination is durable before the old name is removed. No data
+    // clusters are freed. A failed I/O freezes further operations until remount.
+    if (UpdateEntry(original, true) || !Sync())
+    {
+        return -1;
+    }
+
+    return 0;
+}
+
+int FAT32Driver::SaveFile(const char* path, const void* data, uint32_t size, bool create)
+{
+    if ((!data && size) || !valid || ioError)
+    {
+        return -1;
+    }
+
+    DirEntry original, parent, replacement;
+    if (create)
+    {
+        if (Destination(path, parent, replacement))
+        {
+            return -1;
+        }
+
+        replacement.attributes = FILE_ARCHIVE;
+    }
+    else
+    {
+        if (OpenFile(path, &original) || (original.attributes & (FILE_DIRECTORY | FILE_READ_ONLY)))
+        {
+            return -1;
+        }
+
+        auto oldChain = GetClusterChain(original.cluster);
+        if ((original.cluster && !oldChain.size()) || (uint64_t)oldChain.size() * ClusterSize < original.size)
+        {
+            return -1;
+        }
+
+        replacement = original;
+    }
+
+    // Build a fresh chain so allocation/data-write failures cannot truncate the
+    // old file. Only publish the new chain after checked data/FAT flushes.
+    replacement.cluster = AllocateClusterChain(((uint64_t)size + ClusterSize - 1) / ClusterSize);
+    if (replacement.cluster == BAD_CLUSTER)
+    {
+        Sync();
+        return -1;
+    }
+
+    replacement.size = size;
+    auto chain = GetClusterChain(replacement.cluster);
+    uint32_t offset = 0;
+    for (unsigned i = 0; i < chain.size(); ++i)
+    {
+        uint32_t count = size - offset;
+        if (count > ClusterSize)
+        {
+            count = ClusterSize;
+        }
+
+        memset(temporaryBuffer, 0, ClusterSize);
+        memcpy(temporaryBuffer, (const uint8_t*)data + offset, count);
+        WriteCluster(chain[i], temporaryBuffer);
+        offset += count;
+    }
+
+    if (offset != size || !Sync())
+    {
+        return -1;
+    }
+
+    int status = create ? DirectoryAdd(parent.cluster, replacement) : UpdateEntry(replacement);
+    if (status && create && !ioError)
+    {
+        // A clean directory-capacity failure happened before publication.
+        // Return the staged data chain so repeated failed saves cannot fill it.
+        FreeClusterChain(replacement.cluster);
+        Sync();
+        return -1;
+    }
+
+    if (status || !Sync())
+    {
+        // The device may have accepted part of the metadata write. Retain the
+        // chain rather than freeing storage that might now be referenced.
+        return -1;
+    }
+
+    if (!create)
+    {
+        FreeClusterChain(original.cluster);
+    }
+
+    return Sync() ? 0 : -1;
 }

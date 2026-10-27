@@ -80,6 +80,11 @@ Console rendering and hardware operations remain kernel services.
 | `ps [aux]`, `kill <pid>` | List tasks or stop a user program; idle, login and session shell are protected |
 | `ls [-la] [path]`, `wd`, `cd <path>` | Browse the first filesystem; `~` denotes its root |
 | `cat <path>`, `read <path>` | Read a complete file in bounded chunks; close its owned handle on completion |
+| `xxd <file>` | Load at most 32 KiB and print offsets, hex, binary and ASCII columns |
+| `mkdir <path>` | Create one directory with an existing parent |
+| `rm <file>` | Remove one regular file; no directories or recursion |
+| `mv <source> <destination>` | Move/rename one regular file; destination must be a new full file path on the same volume |
+| `edit <file>` | Edit at most 32 KiB of ASCII/LF/tab text; Ctrl+S saves, Ctrl+X exits without saving |
 | `<name> [args]`, `./<program> [args]`, `user <path> [args]` | Launch an isolated foreground program and wait; append a separate `&` for background execution |
 | `id`, `whoami` | Show the process credentials or username |
 | `users`, `groups` | List the persistent account/group registry |
@@ -216,10 +221,10 @@ to the protected login agent and ends all descendants, including background
 programs launched under another UID. A manually launched nested shell can exit
 to its parent; only the authenticated session shell owns session teardown.
 
-Filesystem access remains read-only through the user ABI and has no UID/GID or
-mode metadata. FAT attributes are not Unix file permissions. No filesystem
-ownership or general file-write authorization is claimed. The two account files
-are reserved kernel storage and cannot be opened through the user ABI.
+Filesystem access has no UID/GID or mode metadata. FAT attributes are not Unix
+file permissions. Ordinary users can modify files using the bounded step-15
+interfaces below; read-only files and open paths are rejected. The two account
+files remain kernel-only, and all mutations under `/SYSTEM` are rejected.
 
 ## Syscall ABI
 
@@ -235,7 +240,7 @@ return an error rather than being reinterpreted as new operations.
 | 0 | `exit(status)` | Does not return; libc uses it when `main` returns |
 | 14 | `user_write(buffer, length)` | Literal console bytes, maximum 1024; returns count |
 | 15 | `input()` | Character/event, 0 if empty, 256 for queue overflow; terminal owner only |
-| 16 | `console(operation)` | 0 backspace, 1 clear; terminal owner only |
+| 16 | `console(operation)` | 0 backspace, 1 clear, 2 query ownership without consuming input; terminal owner only |
 | 17 | `clock(out)` | Copies ticks and RTC fields; RTC retains existing BCD representation |
 | 18 | `process_info(index, out)` | Copies one process record; 1 found, 0 end |
 | 19 | `kill(pid)` | Stops another user task owned by the same UID, or any user task as root; idle/login/session shell/self protected |
@@ -243,7 +248,7 @@ return an error rather than being reinterpreted as new operations.
 | 21 | `open(path)` | Returns an opaque read-only file handle |
 | 22 | `read(handle, out, length)` | At most 512 bytes; returns bytes read, 0 at EOF |
 | 23 | `close(handle)` | Closes a handle owned by the caller |
-| 24 | `stat(path, out)` | Copies file size, attributes and name |
+| 24 | `stat(path, out)` | Copies file size, attributes and name; `HACKOS_NOT_FOUND` for a missing component |
 | 25 | `readdir(path, index, out)` | Copies one directory entry; 1 found, 0 end |
 | 26 | `power(operation)` | 0 ACPI shutdown, 1 restart; UID 0 or boot login agent owning the logged-out terminal |
 | 27 | `yield()` | Gives another runnable task a scheduling opportunity |
@@ -270,6 +275,10 @@ return an error rather than being reinterpreted as new operations.
 | 48 | `auth_setup(name, password)` | Boot login agent with terminal ownership only; save initial administrator to an empty store |
 | 49 | `auth_login(name, password)` | Boot login agent with terminal ownership only; verify and create a shell session, returning its PID |
 | 50 | `password_set(uid, password)` | Root sets a registered account password and commits the store; 0 on success |
+| 51 | `file_save(path, data, size, flags)` | Replace an existing file, or exclusively create with flag 1; at most 32768 bytes; checked flush before success |
+| 52 | `mkdir(path)` | Create one directory; existing destinations/missing parents fail |
+| 53 | `unlink(path)` | Remove a regular file only |
+| 54 | `rename(source, destination)` | Move a regular file to a new full path on the first filesystem; never overwrite |
 
 Calls use `int 0x80`: RAX is the number, RDI/RSI/RDX/RCX/R8 hold arguments,
 and saved RAX receives the result. Successful operations without another result
@@ -277,7 +286,8 @@ return zero. `HACKOS_ERROR` (`UINT64_MAX`) denotes failure;
 `HACKOS_DENIED` (`UINT64_MAX-1`) denotes insufficient permission.
 `HACKOS_RETRY` (`UINT64_MAX-2`) asks the login agent to yield until the retry
 deadline; `HACKOS_NO_ENTROPY` (`UINT64_MAX-3`) rejects password creation when
-RDRAND is unavailable or repeatedly fails. Unknown and
+RDRAND is unavailable or repeatedly fails. `HACKOS_NOT_FOUND` (`UINT64_MAX-4`)
+is returned by `stat` when a component is missing. Unknown and
 retired calls return `HACKOS_ERROR`. The fast `syscall` instruction remains
 disabled; vector `0x81` remains kernel-only.
 
@@ -294,14 +304,40 @@ Paths are NUL-terminated within 256 bytes; normalization accepts `/`, `~` or
 a path relative to the caller's working directory. Copy-in validates mapped user pages; copy-out
 also requires writable pages and validates the whole range before touching it.
 Read validates the destination before advancing a file offset. Input events
-include `HACKOS_KEY_UP` (128), `HACKOS_KEY_DOWN` (129), and
-`HACKOS_KEY_INTERRUPT` (3, protected shell/login prompt). No syscall
+include Up/Down (128/129), Left/Right (130/131), Delete (132), Ctrl+S (19),
+Ctrl+X (24), and `HACKOS_KEY_INTERRUPT` (3, protected shell/login prompt).
+Both Ctrl keys produce the editor controls regardless of Shift/Caps Lock;
+release events are not delivered. No syscall
 returns kernel addresses, virtual objects, format strings or `va_list` objects.
 
 Each process can own eight file handles. Monotonically allocated opaque tokens
 are checked against the caller's live slots; closed, stale and foreign tokens
-are rejected. Exit, fault and kill close all outstanding handles. This version
-has no user file-write API; windows use the owned API described below.
+are rejected. Exit, fault and kill close all outstanding handles. Read handles
+remain read-only. Path-based mutation rejects any path with a live read handle
+in any process, including unreaped zombies. Dispatcher serialization protects
+this check and the operation; it does not yield inside its preemption guard.
+
+`file_save` copies the entire user buffer before touching storage, rejects unknown
+flags and oversize data, and checks allocation failure. Flag 0 requires an
+existing regular file; flag 1 requires an absent destination. Empty saves are
+supported. Invalid buffers, protected paths, read-only/open files, unsupported
+operations, allocation failures and I/O errors return `HACKOS_ERROR`. There is
+no cross-filesystem syntax, writable descriptor, append or general seek API.
+
+The editor and `xxd` reserve a 32 KiB private BSS buffer, check the file size,
+read it completely using owned handles, and close before modifying it. The
+editor rejects non-ASCII/binary contents (including CRLF), accepts LF and tabs,
+and starts at the beginning of the file. Arrows, Backspace, Delete, Enter and
+printable characters edit the buffer. A 72-column, 20-row viewport follows the
+cursor, shown as `|`; tabs display as `>` while retaining their byte. Ctrl+S
+saves even an empty new file and clears the modified marker only on success.
+A failed save keeps the buffer and shows an error. Ctrl+X always exits; it does
+not save or prompt, and reports discarded changes. Ctrl-C retains normal
+foreground termination. Background editors fail without consuming terminal
+input. Input overflow is reported so the user can inspect the buffer.
+
+These operations are synchronous and bounded but do not add journaling or
+Unix permissions. See [filesystem persistence limits](filesystems.md).
 
 ## Runtime and tests
 

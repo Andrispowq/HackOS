@@ -37,7 +37,8 @@ int main()
     ok = syscall_power(1) == HACKOS_DENIED && ok;
     ok = syscall_input() == 0 && ok;
     ok = syscall_spawn_foreground("~/USR/BIN/TEST", 0, nullptr) == HACKOS_ERROR && ok;
-    ok = syscall_console(2) == HACKOS_ERROR && ok;
+    ok = syscall_console(2) == 0 && ok;
+    ok = syscall_console(3) == HACKOS_ERROR && ok;
     ok = syscall_kill(2) == HACKOS_DENIED && ok;
     ok = syscall_clock((HackosClock*)0x100000) == HACKOS_ERROR && ok;
     ok = syscall_clock((HackosClock*)0x400000000000) == HACKOS_ERROR && ok;

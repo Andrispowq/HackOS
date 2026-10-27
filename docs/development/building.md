@@ -30,7 +30,10 @@ background. Try `input` for interactive text input; Ctrl-C returns to
 the shell. Up/Down browses the fixed 256-command history, and `history` lists it.
 Bare commands resolve in `/usr/bin`; only `cd`, `history` and `logout` stay in the shell.
 The command suite is built from `libs/commands` and packaged as separate ELF
-programs. The initial administrator has UID 0 regardless of its chosen name. Try `id`,
+programs. Step 15 adds `xxd`, `mkdir`, `rm`, `mv` and `edit`. Try `mkdir /notes`
+and `edit /notes/hello.txt`; Ctrl+S saves and Ctrl+X exits without saving. The
+editor accepts ASCII/LF/tab text up to 32 KiB. `mv` refuses existing destinations.
+Guest file changes persist across normal runs, but rebuilds preserve only accounts. The initial administrator has UID 0 regardless of its chosen name. Try `id`,
 `users`, `groups`, `groupadd staff`, `useradd alice staff`, `passwd alice`, and
 `runas alice id`. `logout` ends the whole session and returns to login. New users
 and the built-in `guest` stay locked until root sets their password. Account

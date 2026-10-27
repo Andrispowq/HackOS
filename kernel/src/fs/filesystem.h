@@ -64,6 +64,34 @@ class Filesystem
     virtual ActiveFile* OpenFile(const char* path) = 0;
     virtual void CloseFile(ActiveFile* file) = 0;
 
+    // Checked operations used by the isolated user ABI. -2 means missing;
+    // all other nonzero results are errors. Unsupported filesystems fail closed.
+    virtual int Lookup(const char* path, ActiveFile*& file)
+    {
+        file = OpenFile(path);
+        return file ? 0 : -1;
+    }
+
+    virtual int MakeDirectory(const char* path)
+    {
+        return -1;
+    }
+
+    virtual int RemoveFile(const char* path)
+    {
+        return -1;
+    }
+
+    virtual int MoveFile(const char* source, const char* destination)
+    {
+        return -1;
+    }
+
+    virtual int SaveFile(const char* path, const void* data, uint32_t size, bool create)
+    {
+        return -1;
+    }
+
     virtual ActiveFile* CreateFile(const char* path, const char* name, permissions_t permissions) = 0;
     virtual void ResizeFile(ActiveFile* file, size_t newSize) = 0;
     virtual void DeleteFile(ActiveFile* file) = 0;
