@@ -6,6 +6,41 @@ The build and regression tests provide a base for the next changes. Memory
 ownership, storage failures and the userspace boundary take priority over adding
 more devices.
 
+## Follow-up plan recorded during step 8 (not implemented in this iteration)
+
+These are queued work, separate from step 8's minimise/maximise/restore and
+wheel support. Preserve this order for investigation; authentication and setup
+also depend on persistent user storage and credential handling.
+
+1. **Slow drawing:** measure repaint/upload/composition time and frame copies,
+   compare BIOS/UEFI under the same emulator settings, and distinguish guest
+   rendering cost from TCG/emulator cost before choosing optimizations.
+2. **Black client at larger sizes:** reproduce the reported loss of colours;
+   capture dimensions, resize notifications and blit results, then trace client
+   repaint and backing-buffer lifetime. Keep this as an unresolved report;
+   adding maximize support is not a claim that this existing bug is fixed.
+3. **Shell command/argument separation:** first tokenize built-ins into a command
+   name plus arguments, preserving quotes/escapes. Dispatch `ps aux` to `ps` with
+   `aux`, so `ps` validates/responds to its arguments rather than the shell
+   reporting an unknown whole line. Test empty/quoted/invalid arguments. In a
+   later migration, turn commands into programs launched from `/usr/bin` using
+   the existing argument and foreground-wait ABI.
+4. **Users, groups, permissions and login:** define stable user/group IDs,
+   process credential ownership/inheritance, and kernel-side privilege checks
+   (including root-only shutdown/restart). Add persistent account/group storage,
+   salted password verification with an appropriate password KDF and entropy,
+   and a login/session lifecycle that starts the shell only after authentication.
+   Replace boot-shell identity as the privilege model; do not trust shell-only
+   checks. Plan logout, failed logins, credential isolation and storage failure
+   tests before implementation.
+5. **First-boot setup wizard:** after the account/credential foundation exists,
+   detect an empty account store and run a CLI wizard to create the initial
+   privileged account with a chosen username and confirmed password. Persist it
+   safely, reject empty/invalid credentials, and avoid plaintext password storage.
+   Subsequent boots must enter login, not repeat setup or start an anonymous
+   shell. Define recovery for interrupted setup or corrupt account storage, and
+   verify first boot, reboot, failed login and successful login on BIOS/UEFI.
+
 ## Boot and memory
 
 - [ ] Share boot-information declarations and add layout assertions across both
@@ -51,8 +86,10 @@ more devices.
 - [x] Add foreground input ownership, safe Ctrl-C termination, and a fixed
   256-command shell history with Up/Down draft navigation.
 - [ ] Add blocking input, process-group/job control, a user heap, file writes and
-  window maximise/minimise and wheel/raw-key events to the safe ABI.
+  raw-key events to the safe ABI.
   Port remaining legacy runtime helpers.
+- [x] Add minimize/maximize/restore, a restore bar, and signed mouse-wheel
+  events to the owned window API and standalone demo.
 - [x] Add bounded window dragging/resizing, focus/z-order, per-window input
   events and overflow recovery.
 - [x] Port the old window test to `USR/BIN/WINDOW` using process-owned handles,

@@ -22,6 +22,7 @@ struct MouseState
     int32_t x, y;
     uint32_t buttons;
     uint32_t key; // zero for mouse packets
+    int32_t wheel;
 };
 
 // 0 empty, 1 packet, 2 overflow with the latest state.

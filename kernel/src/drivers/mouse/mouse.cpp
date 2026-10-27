@@ -1,4 +1,5 @@
 #include "mouse.h"
+#include "packet.h"
 #include "arch/x86_64/interrupts/guard.h"
 #include "hackos/runtime/event_queue.h"
 #include "hackos/abi.h"
@@ -71,9 +72,8 @@ uint8_t MouseRead()
     return __inb(0x60);
 }
 
-static uint8_t MouseCycle = 0;
-static uint8_t MousePacket[4];
-static uint8_t MousePacketReady = 0;
+static MousePacketDecoder decoder;
+static uint8_t mouseDevice;
 static int MousePositionX, MousePositionY;
 
 static uint32_t Width, Height;
@@ -83,10 +83,7 @@ static bool interruptPending;
 
 static void ProcessMousePacket()
 {
-    if (!MousePacketReady)
-    {
-        return;
-    }
+    auto& MousePacket = decoder.bytes;
 
     uint8_t xNeg = MousePacket[0] & PS2XSign;
     uint8_t yNeg = MousePacket[0] & PS2YSign;
@@ -165,41 +162,41 @@ static void ProcessMousePacket()
         buttons &= ~(0x1 << 2);
     }
 
-    mouseEvents.Push({MousePositionX, MousePositionY, buttons, 0});
-
-    MousePacketReady = false;
+    mouseEvents.Push({MousePositionX, MousePositionY, buttons, 0, decoder.Wheel()});
 }
 
-static void mouse_callback(Registers* regs)
+static void mouse_callback(Registers*)
 {
-    uint8_t status = __inb(0x60);
+    if (decoder.Push(__inb(0x60))) ProcessMousePacket();
+}
 
-    static uint8_t skip = 1;
-    if (skip) 
-    { 
-        skip = 0; 
-        return; 
-    }
-
-    switch(MouseCycle)
+static bool MouseReply(uint8_t& value)
+{
+    for (unsigned i = 0; i < 100000; i++)
     {
-    case 0:           
-        if ((status & 0b00001000) == 0) 
-            break;
-        MousePacket[0] = status;
-        MouseCycle++;
-        break;
-    case 1:           
-        MousePacket[1] = status;
-        MouseCycle++;
-        break;
-    case 2:            
-        MousePacket[2] = status;
-        MousePacketReady = 1;
-        MouseCycle = 0;
-        ProcessMousePacket();
-        break;
+        uint8_t status = __inb(0x64);
+        if ((status & 0x21) == 0x21)
+        {
+            value = __inb(0x60);
+            return true;
+        }
     }
+
+    return false;
+}
+
+static bool MouseCommand(uint8_t value)
+{
+    for (unsigned attempt = 0; attempt < 3; attempt++)
+    {
+        MouseWrite(value);
+        uint8_t reply;
+        if (!MouseReply(reply)) return false;
+        if (reply == 0xfa) return true;
+        if (reply != 0xfe) return false;
+    }
+
+    return false;
 }
 
 void InitialiseMouse(uint32_t width, uint32_t height) 
@@ -221,11 +218,38 @@ void InitialiseMouse(uint32_t width, uint32_t height)
     MouseWait();
     __outb(0x60, status); // setting the correct bit is the "compaq" status byte
 
-    MouseWrite(0xF6);
-    MouseRead();
+    MouseCommand(0xf6);
+    bool negotiated = true;
+    const uint8_t rates[] = {200, 100, 80};
+    for (auto rate : rates)
+    {
+        if (!MouseCommand(0xf3) || !MouseCommand(rate))
+        {
+            negotiated = false;
+            break;
+        }
+    }
 
-    MouseWrite(0xF4);
-    MouseRead();
+    uint8_t device = 0;
+    if (negotiated && MouseCommand(0xf2) && MouseReply(device) && device == 3)
+    {
+        mouseDevice = 3;
+    }
+    else
+    {
+        // Reset restores the baseline three-byte protocol after a failed probe.
+        if (MouseCommand(0xff))
+        {
+            uint8_t reply;
+            MouseReply(reply);
+            MouseReply(reply);
+        }
+
+        mouseDevice = 0;
+    }
+
+    decoder.Configure(mouseDevice);
+    MouseCommand(0xf4);
 
     RegisterInterruptHandler(IRQ12, mouse_callback);
 }
@@ -255,7 +279,7 @@ unsigned ReadMouse(MouseState& state)
     InterruptGuard guard;
     if (mouseEvents.TakeOverflow())
     {
-        state = {MousePositionX, MousePositionY, buttons, 0};
+        state = {MousePositionX, MousePositionY, buttons, 0, 0};
         return 2;
     }
 
@@ -270,7 +294,7 @@ unsigned ReadMouse(MouseState& state)
     if (interruptPending)
     {
         interruptPending = false;
-        state = {0, 0, 0, HACKOS_KEY_INTERRUPT};
+        state = {0, 0, 0, HACKOS_KEY_INTERRUPT, 0};
         return 1;
     }
 
@@ -288,7 +312,7 @@ void QueueKey(uint32_t key)
     InterruptGuard guard;
     if (key == HACKOS_KEY_INTERRUPT) interruptPending = true;
 
-    mouseEvents.Push({0, 0, 0, key});
+    mouseEvents.Push({0, 0, 0, key, 0});
 }
 
 void DiscardQueuedKeys()

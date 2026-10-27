@@ -21,6 +21,9 @@ public:
     void SendEvent(uint32_t type, uint32_t key = 0);
     bool ReadEvent(HackosWindowEvent& event);
     void InputOverflow();
+    uint32_t Mode() const;
+    void SaveNormalGeometry();
+    void RestoreNormalGeometry();
     void Draw(Framebuffer* framebuffer);
 
     //Getters
@@ -67,6 +70,7 @@ public:
     void SetCursorGrabbed(bool cursor_grabbed) { this->cursor_grabbed = cursor_grabbed; }
 
 private:
+    uint32_t normalX = 0, normalY = 0, normalWidth = 0, normalHeight = 0;
     uint64_t owner = 0;
     bool focused = false;
     int32_t mouseX = 0, mouseY = 0;

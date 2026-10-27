@@ -14,3 +14,4 @@ extern uint64_t user_windows_live;
 
 uint64_t UserWindowState(uint64_t handle, HackosWindowState* destination);
 uint64_t UserWindowEvent(uint64_t handle, HackosWindowEvent* destination);
+uint64_t UserWindowMode(uint64_t handle, uint64_t operation);

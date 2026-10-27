@@ -6,42 +6,51 @@ static bool Paint(uint64_t window, uint32_t accent, int32_t mouseX, int32_t mous
     if (syscall_window_state(window, &state) != 0) return false;
 
     uint32_t pixels[1024];
-    uint32_t stripHeight = 1024 / state.width;
+    uint32_t tileWidth = state.width < 1024 ? state.width : 1024;
+    uint32_t stripHeight = 1024 / tileWidth;
     for (uint32_t firstY = 0; firstY < state.height; firstY += stripHeight)
     {
         uint32_t height = state.height - firstY;
         if (height > stripHeight) height = stripHeight;
 
-        for (uint32_t row = 0; row < height; row++)
+        for (uint32_t firstX = 0; firstX < state.width; firstX += tileWidth)
         {
-            uint32_t y = firstY + row;
-            for (uint32_t x = 0; x < state.width; x++)
+            uint32_t width = state.width - firstX;
+            if (width > tileWidth) width = tileWidth;
+
+            for (uint32_t row = 0; row < height; row++)
             {
-                uint32_t colour = 0xff000000 | (x * 255 / state.width) << 16 | (y * 255 / state.height) << 8 | 0x60;
-                if (x >= 10 && x < 30 && y >= 10 && y < 30)
+                uint32_t y = firstY + row;
+                for (uint32_t column = 0; column < width; column++)
                 {
-                    colour = accent;
-                }
+                    uint32_t x = firstX + column;
+                    uint32_t colour = 0xff000000 | (x * 255 / state.width) << 16 | (y * 255 / state.height) << 8 | 0x60;
+                    if (x >= 10 && x < 30 && y >= 10 && y < 30)
+                    {
+                        colour = accent;
+                    }
 
-                if ((int32_t)x >= mouseX - 2 && (int32_t)x <= mouseX + 2 &&
-                    (int32_t)y >= mouseY - 2 && (int32_t)y <= mouseY + 2)
-                {
-                    colour = 0xffffffff;
-                }
+                    if ((int32_t)x >= mouseX - 2 && (int32_t)x <= mouseX + 2 &&
+                        (int32_t)y >= mouseY - 2 && (int32_t)y <= mouseY + 2)
+                    {
+                        colour = 0xffffffff;
+                    }
 
-                pixels[row * state.width + x] = colour;
+                    pixels[row * width + column] = colour;
+                }
             }
-        }
 
-        HackosWindowRect rect = {0, firstY, state.width, height};
-        // Geometry may change between uploads. Retry from a fresh snapshot.
-        if (syscall_window_blit(window, &rect, pixels) != 0) return false;
+            HackosWindowRect rect = {firstX, firstY, width, height};
+            // Maximize can exceed one upload's width. Tile both dimensions,
+            // and retry from a fresh snapshot if geometry changes mid-paint.
+            if (syscall_window_blit(window, &rect, pixels) != 0) return false;
+        }
     }
 
     return true;
 }
 
-static void Log(const char* label, uint64_t first, uint64_t second)
+static void Log(const char* label, int64_t first, uint64_t second)
 {
     char line[80];
     unsigned length = 0;
@@ -51,7 +60,10 @@ static void Log(const char* label, uint64_t first, uint64_t second)
         length++;
     }
 
-    uint64_t values[] = {first, second};
+    if (first < 0) line[length++] = '-';
+
+    uint64_t magnitude = first < 0 ? 0 - (uint64_t)first : (uint64_t)first;
+    uint64_t values[] = {magnitude, second};
     for (auto value : values)
     {
         char digits[21];
@@ -91,9 +103,10 @@ int main(int argc, char** argv)
     }
 
     uint32_t accent = 0xffff00ff;
+    int32_t scroll = 0;
     int32_t mouseX = -10, mouseY = -10;
     bool repaint = !Paint(window, accent, mouseX, mouseY);
-    User::Print("Window demo ready. Drag title, resize bottom-right, click to focus. Type to recolour, click to mark, Q to close.\n");
+    User::Print("Window demo ready. Drag title, resize bottom-right, click to focus. Wheel to recolour; M minimizes, F maximizes/restores, R restores, Q closes.\n");
 
     while (syscall_window_poll(window) == 0)
     {
@@ -106,6 +119,21 @@ int main(int argc, char** argv)
             if (event.type == HACKOS_WINDOW_KEY)
             {
                 if (event.key == 'q' || event.key == 'Q') break;
+
+                if (event.key == 'm' || event.key == 'f' || event.key == 'r')
+                {
+                    uint64_t mode = syscall_window_mode(window, HACKOS_WINDOW_QUERY);
+                    uint64_t operation = HACKOS_WINDOW_RESTORE;
+                    if (event.key == 'm') operation = HACKOS_WINDOW_MINIMIZE;
+                    if (event.key == 'f' && !(mode & HACKOS_WINDOW_MAXIMIZED)) operation = HACKOS_WINDOW_MAXIMIZE;
+
+                    if (syscall_window_mode(window, operation) == HACKOS_ERROR)
+                    {
+                        User::Print("Window mode request rejected.\n");
+                    }
+
+                    continue;
+                }
 
                 accent = 0xff000000 | (event.key * 0x12345 & 0xffffff);
                 Log("WINDOW_KEY ", event.key, 0);
@@ -120,6 +148,22 @@ int main(int argc, char** argv)
                     Log("WINDOW_MOUSE ", (uint32_t)mouseX, (uint32_t)mouseY);
                     repaint = true;
                 }
+            }
+            else if (event.type == HACKOS_WINDOW_WHEEL)
+            {
+                int32_t delta = (int32_t)event.key;
+                scroll += delta;
+                if (scroll < -255) scroll = -255;
+                if (scroll > 255) scroll = 255;
+
+                accent = 0xff000000 | ((uint32_t)(scroll + 255) * 0x12345 & 0xffffff);
+                Log("WINDOW_WHEEL ", delta, 0);
+                repaint = true;
+            }
+            else if (event.type == HACKOS_WINDOW_MODE)
+            {
+                Log("WINDOW_MODE ", event.key, 0);
+                if (!(event.key & HACKOS_WINDOW_MINIMIZED)) repaint = true;
             }
             else if (event.type == HACKOS_WINDOW_RESIZE)
             {
@@ -145,7 +189,7 @@ int main(int argc, char** argv)
                 repaint = true;
             }
         }
-        else if (repaint)
+        else if (repaint && !(syscall_window_mode(window, HACKOS_WINDOW_QUERY) & HACKOS_WINDOW_MINIMIZED))
         {
             repaint = !Paint(window, accent, mouseX, mouseY);
             if (!repaint)

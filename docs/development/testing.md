@@ -289,3 +289,16 @@ independent owners, key isolation, a background Ctrl-C, and full event-queue
 recovery. GDB checks geometry, focus, pixel changes, queue bounds and complete
 resource reclamation. `interactive.ppm` captures the resized, painted demo.
 Host tests cover queue FIFO/wrap/overflow/reset and the new 32-byte ABI records.
+
+The suite also verifies title-bar maximize/minimize, bottom-bar restore, saved
+normal geometry, minimized focus fallback, signed PS/2 wheel steps and routing
+to an unfocused hovered owner without stealing focus. `maximized.ppm`,
+`minimized.ppm` and `normal-restored.ppm` capture those states. Pixel assertions
+check the far side of the maximized client; guest probes reject invalid/foreign/
+stale mode calls and exercise minimized-owner exit, fault and kill cleanup.
+Host tests exercise the three-byte fallback and four-byte wheel decoder.
+
+Full-screen demo repaint milestones allow at least 300 seconds under TCG; other
+milestones retain the normal timeout. The current compositor can take over a
+minute to finish a maximized repaint. This is recorded as deferred performance
+work in TODO, not treated as a rendering speed guarantee.

@@ -108,10 +108,14 @@ void Window::Draw(Framebuffer* framebuffer)
     framebuffer->DrawRect(startX, startY, sizeX, navbar_height - 1, colour);
     framebuffer->DrawRect((startX + sizeX) - 25, startY + 5, 20, 20, 0xFFFF0000);
     putchar_at_xy(*framebuffer, 'X', (startX + sizeX) - 19, startY + 7);
+    framebuffer->DrawRect(startX + sizeX - 49, startY + 5, 20, 20, borderColour);
+    putchar_at_xy(*framebuffer, maximised ? 'R' : '+', startX + sizeX - 43, startY + 7);
+    framebuffer->DrawRect(startX + sizeX - 73, startY + 5, 20, 20, borderColour);
+    putchar_at_xy(*framebuffer, '-', startX + sizeX - 67, startY + 7);
 
     int index = 0;
     char c = 0;
-    while((c = title[index]) != 0 && 10 + (index + 1) * mainConsole.char_width < sizeX - 30)
+    while((c = title[index]) != 0 && 10 + (index + 1) * mainConsole.char_width < sizeX - 78)
     {
         putchar_at_xy(*framebuffer, c, (x + index * mainConsole.char_width), y);
         index++;
@@ -126,7 +130,10 @@ void Window::Draw(Framebuffer* framebuffer)
         }
     }
 
-    framebuffer->DrawRect(startX + sizeX - 8, startY + sizeY - 8, 8, 8, borderColour);
+    if (!maximised)
+    {
+        framebuffer->DrawRect(startX + sizeX - 8, startY + sizeY - 8, 8, 8, borderColour);
+    }
 
     mainConsole.fontColour = old_colour;
 }
@@ -172,4 +179,23 @@ void Window::SetTitle(const char* title)
     {
         strcpy(this->title, title);
     }
+}
+
+uint32_t Window::Mode() const
+{
+    return (minimised ? HACKOS_WINDOW_MINIMIZED : 0) | (maximised ? HACKOS_WINDOW_MAXIMIZED : 0);
+}
+
+void Window::SaveNormalGeometry()
+{
+    normalX = startX;
+    normalY = startY;
+    normalWidth = sizeX;
+    normalHeight = sizeY;
+}
+
+void Window::RestoreNormalGeometry()
+{
+    MoveWindow(normalX, normalY);
+    ResizeWindow(normalWidth, normalHeight);
 }

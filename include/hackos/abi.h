@@ -60,3 +60,12 @@ struct HackosWindowEvent
 
 static_assert(sizeof(HackosWindowState) == 32, "window state ABI");
 static_assert(sizeof(HackosWindowEvent) == 32, "window event ABI");
+
+constexpr uint32_t HACKOS_WINDOW_MODE = 7;
+constexpr uint32_t HACKOS_WINDOW_WHEEL = 8;
+constexpr uint32_t HACKOS_WINDOW_MINIMIZED = 1;
+constexpr uint32_t HACKOS_WINDOW_MAXIMIZED = 2;
+constexpr uint64_t HACKOS_WINDOW_QUERY = 0;
+constexpr uint64_t HACKOS_WINDOW_MINIMIZE = 1;
+constexpr uint64_t HACKOS_WINDOW_MAXIMIZE = 2;
+constexpr uint64_t HACKOS_WINDOW_RESTORE = 3;

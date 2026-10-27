@@ -243,6 +243,9 @@ static void syscall_handler(Registers* r)
     case HACKOS_SYS_stat: r->rax = UserStat((const char*)r->rdi, (HackosFileInfo*)r->rsi); break;
     case HACKOS_SYS_readdir: r->rax = UserReadDir((const char*)r->rdi, r->rsi, (HackosFileInfo*)r->rdx); break;
     case HACKOS_SYS_power: r->rax = UserPower(r->rdi); break;
+    case HACKOS_SYS_window_mode:
+        r->rax = UserWindowMode(r->rdi, r->rsi);
+        break;
     case HACKOS_SYS_window_state:
         r->rax = UserWindowState(r->rdi, (HackosWindowState*)r->rsi);
         break;

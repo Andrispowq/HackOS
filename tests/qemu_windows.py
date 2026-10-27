@@ -49,8 +49,8 @@ def test(firmware, timeout):
                 process = subprocess.Popen(args, stdout=log, stderr=subprocess.STDOUT)
                 qmp = None
                 try:
-                    def wait_for(predicate, description):
-                        deadline = time.monotonic() + timeout
+                    def wait_for(predicate, description, allowance=None):
+                        deadline = time.monotonic() + (timeout if allowance is None else allowance)
                         while time.monotonic() < deadline:
                             if process.poll() is not None:
                                 raise AssertionError("QEMU exited before " + description)
@@ -61,8 +61,8 @@ def test(firmware, timeout):
                             time.sleep(0.05)
                         raise AssertionError("Timed out waiting for " + description + "; see console.log")
                     def output(): return console.read_text(errors="replace")
-                    def wait_text(text, offset=0):
-                        wait_for(lambda: text in output()[offset:], repr(text))
+                    def wait_text(text, offset=0, allowance=None):
+                        wait_for(lambda: text in output()[offset:], repr(text), allowance)
                     wait_for(qmp_path.exists, "QMP socket")
                     qmp = QMP(qmp_path)
                     wait_text("root@root:~$ ")
@@ -138,6 +138,17 @@ back = display["backbuffer"]
                         button(True)
                         button(False)
 
+                    def wheel(direction):
+                        for down in (True, False):
+                            qmp.call("input-send-event", {"events": [
+                                {"type": "btn", "data": {"button": "wheel-" + direction, "down": down}}]})
+                        time.sleep(0.15)
+
+                    def snapshot(name):
+                        qmp.call("stop")
+                        qmp.call("screendump", {"filename": str(directory/(name + ".ppm"))})
+                        qmp.call("cont")
+
                     def launch():
                         offset = len(output())
                         qmp.type("./USR/BIN/WINDOW\n")
@@ -209,6 +220,55 @@ assert int(w["mouseButtons"]) == 0
 assert int(w["mouseX"]) == 320 and int(w["mouseY"]) == 270
 assert int(gdb.parse_and_eval("KernelWindowManager->capture")) == 0
 """)
+                    wheel_offset = len(output())
+                    move(350, 350)
+                    wheel("up")
+                    wait_text("WINDOW_WHEEL -1 0", wheel_offset)
+                    wheel("down")
+                    wait_text("WINDOW_WHEEL 1 0", wheel_offset)
+                    inspect("wheel-device", """
+assert int(gdb.parse_and_eval("mouseDevice")) == 3
+""")
+                    mode_offset = len(output())
+                    click(481, 265)
+                    wait_text("WINDOW_MODE 2 0", mode_offset)
+                    wait_text("WINDOW_PAINT 1918 1020", output().index("WINDOW_MODE 2 0", mode_offset), allowance=max(timeout, 300))
+                    inspect("maximized", """
+w = gdb.parse_and_eval("KernelWindowManager->focused")
+assert int(w["maximised"]) and not int(w["minimised"])
+assert int(w["startX"]) == 1 and int(w["startY"]) == 1
+assert int(w["sizeX"]) == 1918 and int(w["sizeY"]) == 1050
+assert int(w["drawArea"]["address"][900 * 1918 + 1500]) != 0
+assert int(fb["address"][931 * int(fb["pitch"]) + 1501]) == int(w["drawArea"]["address"][900 * 1918 + 1500])
+""")
+                    snapshot("maximized")
+                    mode_offset = len(output())
+                    click(1856, 16)
+                    wait_text("WINDOW_MODE 3 0", mode_offset)
+                    inspect("minimized", """
+assert int(gdb.parse_and_eval("KernelWindowManager->focused")) == 0
+w = gdb.parse_and_eval("KernelWindowManager->windows.ptr[0]")
+assert int(w["minimised"]) and int(w["maximised"])
+assert int(fb["address"][931 * int(fb["pitch"]) + 1501]) == int(back["address"][931 * int(back["pitch"]) + 1501])
+""")
+                    snapshot("minimized")
+                    wheel_offset = len(output())
+                    wheel("up")
+                    click(60, 1066)
+                    wait_text("WINDOW_MODE 2 0", wheel_offset)
+                    assert "WINDOW_WHEEL" not in output()[wheel_offset:]
+                    wait_text("WINDOW_PAINT 1918 1020", output().index("WINDOW_MODE 2 0", wheel_offset), allowance=max(timeout, 300))
+                    mode_offset = len(output())
+                    qmp.type("r")
+                    wait_text("WINDOW_MODE 0 0", mode_offset)
+                    wait_text("WINDOW_PAINT 240 200", output().index("WINDOW_MODE 0 0", mode_offset))
+                    inspect("normal-restored", """
+w = gdb.parse_and_eval("KernelWindowManager->focused")
+assert not int(w["minimised"]) and not int(w["maximised"])
+assert int(w["startX"]) == 280 and int(w["startY"]) == 250
+assert int(w["sizeX"]) == 240 and int(w["sizeY"]) == 230
+""")
+                    snapshot("normal-restored")
                     # Oversize and undersize drags are bounded by the ABI limits.
                     move(516, 476)
                     button(True)
@@ -277,6 +337,29 @@ assert int(other["drawArea"]["address"][15 * 200 + 15]) == 0xffff00ff
 assert int(active["drawArea"]["address"][15 * 200 + 15]) == (0xff000000 | (98 * 0x12345 & 0xffffff))
 """)
                     assert output()[key_offset:].count("WINDOW_KEY 98 0") == 1
+                    wheel_offset = len(output())
+                    move(500, 330)
+                    wheel("up")
+                    wait_text("WINDOW_WHEEL -1 0", wheel_offset)
+                    wait_text("WINDOW_PAINT 200 170", output().index("WINDOW_WHEEL -1 0", wheel_offset))
+                    inspect("wheel-isolation", """
+manager = gdb.parse_and_eval("KernelWindowManager")
+assert int(manager["focused"]["startX"]) == 200
+other = manager["windows"]["ptr"][0]
+assert int(other["startX"]) == 450
+assert int(other["drawArea"]["address"][15 * 200 + 15]) != 0xffff00ff
+""")
+                    mode_offset = len(output())
+                    qmp.type("m")
+                    wait_text("WINDOW_MODE 1 0", mode_offset)
+                    inspect("minimize-focus-fallback", """
+assert int(gdb.parse_and_eval("KernelWindowManager->focused->startX")) == 450
+""")
+                    click(60, 1066)
+                    wait_text("WINDOW_MODE 0 0", mode_offset)
+                    inspect("restore-focus", """
+assert int(gdb.parse_and_eval("KernelWindowManager->focused->startX")) == 200
+""")
                     key_offset = len(output())
                     qmp.type("q")
                     wait_text("Window demo closed.", key_offset)
@@ -320,7 +403,7 @@ gdb.selected_inferior().write_memory(physical, struct.pack("<Q", 1))
 
                     enter("./USR/BIN/WINPROBE", "WINDOW_API_OK")
                     enter("./USR/BIN/WINPROBE fault", "Program exited with status 142.")
-                    enter("./USR/BIN/WINPROBE hold &", "WINDOW_HELD")
+                    enter("./USR/BIN/WINPROBE minimized &", "WINDOW_HELD")
                     click(20, 900)
                     enter("ps", "WINPROBE")
                     pid = re.findall(r"Process: ~/USR/BIN/WINPROBE \((\d+)\) ALIVE", output())[-1]
@@ -346,7 +429,7 @@ assert int(fb["address"][245 * int(fb["pitch"]) + 215]) == int(back["address"][2
                     qmp.type("shutdown\n")
                     process.wait(timeout=timeout)
                     assert process.returncode == 0
-                    return "CPL3 window demo, pixel composition/restoration, Q and PS/2 close, bounded drag/resize, client mouse capture/release, focus/z-order and key isolation, event overflow recovery, background Ctrl-C, checked pointers/rectangles/events, per-process quota, foreign/stale handles, exit/fault/kill cleanup and shutdown."
+                    return "CPL3 window demo, pixel composition/restoration, Q and PS/2 close, bounded drag/resize, maximize/minimize/restore geometry and focus, signed wheel routing, minimized-owner cleanup, client mouse capture/release, focus/z-order and key isolation, event overflow recovery, background Ctrl-C, checked pointers/rectangles/events, per-process quota, foreign/stale handles, exit/fault/kill cleanup and shutdown."
                 finally:
                     if qmp: qmp.close()
                     process.terminate()

@@ -181,6 +181,7 @@ private Unix socket and a bounded timeout; see [testing](testing.md). A
 framebuffer requires a graphical window or VNC: `-nographic` does not turn it
 into a text console.
 
-The kernel compiles `window.cpp` and `window_manager.cpp` with `-O2` to keep the
-interactive compositor within the fixed BIOS kernel slot. Debug information,
+The kernel compiles `window.cpp`, `window_manager.cpp`, `proc/user/windows.cpp`
+and `mouse.cpp` with `-Os` to keep window and input code within the fixed BIOS
+kernel slot. Debug information,
 frame pointers, freestanding flags and the no-red-zone policy are retained.

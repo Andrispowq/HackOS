@@ -163,3 +163,13 @@ uint64_t UserWindowEvent(uint64_t handle, HackosWindowEvent* destination)
     process->userSpace->CopyToUser((uint64_t)destination, &event, sizeof(event));
     return 1;
 }
+
+uint64_t UserWindowMode(uint64_t handle, uint64_t operation)
+{
+    if (WindowSlot(GetRunningProcess(), handle) < 0) return HACKOS_ERROR;
+
+    auto window = KernelWindowManager->GetWindow(handle);
+    if (!window) return HACKOS_ERROR;
+
+    return KernelWindowManager->ChangeMode(window, operation);
+}

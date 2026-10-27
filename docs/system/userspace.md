@@ -180,6 +180,7 @@ return an error rather than being reinterpreted as new operations.
 | 34 | `window_close(handle)` | Destroy the window and release its handle; return 0 |
 | 35 | `window_state(handle, out)` | Copy geometry, focus and latest client-relative pointer state; return 0 |
 | 36 | `window_event(handle, out)` | Copy one event; 1 delivered, 0 empty, error for invalid pointers/handles |
+| 37 | `window_mode(handle, operation)` | Query/minimize/maximize/restore an owned window; return mode flags |
 
 Calls use `int 0x80`: RAX is the number, RDI/RSI/RDX/RCX/R8 hold arguments,
 and saved RAX receives the result. Successful operations without another result
@@ -219,7 +220,10 @@ print, timer preemption and exit. The standalone `WINDOW` program ports the old
 window demo onto owned handles and pixel uploads. Launch `./USR/BIN/WINDOW`,
 then drag its title bar, resize its bottom-right grip, click to focus, type to
 change the colour marker, and click the client to mark a position. Close X,
-press Q, or use Ctrl-C. Background windows also receive focused keyboard input;
+press Q, or use Ctrl-C. Use the title-bar `-` / `+` / `R` controls or keys M / F / R
+to minimize, toggle maximize, or restore. Click a minimized window's bottom-bar
+tab to bring it back. Scrolling changes the colour marker and logs signed wheel
+steps. Background windows also receive focused keyboard input;
 click the desktop to type shell commands.
 The old split adapters retain host coverage,
 but allocation-dependent legacy libc helpers are not linked into user programs.
@@ -233,7 +237,7 @@ listed in [TODO](../TODO.md).
 
 `HackosWindowSpec` is 48 bytes: four `uint32_t` fields (`x`, `y`, `width`,
 `height`), followed by a 32-byte title buffer. Width/height specify the client
-area; the kernel adds a 30-pixel title bar. Client widths are 96–320 pixels,
+area; the kernel adds a 30-pixel title bar. Normal client widths are 96–320 pixels,
 heights 30–240. Coordinates start at 1 and the complete decorated window must
 fit the screen. Titles must terminate within 30 bytes and contain printable
 ASCII; long labels are visually clipped before the title-bar controls.
@@ -255,9 +259,8 @@ pointers are checked against the caller's mappings.
 The mouse X button removes the window; its handle remains reserved until
 `window_close` or process cleanup so the owner can observe `window_poll == 1`.
 Invalid, foreign and explicitly closed handles return `HACKOS_ERROR`. Polling
-does not block. The inactive title-bar maximise/minimise decorations have been
-removed. Dragging, resizing, focus and input events are described below; maximise/minimise, wheel input and raw key-up events remain
-future work.
+does not block. Dragging, resizing, window modes, focus and input events are
+described below. Raw key-up events remain future work.
 
 Idle updates mouse closure and flushes dirty drawing under a preemption guard.
 The compositor overlays windows onto the physical display after copying the
@@ -269,7 +272,7 @@ closing or reclaiming a window triggers redraw to restore the console beneath.
 New windows take focus. A left click raises and focuses the topmost window under
 the pointer; clicking outside windows restores terminal keyboard routing. The
 focused title bar is blue. Closing the focused window selects the topmost
-remaining window, or the terminal if none remain. Ownership remains enforced
+remaining visible window, or the terminal if none remain. Ownership remains enforced
 regardless of focus: another process cannot query or consume your window events.
 
 Drag the title bar to move, or the bottom-right 8-by-8 grip to resize. Geometry
@@ -280,18 +283,42 @@ state query. Dragging/resizing captures the pointer until left-button release.
 A press inside the client similarly captures motion/release outside the window;
 client-relative coordinates are signed and may be negative or beyond its size.
 
+`window_mode` accepts QUERY=0, MINIMIZE=1, MAXIMIZE=2 and RESTORE=3.
+It returns flags MINIMIZED=1 and MAXIMIZED=2, or `HACKOS_ERROR` for an
+invalid operation/handle or an unsupported maximize size/budget. Minimize hides
+the window, cancels capture, and selects the next visible window for focus.
+Its handle, pixels and geometry remain alive. A bottom restore bar lists hidden
+windows. Restoring a minimized window makes it visible with its previous mode;
+restoring a visible maximized window returns to its saved normal rectangle.
+Thus a minimized maximized window takes two restores to return to normal.
+Maximize is idempotent and unminimizes an already-maximized window.
+
+Maximize uses the display except for a one-pixel border and a reserved 28-pixel
+bottom bar. It disables manual dragging/resizing until restored. Displays above
+4096 by 2160 or below 98 by 90 are rejected. The compositor caps aggregate
+maximized client buffers plus a reservation for all 16 normal windows at 64 MiB.
+Maximize/normal restore clear the client buffer and emit MOVE, RESIZE and MODE;
+applications must repaint using the current geometry. Blits remain bounded to
+1024 pixels, including for maximized clients. The demo tiles in both axes.
+
 `HackosWindowState` is 32 bytes: unsigned x/y/client width/client height, signed
 mouseX/mouseY, then unsigned buttons/focused. Button bits are left=1, middle=2,
 right=4; focused is 0 or 1. `HackosWindowEvent` is also 32 bytes: unsigned type/key,
 signed x/y, then unsigned client width/height/buttons/focused. All fields are
-initialized. Types are KEY=1, MOUSE=2, FOCUS=3, MOVE=4, RESIZE=5, OVERFLOW=6.
+initialized. Types are KEY=1, MOUSE=2, FOCUS=3, MOVE=4, RESIZE=5, OVERFLOW=6,
+MODE=7 and WHEEL=8. MODE stores the current mode flags in `key`. WHEEL stores
+a signed 32-bit step delta in `key` (cast to `int32_t`; negative up, positive
+down). Wheel input goes to the hovered client or captured client without
+changing focus; hidden windows and title/restore bars receive no wheel events.
 MOVE x/y are screen coordinates; other event x/y are client-relative pointer
 coordinates. KEY carries the translated US-layout character or existing arrow
 code (press/repeat only). Mouse motion/button snapshots go to the topmost client
 under the pointer, or the captured client during a drag.
 
 Each window has a fixed 64-event queue. Overflow discards the incomplete queue
-and returns one OVERFLOW event; query `window_state` and repaint to resynchronize.
+and returns one OVERFLOW event; query `window_state` and
+`window_mode(QUERY)`, then repaint if visible to resynchronize. Lost wheel steps
+cannot be reconstructed from state.
 Invalid output pointers do not consume an event. `window_poll` remains the close
 notification, and closed windows retain their handle until explicit close or
 owner cleanup. Events never expose a kernel pointer.

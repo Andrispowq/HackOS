@@ -61,7 +61,11 @@ the focused window owner or terminal foreground process at a safe scheduling poi
 a truncated command. The keyboard layout is US ASCII.
 
 The [mouse driver](../../kernel/src/drivers/mouse/mouse.cpp) configures the PS/2
-controller, assembles complete packets and queues position/button snapshots.
+controller, negotiates IntelliMouse ID 3 with sample rates 200/100/80, and
+queues complete position/button/wheel packets. Commands use bounded ACK/resend
+handling. A failed wheel probe resets the mouse to the basic three-byte mode;
+ID 3 uses a signed fourth byte for wheel steps. The packet decoder has host
+coverage for both protocols, synchronization and signed deltas.
 The compositor draws the cursor after windows.
 IRQ1 and IRQ12 connect these drivers to the [interrupt layer](interrupts.md).
 
