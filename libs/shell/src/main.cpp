@@ -606,10 +606,31 @@ static void Command(char* input)
     }
 }
 
+static void RedrawLine(const LineBuffer& line, size_t oldLength)
+{
+    char output[512];
+    size_t used = 0;
+    for (size_t i = 0; i < oldLength; ++i)
+    {
+        output[used++] = '\b';
+    }
+    for (size_t i = 0; i < line.Length(); ++i)
+    {
+        output[used++] = line.Text()[i];
+    }
+    syscall_user_write(output, used);
+}
+
 static void Complete(LineBuffer& line)
 {
     CompletionWord word;
-    if (line.Overflowed() || !CompletionPrefix(line.Text(), word))
+    char prefix[256];
+    for (size_t i = 0; i < line.Cursor(); ++i)
+    {
+        prefix[i] = line.Text()[i];
+    }
+    prefix[line.Cursor()] = 0;
+    if (line.Overflowed() || !CompletionPrefix(prefix, word))
     {
         return;
     }
@@ -728,15 +749,21 @@ static void Complete(LineBuffer& line)
 
             Copy(completed + prefixLength, common);
             char suffix = matches == 1 ? (isDirectory ? '/' : ' ') : 0;
-            if (CompletionReplace(line.Text(), word.start, completed, suffix, replacement))
+            if (CompletionReplace(prefix, word.start, completed, suffix, replacement))
             {
-                for (size_t i = 0; i < line.Length(); ++i)
+                char joined[256];
+                size_t completedLength = Length(replacement);
+                size_t tailLength = line.Length() - line.Cursor();
+                if (completedLength + tailLength >= sizeof(joined))
                 {
-                    syscall_console(0);
+                    return;
                 }
-
-                line.Set(replacement);
-                Print(line.Text());
+                Copy(joined, replacement);
+                Copy(joined + completedLength, line.Text() + line.Cursor());
+                size_t oldLength = line.Length();
+                line.Set(joined);
+                line.SetCursor(completedLength);
+                RedrawLine(line, oldLength);
             }
 
             if (matches == 1)
@@ -757,10 +784,11 @@ int main()
 {
     Print("\nHackOS ring-3 shell. Type 'help' for commands.\n");
     Prompt();
-    LineBuffer line;
+    LineBuffer line(true);
     bool discard = false;
     for (;;)
     {
+        syscall_terminal_cursor(line.Length() - line.Cursor(), discard ? 0 : 1);
         uint64_t value = syscall_terminal_read(0);
         if (value == HACKOS_DENIED || value == HACKOS_ERROR)
         {
@@ -768,6 +796,7 @@ int main()
             return 1;
         }
 
+        syscall_terminal_cursor(0, 0);
         if (value == HACKOS_KEY_INTERRUPT)
         {
             line.Reset();
@@ -822,8 +851,14 @@ int main()
             continue;
         }
 
+        size_t oldLength = line.Length();
         switch (line.Push(ch))
         {
+        case LineBuffer::Redraw:
+            RedrawLine(line, oldLength);
+            break;
+        case LineBuffer::Moved:
+            break;
         case LineBuffer::Echo:
             syscall_user_write(&ch, 1);
             break;

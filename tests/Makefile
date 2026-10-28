@@ -68,3 +68,9 @@ test-terminal:
 .PHONY: test-login-performance
 test-login-performance:
 	$(PYTHON) qemu_login_performance.py --firmware $(FIRMWARE)
+
+.PHONY: test-shell-editing test-listing-performance
+test-shell-editing:
+	$(PYTHON) qemu_shell_editing.py --firmware $(FIRMWARE)
+test-listing-performance:
+	$(PYTHON) qemu_listing_performance.py --firmware $(FIRMWARE)

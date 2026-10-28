@@ -1,5 +1,7 @@
 #include "hackos/user.h"
 
+static bool trace;
+
 static bool Paint(uint64_t window, uint32_t accent, int32_t mouseX, int32_t mouseY)
 {
     HackosWindowState state;
@@ -70,6 +72,10 @@ static bool Paint(uint64_t window, uint32_t accent, int32_t mouseX, int32_t mous
 
 static void Log(const char* label, int64_t first, uint64_t second)
 {
+    if (!trace)
+    {
+        return;
+    }
     char line[80];
     unsigned length = 0;
     while (label[length])
@@ -110,7 +116,19 @@ static void Log(const char* label, int64_t first, uint64_t second)
 int main(int argc, char** argv)
 {
     HackosWindowSpec spec = {200, 200, 200, 170, "Window input demo"};
-    if (argc > 1 && User::Equal(argv[1], "second"))
+    bool second = false;
+    for (int i = 1; i < argc; ++i)
+    {
+        if (User::Equal(argv[i], "--trace"))
+        {
+            trace = true;
+        }
+        if (User::Equal(argv[i], "second"))
+        {
+            second = true;
+        }
+    }
+    if (second)
     {
         spec.x = 450;
         spec.y = 250;
@@ -127,8 +145,9 @@ int main(int argc, char** argv)
     int32_t scroll = 0;
     int32_t mouseX = -10, mouseY = -10;
     bool repaint = !Paint(window, accent, mouseX, mouseY);
-    User::Print("Window demo ready. Drag title, resize bottom-right, click to focus. Wheel to recolour; M minimizes, F "
-                "maximizes/restores, R restores, Q closes.\n");
+    User::Print("Window demo ready. Input test: click/drag in the client to place the white marker.\n"
+                "The gradient is a test pattern, not a colour picker. Type or scroll to recolour the small swatch.\n"
+                "Drag title, resize bottom-right; M minimizes, F maximizes/restores, R restores, Q closes.\n");
 
     unsigned pending = 0;
 
@@ -173,7 +192,7 @@ int main(int argc, char** argv)
                 }
 
                 accent = 0xff000000 | (event.key * 0x12345 & 0xffffff);
-                //Log("WINDOW_KEY ", event.key, 0);
+                Log("WINDOW_KEY ", event.key, 0);
                 repaint = true;
             }
             else if (event.type == HACKOS_WINDOW_MOUSE)
@@ -182,7 +201,7 @@ int main(int argc, char** argv)
                 {
                     mouseX = event.x;
                     mouseY = event.y;
-                    //Log("WINDOW_MOUSE ", (uint32_t)mouseX, (uint32_t)mouseY);
+                    Log("WINDOW_MOUSE ", (uint32_t)mouseX, (uint32_t)mouseY);
                     repaint = true;
                 }
             }
@@ -201,12 +220,12 @@ int main(int argc, char** argv)
                 }
 
                 accent = 0xff000000 | ((uint32_t)(scroll + 255) * 0x12345 & 0xffffff);
-                //Log("WINDOW_WHEEL ", delta, 0);
+                Log("WINDOW_WHEEL ", delta, 0);
                 repaint = true;
             }
             else if (event.type == HACKOS_WINDOW_MODE)
             {
-                //Log("WINDOW_MODE ", event.key, 0);
+                Log("WINDOW_MODE ", event.key, 0);
                 if (!(event.key & HACKOS_WINDOW_MINIMIZED))
                 {
                     repaint = true;
@@ -214,16 +233,16 @@ int main(int argc, char** argv)
             }
             else if (event.type == HACKOS_WINDOW_RESIZE)
             {
-                //Log("WINDOW_RESIZE ", event.width, event.height);
+                Log("WINDOW_RESIZE ", event.width, event.height);
                 repaint = true;
             }
             else if (event.type == HACKOS_WINDOW_MOVE)
             {
-                //Log("WINDOW_MOVE ", event.x, event.y);
+                Log("WINDOW_MOVE ", event.x, event.y);
             }
             else if (event.type == HACKOS_WINDOW_FOCUS)
             {
-                //Log("WINDOW_FOCUS ", event.focused, 0);
+                Log("WINDOW_FOCUS ", event.focused, 0);
             }
             else if (event.type == HACKOS_WINDOW_OVERFLOW)
             {
@@ -235,7 +254,10 @@ int main(int argc, char** argv)
 
                 mouseX = state.mouseX;
                 mouseY = state.mouseY;
-                //User::Print("WINDOW_OVERFLOW: state restored\n");
+                if (trace)
+                {
+                    User::Print("WINDOW_OVERFLOW: state restored\n");
+                }
                 repaint = true;
             }
         }
@@ -256,7 +278,7 @@ int main(int argc, char** argv)
                 HackosWindowState state;
                 if (syscall_window_state(window, &state) == 0)
                 {
-                    //Log("WINDOW_PAINT ", state.width, state.height);
+                    Log("WINDOW_PAINT ", state.width, state.height);
                 }
             }
         }

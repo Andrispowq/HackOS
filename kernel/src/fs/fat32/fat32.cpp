@@ -417,3 +417,57 @@ int FAT32::DirectoryCount(const char* path, uint64_t& count)
     count = entries.size();
     return driver->IsValid() ? 0 : -1;
 }
+
+int FAT32::ReadDirectory(const char* path, uint64_t index, HackosFileInfo* output, uint64_t capacity, uint64_t& count)
+{
+    count = 0;
+    DirEntry directory;
+    if (!output || !capacity || driver->OpenFile(path, &directory) || !(directory.attributes & FILE_DIRECTORY))
+    {
+        return -1;
+    }
+    auto entries = driver->GetDirectories(directory.cluster, 0, false);
+    if (!driver->IsValid())
+    {
+        return -1;
+    }
+    if (index >= entries.size())
+    {
+        return 0;
+    }
+    for (uint64_t i = index; i < entries.size() && count < capacity; ++i)
+    {
+        DirEntry entry = entries[i];
+        // Dot entries refer to canonical directories, not their own FAT slots.
+        if (!strcmp(entry.name, ".") || !strcmp(entry.name, ".."))
+        {
+            char canonical[260];
+            size_t length = strlen((char*)path);
+            if (length + strlen(entry.name) + 2 > sizeof(canonical))
+            {
+                return -1;
+            }
+            strcpy(canonical, (char*)path);
+            canonical[length] = '/';
+            strcpy(canonical + length + 1, entry.name);
+            DirEntry resolved;
+            if (driver->OpenFile(canonical, &resolved))
+            {
+                return -1;
+            }
+            entry.permissions = resolved.permissions;
+            entry.size = resolved.size;
+            entry.attributes = resolved.attributes;
+        }
+        HackosFileInfo info = {};
+        strcpy(info.name, entry.name);
+        info.size = entry.size;
+        info.attributes = entry.attributes;
+        info.uid = entry.permissions.uid;
+        info.gid = entry.permissions.gid;
+        info.mode = entry.permissions.mode;
+        info.metadataVersion = 1;
+        output[count++] = info;
+    }
+    return 0;
+}

@@ -201,3 +201,8 @@ struct HackosSpawnIo
 
 static_assert(sizeof(HackosPollFd) == 16, "poll ABI");
 static_assert(sizeof(HackosSpawnIo) == 32, "spawn I/O ABI");
+
+// Bounded directory pages; offsets are entry indices, not stable snapshots.
+constexpr uint64_t HACKOS_READDIR_BATCH_MAX = 16;
+// terminal_cursor(back, visible): caret up to 255 cells behind the output position.
+constexpr uint64_t HACKOS_TERMINAL_CURSOR_MAX = 255;

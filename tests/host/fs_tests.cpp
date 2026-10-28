@@ -152,6 +152,7 @@ class MemoryDisk : public Device
     unsigned char* bytes;
     size_t size;
     bool readError = false, writeError = false, flushError = false;
+    unsigned reads = 0;
     unsigned writes = 0, failWrite = 0;
     unsigned flushes = 0, failFlush = 0;
     int cutSectors = -1;
@@ -174,6 +175,7 @@ class MemoryDisk : public Device
 
     bool Read(uint64_t lba, void* p, uint64_t count) override
     {
+        ++reads;
         if (readError || powerLost)
         {
             return false;
@@ -1140,5 +1142,49 @@ TEST(storage_directory_aliases_keep_names_and_permissions)
     alias = fs.OpenFile("~/PRIVATE/SHORT~1");
     CHECK(alias);
     fs.CloseFile(alias);
+    return 0;
+}
+
+TEST(fat_directory_batches_match_individual_metadata_and_reduce_reads)
+{
+    MemoryDisk disk;
+    FAT32 fs(&disk, 0);
+    HackosFileInfo entries[16];
+    uint64_t count = 0;
+    unsigned before = disk.reads;
+    CHECK(fs.ReadDirectory("~/TESTS", 0, entries, 16, count) == 0 && count > 2 && count < 16);
+    unsigned batched = disk.reads - before;
+    before = disk.reads;
+    for (uint64_t i = 0; i < count; ++i)
+    {
+        auto file = fs.GetFile("~/TESTS", i);
+        CHECK(file);
+        CHECK(test_name_equal(file->GetName(), entries[i].name));
+        CHECK(file->GetSize() == entries[i].size && file->GetAttributes() == entries[i].attributes);
+        auto permissions = file->GetPermissions();
+        CHECK(permissions.uid == entries[i].uid && permissions.gid == entries[i].gid &&
+              permissions.mode == entries[i].mode);
+        fs.CloseFile(file);
+    }
+    CHECK(disk.reads - before > batched);
+    uint64_t next = 99;
+    CHECK(fs.ReadDirectory("~/TESTS", count, entries, 16, next) == 0 && next == 0);
+    CHECK(fs.ReadDirectory("~/TESTS", ~0ULL, entries, 16, next) == 0 && next == 0);
+    CHECK(fs.ReadDirectory("~/TESTS/HELLO.TXT", 0, entries, 16, next) != 0);
+    CHECK(fs.ReadDirectory("~/TESTS", 0, entries, 0, next) != 0);
+    CHECK(fs.SetPermissions("~/TESTS/HELLO.TXT", {42, 43, 0600}) == 0);
+    CHECK(fs.ReadDirectory("~/TESTS", 0, entries, 16, count) == 0);
+    bool found = false;
+    for (uint64_t i = 0; i < count; ++i)
+    {
+        if (test_name_equal(entries[i].name, "HELLO.TXT"))
+        {
+            CHECK(entries[i].uid == 42 && entries[i].gid == 43 && entries[i].mode == 0600);
+            found = true;
+        }
+    }
+    CHECK(found);
+    disk.readError = true;
+    CHECK(fs.ReadDirectory("~/TESTS", 0, entries, 16, count) != 0);
     return 0;
 }

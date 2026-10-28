@@ -388,7 +388,7 @@ vector<DirEntry> FAT32Driver::GetDirectories(uint32_t cluster, uint32_t filter, 
             uint8_t first = (uint8_t)raw.name[0];
             if (first == ENTRY_END)
             {
-                return entries;
+                goto complete;
             }
 
             if (first == ENTRY_FREE)
@@ -460,19 +460,23 @@ vector<DirEntry> FAT32Driver::GetDirectories(uint32_t cluster, uint32_t filter, 
                 continue;
             }
 
-            if (!SameName(entry.name, ".") && !SameName(entry.name, "..") && !Permissions(entry, false))
-            {
-                ioError = true;
-                return {};
-            }
-
-            if ((!exclude && !(entry.attributes & filter)) || (exclude && (entry.attributes & filter)))
-            {
-                entries.push_back(entry);
-            }
+            entries.push_back(entry);
         }
     }
 
+complete:
+    if (!DirectoryPermissions(entries))
+    {
+        ioError = true;
+        return {};
+    }
+    for (size_t i = entries.size(); i > 0; --i)
+    {
+        if ((!exclude && (entries[i - 1].attributes & filter)) || (exclude && !(entries[i - 1].attributes & filter)))
+        {
+            entries.erase(i - 1);
+        }
+    }
     return entries;
 }
 
@@ -1425,6 +1429,71 @@ uint32_t RecordChecksum(const PermissionRecord& record)
 
     return value;
 }
+}
+
+bool FAT32Driver::DirectoryPermissions(vector<DirEntry>& entries)
+{
+    bool* found = new bool[entries.size() ? entries.size() : 1];
+    if (!found)
+    {
+        return false;
+    }
+    memset(found, 0, entries.size());
+    bool validRecords = true;
+    PermissionRecord records[16];
+    PermissionRecord empty;
+    memset(&empty, 0, sizeof(empty));
+    for (unsigned sector = 0; sector < PERMISSION_SECTORS && validRecords; ++sector)
+    {
+        if (!device->Read((uint64_t)PartitionStart + PERMISSION_START + sector, records, 1))
+        {
+            validRecords = false;
+            break;
+        }
+        for (const auto& record : records)
+        {
+            if (!record.tag)
+            {
+                if (memcmp((void*)&record, &empty, sizeof(record)))
+                {
+                    validRecords = false;
+                }
+                continue;
+            }
+            if (record.tag != 0x36315048 || record.reserved || record.permissions.mode > 0777 ||
+                record.checksum != RecordChecksum(record))
+            {
+                validRecords = false;
+                break;
+            }
+            for (size_t i = 0; i < entries.size(); ++i)
+            {
+                auto& entry = entries[i];
+                if (SameName(entry.name, ".") || SameName(entry.name, ".."))
+                {
+                    continue;
+                }
+                if (record.parent == entry.parentCluster && record.slot == entry.offsetInParentCluster)
+                {
+                    if (found[i])
+                    {
+                        validRecords = false;
+                    }
+                    found[i] = true;
+                    entry.permissions = record.permissions;
+                }
+            }
+        }
+    }
+    for (size_t i = 0; i < entries.size(); ++i)
+    {
+        if (!SameName(entries[i].name, ".") && !SameName(entries[i].name, "..") && !found[i])
+        {
+            validRecords = false;
+        }
+    }
+    delete[] found;
+    return validRecords;
 }
 
 bool FAT32Driver::Permissions(DirEntry& entry, bool write, bool remove)

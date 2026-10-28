@@ -124,6 +124,14 @@ class Filesystem
         return -1;
     }
 
+    // Copied metadata only: no persistent handles or cross-call cache.
+    virtual int ReadDirectory(const char* path, uint64_t index, HackosFileInfo* output, uint64_t capacity,
+                              uint64_t& count)
+    {
+        count = 0;
+        return -1;
+    }
+
     virtual int DirectoryCount(const char* path, uint64_t& count)
     {
         return -1;

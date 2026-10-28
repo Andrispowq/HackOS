@@ -198,6 +198,15 @@ jobs:
             --mount "type=bind,source=$PWD,target=/work,readonly" \
             --mount "type=bind,source=$PWD/tests/out,target=/work/tests/out" \
             hackos-tests:toolchain python3 tests/qemu_terminal.py --firmware "$FIRMWARE"
+      - name: Exercise shell editing, caret and directory pages
+        if: ${{ !cancelled() && steps.build.outcome == 'success' }}
+        env:
+          FIRMWARE: ${{ matrix.firmware }}
+        run: |
+          docker run --rm --network none --user "$(id -u):$(id -g)" \
+            --mount "type=bind,source=$PWD,target=/work,readonly" \
+            --mount "type=bind,source=$PWD/tests/out,target=/work/tests/out" \
+            hackos-tests:toolchain python3 tests/qemu_shell_editing.py --firmware "$FIRMWARE"
       - name: Exercise file utilities, editor and reboot persistence
         if: ${{ !cancelled() && steps.build.outcome == 'success' }}
         env:

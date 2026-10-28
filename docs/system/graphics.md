@@ -112,3 +112,14 @@ round trips and host scheduling, so compare on the same emulator/host rather
 than treating them as hardware frame times. `display.framesPresented`,
 `sceneFrames` and `pixelsPresented` are debugger-visible cumulative counters;
 `pixelsPresented` counts scene spans only, excluding cursor restoration/drawing.
+
+The shell caret is composed above console text and below windows, with its own
+small damage bounds and a 500 ms blink period. It leaves console pixels and
+serial output untouched; caret control is restricted to the individual terminal
+owner.
+
+`window` is an input/painting diagnostic, not a colour picker. Its gradient is a
+test pattern, clicking/dragging places a white marker, and ordinary keys or the
+mouse wheel recolour the small swatch. Mode/close keys keep their existing
+functions. Add `--trace` for event logs used by the regression suite; the normal
+demo remains quiet apart from its instructions and exit message.

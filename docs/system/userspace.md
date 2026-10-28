@@ -254,6 +254,18 @@ writes, supporting `%s`, `%c`, signed/unsigned decimal, hex, pointers, `%%` and
 untruncated character count. Physical-address allocation and legacy raw kernel
 objects remain unavailable; window programs use the existing owned-handle ABI.
 
+## Shell editing and caret
+
+The shell supports Left/Right, insertion at the caret, Backspace and Delete.
+Up/Down recalls history; Tab completes the prefix before the caret and preserves
+the trailing text. The 255-character command bound and overflow rejection remain
+unchanged. The visible two-pixel caret blinks every 500 ms, follows wrapped lines,
+and uses the terminal foreground colour. It is a graphical overlay, so it never
+appears in redirected output or serial logs. The shell hides it while executing
+commands; the kernel also suppresses it whenever its requesting process no longer
+owns the terminal. Other users of `LineBuffer` retain end-only editing unless
+they explicitly enable middle editing.
+
 ## Command history
 
 The shell stores the latest 256 nonblank submitted commands in a predefined
@@ -394,6 +406,8 @@ return an error rather than being reinterpreted as new operations.
 | 80 | `terminal_info(fd, out)` | Copy 16-byte geometry and foreground flags; no root requirement; see [streams](streams.md#descriptor-abi) |
 | 81 | `terminal_get(out)` | Copy a 24-byte `HackosTerminalSettings` snapshot; no ownership/root requirement |
 | 82 | `terminal_set(key, value)` | Foreground owner only; set console appearance or reset defaults |
+| 83 | `terminal_cursor(back, visible)` | Owner only; back=0–255 cells from current output position, visible=0/1; reset blink phase; zero or error |
+| 84 | `readdir_batch(path, index, out, capacity)` | Copy up to 1–16 file-info records; return count, zero at end, or error; directory read/traverse permissions required |
 
 `HackosTerminalSettings` contains six uint32 fields: pixel `fontSize`, RGBA
 `bgColour`, RGBA `fontColour`, `columns`, `rows`, and zero `reserved`. The colours
@@ -633,3 +647,12 @@ permission records; FAT attributes are shown separately. Timestamps remain
 unexposed.
 Use `-la`, `-al`, separate flags, or `--` to end option parsing. A single optional
 path is supported; unknown flags, empty paths and extra paths report usage.
+
+`terminal_cursor` rejects invalid values without changing caret state; an offset
+before the visible console start is hidden. It does not move the output position
+or consume input. `readdir_batch` validates the entire output range before I/O
+and copies records only on success. Entry indices match `readdir`; calls are not
+stable snapshots across directory mutations. The legacy single-record call remains
+available. `User::BufferedOutput` offers an explicit 1 KiB stdout buffer; callers
+must call `Flush()` and check its result. Failures remain sticky, and unrelated
+`User::Print` calls retain immediate-output behavior.

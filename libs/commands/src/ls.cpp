@@ -52,26 +52,33 @@ int main(int argc, char** argv)
         }
     }
 
+    BufferedOutput output;
     if (longFormat)
     {
-        Print("MODE       UID GID ATTR       BYTES NAME\n");
+        output.Print("MODE       UID GID ATTR       BYTES NAME\n");
     }
 
-    HackosFileInfo info;
-    for (uint64_t i = 0;; i++)
+    HackosFileInfo entries[HACKOS_READDIR_BATCH_MAX];
+    uint64_t offset = 0, available = 0, next = 0;
+    for (;;)
     {
-        uint64_t result = syscall_readdir(path, i, &info);
-        if (result == 0)
+        if (next == available)
         {
-            break;
+            available = syscall_readdir_batch(path, offset, entries, HACKOS_READDIR_BATCH_MAX);
+            if (!available)
+            {
+                break;
+            }
+            if (available > HACKOS_READDIR_BATCH_MAX)
+            {
+                output.Flush();
+                Error("Cannot list directory.\n");
+                return 1;
+            }
+            offset += available;
+            next = 0;
         }
-
-        if (result == HACKOS_ERROR || result == HACKOS_DENIED)
-        {
-            Error("Cannot list directory.\n");
-            return 1;
-        }
-
+        const HackosFileInfo& info = entries[next++];
         if (!all && (info.name[0] == '.' || (info.attributes & 2)))
         {
             continue;
@@ -91,11 +98,11 @@ int main(int argc, char** argv)
                 }
             }
 
-            Print(mode);
-            Number(info.uid);
-            Print(" ");
-            Number(info.gid);
-            Print(" ");
+            output.Print(mode);
+            output.Number(info.uid);
+            output.Print(" ");
+            output.Number(info.gid);
+            output.Print(" ");
             char attributes[] = "---- ";
             if (info.attributes & 1)
             {
@@ -117,7 +124,7 @@ int main(int argc, char** argv)
                 attributes[3] = 'a';
             }
 
-            Print(attributes);
+            output.Print(attributes);
 
             uint64_t value = info.size;
             unsigned digits = 1;
@@ -129,21 +136,21 @@ int main(int argc, char** argv)
 
             for (unsigned padding = digits; padding < 10; padding++)
             {
-                Print(" ");
+                output.Print(" ");
             }
 
-            Number(info.size);
-            Print(" ");
+            output.Number(info.size);
+            output.Print(" ");
         }
 
-        Print(info.name);
+        output.Print(info.name);
         if (directory)
         {
-            Print("/");
+            output.Print("/");
         }
 
-        Print("\n");
+        output.Print("\n");
     }
 
-    return 0;
+    return output.Flush() ? 0 : 1;
 }

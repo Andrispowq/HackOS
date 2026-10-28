@@ -71,3 +71,5 @@ HACKOS_SYSCALL(79, hardware, UserHardware, 3, uint64_t, uint64_t, HackosHardware
 HACKOS_SYSCALL(80, terminal_info, UserTerminalInfo, 2, uint64_t, HackosTerminalInfo*)
 HACKOS_SYSCALL(81, terminal_get, UserTerminalGet, 1, HackosTerminalSettings*)
 HACKOS_SYSCALL(82, terminal_set, UserTerminalSet, 2, uint64_t, uint64_t)
+HACKOS_SYSCALL(83, terminal_cursor, UserTerminalCursor, 2, uint64_t, uint64_t)
+HACKOS_SYSCALL(84, readdir_batch, UserReadDirBatch, 4, const char*, uint64_t, HackosFileInfo*, uint64_t)

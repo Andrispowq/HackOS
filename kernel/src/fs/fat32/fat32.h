@@ -50,6 +50,8 @@ class FAT32 : public Filesystem
 
     int SetPermissions(const char* path, const FilePermissions& permissions) override;
     int Flush() override;
+    int ReadDirectory(const char* path, uint64_t index, HackosFileInfo* output, uint64_t capacity,
+                      uint64_t& count) override;
     int DirectoryCount(const char* path, uint64_t& count) override;
 
   private:

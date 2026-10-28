@@ -42,6 +42,7 @@ class FAT32Driver
     int SetPermissions(const char* path, const FilePermissions& permissions);
 
   private:
+    bool DirectoryPermissions(vector<DirEntry>& entries);
     bool Permissions(DirEntry& entry, bool write, bool remove = false);
     int Destination(const char* path, DirEntry& parent, DirEntry& file);
     bool ValidCluster(uint32_t cluster) const;

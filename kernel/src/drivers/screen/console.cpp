@@ -115,11 +115,11 @@ void Console::Scroll(Framebuffer& framebuffer) const
     }
 
     uint32_t keptHeight = (rows - 1) * char_height;
-    for (uint32_t y = 0; y < keptHeight; ++y)
-    {
-        memcpy(framebuffer.address + (uint64_t)y * framebuffer.pitch,
-               framebuffer.address + (uint64_t)(y + char_height) * framebuffer.pitch,
-               framebuffer.width * sizeof(uint32_t));
-    }
+    Framebuffer remaining = framebuffer;
+    remaining.address += (uint64_t)char_height * framebuffer.pitch;
+    remaining.height = keptHeight;
+    // Top-to-bottom rows move toward lower addresses; each row is disjoint
+    // from its source. Reuse the bounded pixel-copy path instead of byte memcpy.
+    framebuffer.CopyFrom(remaining, 0, 0);
     framebuffer.DrawRect(0, keptHeight, framebuffer.width, framebuffer.height - keptHeight, Background());
 }

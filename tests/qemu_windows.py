@@ -238,7 +238,7 @@ back = display["backbuffer"]
 
                     def launch():
                         offset = len(output())
-                        qmp.type("window\n")
+                        qmp.type("window --trace\n")
                         wait_text("Window demo ready.", offset)
                         return offset
 
@@ -428,12 +428,12 @@ assert int(fb["address"][245 * int(fb["pitch"]) + 215]) == int(back["address"][2
 
                     # Two independent owners: focus raises a window and routes keys
                     # without leaking them to the shell or the unfocused owner.
-                    enter("window &", "Window demo ready.")
+                    enter("window --trace &", "Window demo ready.")
                     click(20, 900)
                     inspect("desktop-focus", """
 assert int(gdb.parse_and_eval("KernelWindowManager->focused")) == 0
 """)
-                    enter("window second &", "Window demo ready.")
+                    enter("window second --trace &", "Window demo ready.")
                     click(250, 300)
                     inspect("focus-first", """
 manager = gdb.parse_and_eval("KernelWindowManager")

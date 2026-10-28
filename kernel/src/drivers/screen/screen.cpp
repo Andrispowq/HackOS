@@ -6,6 +6,7 @@
 #include "arch/x86_64/timer/pit.h"
 
 #include "arch/x86_64/ports.h"
+#include "proc/tasking/process.h"
 #include "arch/x86_64/paging/paging.h"
 
 #include "lib/memory.h"
@@ -72,8 +73,41 @@ void printf_backspace()
     display.put_backspace();
 }
 
+void Display::SetCaret(uint64_t owner, uint32_t back, bool enabled)
+{
+    caretOwner = owner;
+    caretBack = back;
+    caretEnabled = enabled;
+    caretTick = tick;
+    UpdateCaret();
+}
+
+void Display::UpdateCaret()
+{
+    uint64_t position = (uint64_t)console.current_y * console.con_width + console.current_x;
+    bool visible = caretEnabled && OwnsTerminal(caretOwner) && console.con_width && position >= caretBack &&
+                   ((tick - caretTick) / TimerTicksForMilliseconds(500)) % 2 == 0;
+    uint32_t x = visible ? (position - caretBack) % console.con_width : 0;
+    uint32_t y = visible ? (position - caretBack) / console.con_width : 0;
+    if (visible != caretVisible || x != caretX || y != caretY)
+    {
+        if (caretVisible)
+        {
+            InvalidateRect(caretX * console.char_width, caretY * console.char_height, 2, console.char_height);
+        }
+        if (visible)
+        {
+            InvalidateRect(x * console.char_width, y * console.char_height, 2, console.char_height);
+        }
+        caretVisible = visible;
+        caretX = x;
+        caretY = y;
+    }
+}
+
 void Display::Refresh()
 {
+    UpdateCaret();
     // Coalesce small user uploads and cursor events between frames. Keep dirty
     // set until the final update is displayed, even when input has stopped.
     if ((dirty || cursorDirty) && tick - lastFrameTick >= TimerTicksForMilliseconds(16))
@@ -124,6 +158,11 @@ void Display::DrawBackbuffer()
     if (dirty || !presented)
     {
         composition.CopyFrom(backbuffer, 0, 0);
+        if (caretVisible)
+        {
+            composition.DrawRect(caretX * console.char_width, caretY * console.char_height, 2, console.char_height,
+                                 console.Foreground());
+        }
         if (KernelWindowManager)
         {
             KernelWindowManager->Draw();

@@ -21,7 +21,7 @@ SOURCES = [
     "boot/BIOS/stage_2/src/libc/memory.c", "boot/BIOS/stage_2/src/libc/string.c",
     "libs/libc/src/string.cpp",
     "common/src/split.c", "kernel/src/proc/user/address_space.cpp", "kernel/src/proc/user/accounts.cpp", "kernel/src/proc/user/account_store.cpp", "kernel/src/security/crypto.cpp",
-    *[f"tests/host/{s}.cpp" for s in ("adapters", "main", "library_tests", "graphics_tests", "console_tests", "fs_tests", "elf_tests", "bios_tests", "user_tests", "input_tests", "file_abi_provider", "file_abi_consumer", "syscall_tests", "split_tests", "user_address_tests", "argument_tests", "history_tests", "event_queue_tests", "mouse_packet_tests", "path_tests", "text_buffer_tests", "account_tests", "account_store_tests", "usability_tests", "stream_tests", "rtc_tests")],
+    *[f"tests/host/{s}.cpp" for s in ("adapters", "main", "library_tests", "graphics_tests", "console_tests", "fs_tests", "elf_tests", "bios_tests", "user_tests", "input_tests", "file_abi_provider", "file_abi_consumer", "syscall_tests", "split_tests", "user_address_tests", "argument_tests", "history_tests", "event_queue_tests", "mouse_packet_tests", "path_tests", "text_buffer_tests", "account_tests", "account_store_tests", "usability_tests", "stream_tests", "rtc_tests", "output_tests")],
 ]
 
 

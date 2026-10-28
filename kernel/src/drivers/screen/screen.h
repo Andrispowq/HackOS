@@ -22,6 +22,7 @@ class Display
 
     void DrawBackbuffer();
     void Refresh();
+    void SetCaret(uint64_t owner, uint32_t back, bool enabled);
     void Invalidate();
     void InvalidateRect(uint32_t x, uint32_t y, uint32_t width, uint32_t height);
     void InitialiseComposition(uint64_t memory, uint64_t bytes);
@@ -48,6 +49,10 @@ class Display
     uint64_t lastFrameTick = 0;
     Framebuffer previous;
     FramebufferDamage damage;
+    void UpdateCaret();
+    uint64_t caretOwner = 0, caretTick = 0;
+    uint32_t caretBack = 0, caretX = 0, caretY = 0;
+    bool caretEnabled = false, caretVisible = false;
     bool presented = false;
     uint32_t cursorX = 0, cursorY = 0;
 };

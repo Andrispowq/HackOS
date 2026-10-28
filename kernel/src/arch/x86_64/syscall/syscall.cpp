@@ -109,6 +109,20 @@ static uint64_t UserConsole(uint64_t operation)
     return 0;
 }
 
+static uint64_t UserTerminalCursor(uint64_t back, uint64_t visible)
+{
+    if (!OwnsTerminal(Caller()->pid))
+    {
+        return HACKOS_DENIED;
+    }
+    if (back > HACKOS_TERMINAL_CURSOR_MAX || visible > 1)
+    {
+        return HACKOS_ERROR;
+    }
+    Display::SharedDisplay()->SetCaret(Caller()->pid, back, visible);
+    return 0;
+}
+
 static uint64_t UserTerminalGet(HackosTerminalSettings* destination)
 {
     HackosTerminalSettings settings = Display::SharedDisplay()->console.Settings();
@@ -907,14 +921,14 @@ static uint64_t UserStat(const char* name, HackosFileInfo* destination)
     return Output(destination, &info, sizeof(info)) ? 0 : HACKOS_ERROR;
 }
 
-static uint64_t UserReadDir(const char* name, uint64_t index, HackosFileInfo* destination)
+static uint64_t UserReadDirBatch(const char* name, uint64_t index, HackosFileInfo* destination, uint64_t capacity)
 {
     char path[256];
-    if (!Path(name, path) || !Caller()->userSpace->WritableRange((uint64_t)destination, sizeof(*destination)))
+    if (!capacity || capacity > HACKOS_READDIR_BATCH_MAX || !Path(name, path) ||
+        !Caller()->userSpace->WritableRange((uint64_t)destination, capacity * sizeof(*destination)))
     {
         return HACKOS_ERROR;
     }
-
     if (path[1])
     {
         auto directory = filesystems[0]->OpenFile(path);
@@ -922,7 +936,6 @@ static uint64_t UserReadDir(const char* name, uint64_t index, HackosFileInfo* de
         {
             return HACKOS_ERROR;
         }
-
         bool isDirectory = directory->GetAttributes() & DIRECTORY;
         filesystems[0]->CloseFile(directory);
         if (!isDirectory)
@@ -930,33 +943,26 @@ static uint64_t UserReadDir(const char* name, uint64_t index, HackosFileInfo* de
             return HACKOS_ERROR;
         }
     }
-
     if (!PathAccess(path, Caller()->credentials, 5))
     {
         return HACKOS_DENIED;
     }
-
+    HackosFileInfo entries[HACKOS_READDIR_BATCH_MAX];
     uint64_t count = 0;
-    if (filesystems[0]->DirectoryCount(path, count))
+    if (filesystems[0]->ReadDirectory(path, index, entries, capacity, count))
     {
         return HACKOS_ERROR;
     }
-
-    if (index >= count)
+    if (!count)
     {
         return 0;
     }
+    return Output(destination, entries, count * sizeof(*entries)) ? count : HACKOS_ERROR;
+}
 
-    auto file = filesystems[0]->GetFile(path, index);
-    if (!file)
-    {
-        return HACKOS_ERROR;
-    }
-
-    HackosFileInfo info = {};
-    Info(info, file);
-    filesystems[0]->CloseFile(file);
-    return Output(destination, &info, sizeof(info)) ? 1 : HACKOS_ERROR;
+static uint64_t UserReadDir(const char* name, uint64_t index, HackosFileInfo* destination)
+{
+    return UserReadDirBatch(name, index, destination, 1);
 }
 
 static uint64_t UserGetCwd(char* destination, uint64_t capacity)
@@ -1316,6 +1322,12 @@ static void syscall_handler(Registers* r)
         break;
     case HACKOS_SYS_terminal_info:
         r->rax = UserTerminalInfo(r->rdi, (HackosTerminalInfo*)r->rsi);
+        break;
+    case HACKOS_SYS_terminal_cursor:
+        r->rax = UserTerminalCursor(r->rdi, r->rsi);
+        break;
+    case HACKOS_SYS_readdir_batch:
+        r->rax = UserReadDirBatch((const char*)r->rdi, r->rsi, (HackosFileInfo*)r->rdx, r->rcx);
         break;
     case HACKOS_SYS_terminal_get:
         r->rax = UserTerminalGet((HackosTerminalSettings*)r->rdi);

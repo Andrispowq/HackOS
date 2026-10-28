@@ -129,6 +129,7 @@ TEST(line_buffer_edits_and_submits_only_on_enter)
 {
     LineBuffer line;
     CHECK(line.Push('\b') == LineBuffer::Ignored);
+    CHECK(line.Push((char)130) == LineBuffer::Ignored);
     CHECK(line.Push('a') == LineBuffer::Echo);
     CHECK(line.Push('b') == LineBuffer::Echo);
     CHECK(line.Push('\b') == LineBuffer::Erase);
@@ -250,5 +251,41 @@ TEST(keyboard_editor_controls_left_right_ctrl_and_breaks)
         CHECK(!keys.Pop(c));
     }
 
+    return 0;
+}
+
+TEST(line_buffer_middle_editing_and_boundaries)
+{
+    LineBuffer line(true);
+    line.Set("abcd");
+    CHECK(line.Cursor() == 4);
+    CHECK(line.Push((char)130) == LineBuffer::Moved);
+    line.Push((char)130);
+    CHECK(line.Cursor() == 2);
+    CHECK(line.Push('X') == LineBuffer::Redraw);
+    CHECK(test_name_equal(line.Text(), "abXcd") && line.Cursor() == 3);
+    CHECK(line.Push((char)132) == LineBuffer::Redraw);
+    CHECK(test_name_equal(line.Text(), "abXd"));
+    CHECK(line.Push('\b') == LineBuffer::Redraw);
+    CHECK(test_name_equal(line.Text(), "abd") && line.Cursor() == 2);
+    line.SetCursor(0);
+    CHECK(line.Push('\b') == LineBuffer::Ignored);
+    line.Push((char)130);
+    CHECK(line.Cursor() == 0);
+    line.Push('z');
+    CHECK(test_name_equal(line.Text(), "zabd") && line.Cursor() == 1);
+    line.SetCursor(999);
+    CHECK(line.Cursor() == line.Length());
+    CHECK(line.Push((char)132) == LineBuffer::Ignored);
+    line.Reset();
+    CHECK(!line.Cursor() && !line.Length());
+    for (unsigned i = 0; i < 255; ++i)
+    {
+        line.Push('a');
+    }
+    line.SetCursor(12);
+    line.Push('b');
+    CHECK(line.Overflowed() && line.Length() == 255);
+    CHECK(line.Push('\n') == LineBuffer::Overflow);
     return 0;
 }

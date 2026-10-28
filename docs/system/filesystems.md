@@ -143,3 +143,19 @@ cluster indices. Ordinary mtools reads remain useful for independent checking.
 External writes can invalidate ownership keys or bypass recovery and are not a
 supported way to edit a used HackOS filesystem. Never clear a dirty journal or
 reinitialize metadata to hide corruption. Use disposable images for tests.
+
+## Directory enumeration
+
+Directory pages return copied `HackosFileInfo` metadata directly from one FAT
+scan, without counting the directory separately or reopening every ordinary
+entry. Dot entries retain canonical parent/self metadata. A directory scan reads
+and validates the permission table once for all entries; missing or duplicate
+matching records, bad checksums and malformed records still fail closed. There
+is no new persistent metadata cache, so chmod, chown and journal recovery remain
+visible to subsequent reads. Existing journal-owned permission-sector caching
+remains authoritative.
+
+`ls` requests up to sixteen entries per syscall and groups formatted output into
+1 KiB writes. This reduces repeated path checks and scheduler/renderer work while
+preserving listing order, hidden-file options, long-format metadata, pipes and
+redirection. Console scrolling uses pitch-aware pixel copies toward lower rows.

@@ -740,3 +740,40 @@ results are in `tests/out/graphics-final-manifest.json` and
 `tests/out/graphics-{bios,uefi}-validation.json`. The translated x86-64 ASan
 runtime failed its empty-program preflight; full x86-64 ASan remains a native
 CI requirement.
+
+## Shell editing and directory listing
+
+`make -C tests test-shell-editing FIRMWARE=bios` (or `FIRMWARE=uefi`)
+checks blinking caret pixels and cursor position through GDB, PS/2 middle-line
+insertion/deletion, wrapped lines, history, completion, cursor authorization,
+batched directory ABI bounds and redirected listing contents. The window suite
+uses `window --trace` for event assertions; ordinary demo launches stay quiet.
+
+`make -C tests test-listing-performance FIRMWARE=bios` runs three samples on a
+disposable image. `tests/qemu_listing_performance.py --firmware bios
+--build-directory /absolute/build/directory` selects a saved build. The probe
+separates legacy entry-at-a-time enumeration, tiny writes and a grouped write;
+it also measures actual `ls /USR/BIN` from Enter to the next prompt. Run
+benchmarks sequentially on an otherwise idle host. Guest PIT ticks and host
+wall times are diagnostics, not CI thresholds or hardware guarantees.
+
+The local BIOS comparison with 50 entries reduced median listing time from
+14.84 seconds to 0.296 seconds (three samples each). Final samples were
+0.256–0.340 seconds; final UEFI median was 0.308 seconds (0.299–0.363).
+The change combines 16-record directory pages, one
+permission-table validation per directory scan, explicit 1024-byte output
+buffering and faster console scrolling. Permission sectors were already cached
+by the journal; repeated metadata processing and tiny output calls both cost
+time. Raw baseline and final samples are in
+`tests/out/listing-baseline-bios.json` and
+`tests/out/qemu-listing-performance-{bios,uefi}/timings.json`.
+
+Validation passed 208 x86-64 UBSan host checks, 18 native ARM ASan/UBSan renderer
+checks, six boot-asset checks, the BIOS chain probe, and both firmware builds.
+Boot, shell, terminal, windows, storage, files, accounts, streams, usability,
+filters and isolated-user suites passed on BIOS and UEFI. Final isolated builds
+in `tests/out/shell-final/{bios,uefi}` additionally passed the editing/ABI
+suite after making middle editing opt-in for the shared input helper. Their
+kernels and the loadable segments of all 44 other compared programs match the
+broad regression builds; the final shell/input sources received the focused
+checks. Full translated x86-64 ASan remains unavailable as described above.
