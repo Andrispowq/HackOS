@@ -187,3 +187,33 @@ PageFrameAllocator* PageFrameAllocator::SharedAllocator()
 
     return s_Allocator;
 }
+
+// Surface buffers use the existing supervisor identity mapping below 3 GiB,
+// away from the display virtual mappings. Fragmentation is a recoverable failure.
+void* PageFrameAllocator::TryRequestSurfacePages(uint64_t count)
+{
+    if (!count || count > 16384)
+    {
+        return nullptr;
+    }
+
+    uint64_t limit = bitmap.size * 8;
+    if (limit > 0xc0000000ULL / 4096)
+    {
+        limit = 0xc0000000ULL / 4096;
+    }
+
+    uint64_t run = 0;
+    for (uint64_t i = 256; i < limit; ++i)
+    {
+        run = bitmap.Get(i) ? 0 : run + 1;
+        if (run == count)
+        {
+            void* result = (void*)((i + 1 - count) * 4096);
+            LockPages(result, count);
+            return result;
+        }
+    }
+
+    return nullptr;
+}

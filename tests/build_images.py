@@ -79,7 +79,7 @@ def build(firmware):
         validate_elf(kernel)
         # Large-model .lbss/.ldata must remain in their aligned load segments.
         # The kernel rejects shared pages rather than merging R/W/X permissions.
-        for path in (work / "libs/commands/bin").iterdir():
+        for path in [*(work / "libs/commands/bin").iterdir(), work / "libs/window/bin/window"]:
             data = path.read_bytes()
             validate_elf(data)
             phoff = struct.unpack_from('<Q', data, 32)[0]

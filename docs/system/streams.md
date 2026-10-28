@@ -174,3 +174,12 @@ python3 tools/run_qemu.py --firmware uefi --image out/uefi/HackOS.img --serial-l
 Serial is an output diagnostic channel, not another login/input terminal.
 EOF, broken pipes and terminal control remain HackOS interfaces, not a claim
 of POSIX compatibility.
+
+### Window readiness
+
+`poll` also accepts entries whose `fd` is an owned window handle and whose events
+are `HACKOS_POLL_WINDOW | HACKOS_POLL_READ`. These entries may be mixed with
+stream descriptors within the same 16-entry array and deadline. READ means an
+event/overflow is pending, HANGUP means mouse closure and INVALID means the
+handle is not owned or has been released. Poll never consumes window events.
+See [frame submission and waits](userspace.md#atomic-frame-submission-and-waits).

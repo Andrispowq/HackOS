@@ -70,9 +70,9 @@ owns a list of windows, applies focus, dragging, resizing and mouse closure, dra
 and resolves window IDs. Window pixels do not alter the console backbuffer.
 
 Userspace uses process-owned opaque handles through `window_create`,
-`window_blit`, `window_poll`, `window_close`, `window_state` and `window_event`. Creation takes a copied title
+`window_blit`, `window_poll`, `window_close`, `window_state` and `window_event`, plus `window_frame`/`window_upload` for atomic frames. Creation takes a copied title
 and bounded geometry; drawing copies validated pixel rectangles. No kernel
-framebuffer pointer or object layout is exposed. Exit, fault, kill and Ctrl-C
+framebuffer pointer or object layout is exposed. Exit, fault and termination
 release the owner's windows. See [userspace](userspace.md#owned-windows) for
 record layouts, quotas and return values.
 
@@ -83,7 +83,7 @@ Creation, uploads, mouse closure and resource cleanup mark the display dirty.
 Console output also marks it dirty; compositing keeps windows visible over
 updated text. Removing a window restores the console from its untouched
 backbuffer. The standalone ring-3 shell launches `./USR/BIN/WINDOW` on request;
-the demo closes with X, Q, or Ctrl-C.
+the demo accepts X/Alt-F4 requests or Q; Ctrl-Alt-Esc forces termination.
 
 ## Observing graphics
 
@@ -123,3 +123,39 @@ test pattern, clicking/dragging places a white marker, and ordinary keys or the
 mouse wheel recolour the small swatch. Mode/close keys keep their existing
 functions. Add `--trace` for event logs used by the regression suite; the normal
 demo remains quiet apart from its instructions and exit message.
+
+## Window rendering foundation
+
+Normal windows can grow to the available screen area (at most 4096×2160 client
+pixels). The legacy immediate-blit API is retained. New clients stage bounded
+pixel uploads behind a generation token, then present the complete replacement
+atomically to the compositor. Resize preserves the last committed image while
+invalidating stale transactions; allocation failure preserves the old geometry
+and buffers. Uncovered resized areas are black until the next presentation.
+
+A 64 MiB aggregate budget includes front, staging and temporary replacement
+surfaces, rounded to pages. Surfaces use recoverable contiguous physical-page
+allocation below 3 GiB, separate from the kernel heap. Fragmentation can reject
+an allocation even with sufficient total free memory. Window objects and their
+list use fixed storage; closing or reclaiming windows returns all surface pages.
+This is a bounded software renderer, with no shared user mappings or GPU path.
+
+The demo uses tiled frame transactions and sleeps in the existing timed poll
+API between events. Window readiness can be polled alongside stream readiness;
+closure and queue overflow also wake waiters. See the
+[frame and wait ABI](userspace.md#atomic-frame-submission-and-waits).
+
+## GUI interaction
+
+Opt-in GUI windows receive physical down/up, modifier/repeat and separate
+US-layout text events, with an authoritative held-key/button snapshot and reset
+epoch. Focus changes and ingress loss cancel capture and reset delivered input;
+close requests survive queue overflow. The manager supports Alt-Tab,
+Shift-Alt-Tab, Alt-Esc, Alt-F4, Alt-F9/F10 and explicit Ctrl-Alt-Esc termination.
+GUI Ctrl-C is an application shortcut. Existing decoded terminal and legacy
+window interfaces remain available.
+
+The 4 KiB session clipboard requires the focused window owner and is zeroed on
+logout. `window --interaction` demonstrates keyboard field/dialog navigation,
+clipboard editing, saved text and cancellable close requests using the existing
+bounded frame renderer. See [the GUI input ABI](userspace.md#gui-input-and-desktop-interaction).

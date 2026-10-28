@@ -23,6 +23,43 @@ static uint64_t Spawn(const char* mode)
     return syscall_spawn_args(args[0], 2, args);
 }
 
+static bool Reaped(uint64_t pid)
+{
+    // Child completion and idle reclamation are independent. Inherited file
+    // references remain live until reaping, unlike pipe endpoints at exit.
+    for (unsigned attempt = 0; attempt < 2000; ++attempt)
+    {
+        bool found = false;
+        HackosProcessInfo info;
+        for (uint64_t index = 0;; ++index)
+        {
+            uint64_t result = syscall_process_info(index, &info);
+            if (result == HACKOS_ERROR)
+            {
+                return false;
+            }
+            if (!result)
+            {
+                break;
+            }
+            if (info.pid == pid)
+            {
+                found = true;
+                break;
+            }
+        }
+        if (!found)
+        {
+            return true;
+        }
+        if (syscall_sleep(1) != 0)
+        {
+            return false;
+        }
+    }
+    return false;
+}
+
 int main(int argc, char** argv)
 {
     static char data[1024];
@@ -211,6 +248,7 @@ int main(int argc, char** argv)
     CHECK(syscall_dup2(file, 10) == 10);
     child = Spawn("inherit");
     CHECK(syscall_wait_timeout(child, &status, 0, 2000) == child && status == 0);
+    CHECK(Reaped(child));
     CHECK(Write(file, "C", 1));
     CHECK(syscall_fd_close(10) == 0 && syscall_fd_flush(file) == 0 && syscall_fd_close(file) == 0);
     file = syscall_fd_open("/tmp/streams.dat", HACKOS_OPEN_READ);

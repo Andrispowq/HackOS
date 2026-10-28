@@ -63,6 +63,18 @@ and protect `/SYSTEM`; `mv` never overwrites and handles files only. Step 16 add
 journaling. `/tmp` is shared writable storage; new files/directories use
 0644/0755. Recovery replays prepared transactions before mounting; corrupt
 journals fail closed. See `docs/system/filesystems.md` for the format and limits.
+Userspace windows support screen-relative client sizes up to 4096×2160 and a
+64 MiB aggregate front/staging surface budget. Generation-checked frame
+transactions preserve the last committed image during resize; allocation failure
+leaves the old state intact. Window readiness shares timed `poll` with streams,
+and the demo blocks between events. Legacy immediate blits remain supported
+until a handle opts into frame transactions. GUI input is separately opt-in:
+physical key-down/up, text/modifier/repeat events, reset snapshots and negotiated
+close requests. Alt-Tab/Shift-Alt-Tab cycle windows, Alt-Esc focuses the terminal,
+Alt-F4 requests close and Alt-F9/F10 control window modes. GUI Ctrl-C is an app
+shortcut; Ctrl-Alt-Esc terminates the focused owner. The focused owner can access
+a 4 KiB session clipboard, zeroed on logout. `window --interaction` demonstrates
+Tab navigation, clipboard editing, saving and unsaved-change confirmation.
 Userspace windows use process-owned handles and bounded pixel uploads; idle
 reclaims them on exit and composites them over the console. `USR/BIN/WINDOW`
 is the standalone demo. Idle dispatches ordered keyboard/mouse ingress, focus

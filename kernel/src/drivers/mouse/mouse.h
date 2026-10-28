@@ -2,6 +2,7 @@
 #define MOUSE_H
 
 #include "lib/stdint.h"
+#include "drivers/keyboard/gui_input.h"
 
 #define PS2LeftButton 0b00000001
 #define PS2MiddleButton 0b00000100
@@ -25,14 +26,16 @@ struct MouseState
     uint32_t buttons;
     uint32_t key; // zero for mouse packets
     int32_t wheel;
+    bool keyboard = false;
+    GuiKey input = {};
 };
 
-// 0 empty, 1 packet, 2 overflow with the latest state.
+// 0 empty, 1 packet, 2 overflow with latest state, 3 recovered emergency key.
 unsigned ReadMouse(MouseState& state);
 class Framebuffer;
 void GetMousePosition(uint32_t& x, uint32_t& y);
 void DrawMouse(Framebuffer& framebuffer, uint32_t x, uint32_t y);
-void QueueKey(uint32_t key);
+void QueueGuiKey(const GuiKey& key);
 void DiscardQueuedKeys();
 
 #endif

@@ -79,6 +79,7 @@ static uint32_t Width, Height;
 static uint8_t buttons;
 static EventQueue<MouseState, 128> mouseEvents;
 static bool interruptPending;
+static GuiKey pendingInterrupt;
 
 static void ProcessMousePacket()
 {
@@ -313,7 +314,8 @@ unsigned ReadMouse(MouseState& state)
 
     if (mouseEvents.Pop(state))
     {
-        if (state.key == HACKOS_KEY_INTERRUPT)
+        if (state.keyboard && state.input.down && state.input.key == pendingInterrupt.key &&
+            state.input.modifiers == pendingInterrupt.modifiers)
         {
             interruptPending = false;
         }
@@ -326,8 +328,8 @@ unsigned ReadMouse(MouseState& state)
     if (interruptPending)
     {
         interruptPending = false;
-        state = {0, 0, 0, HACKOS_KEY_INTERRUPT, 0};
-        return 1;
+        state = {0, 0, 0, HACKOS_KEY_INTERRUPT, 0, true, pendingInterrupt};
+        return 3;
     }
 
     return 0;
@@ -355,15 +357,17 @@ void DrawMouse(Framebuffer& framebuffer, uint32_t x, uint32_t y)
     }
 }
 
-void QueueKey(uint32_t key)
+void QueueGuiKey(const GuiKey& key)
 {
     InterruptGuard guard;
-    if (key == HACKOS_KEY_INTERRUPT)
+    if (key.down && (key.decoded == HACKOS_KEY_INTERRUPT ||
+                     (key.key == HACKOS_PHYSICAL_ESCAPE &&
+                      (key.modifiers & (HACKOS_MOD_CTRL | HACKOS_MOD_ALT)) == (HACKOS_MOD_CTRL | HACKOS_MOD_ALT))))
     {
         interruptPending = true;
+        pendingInterrupt = key;
     }
-
-    mouseEvents.Push({0, 0, 0, key, 0});
+    mouseEvents.Push({0, 0, 0, key.decoded, 0, true, key});
 }
 
 void DiscardQueuedKeys()
@@ -374,7 +378,7 @@ void DiscardQueuedKeys()
     for (unsigned i = 0; i < count; i++)
     {
         mouseEvents.Pop(state);
-        if (!state.key)
+        if (!state.keyboard)
         {
             mouseEvents.Push(state);
         }

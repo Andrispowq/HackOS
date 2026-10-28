@@ -220,8 +220,16 @@ back = display["backbuffer"]
                             {"type": "btn", "data": {"button": "left", "down": down}}]})
                         time.sleep(0.15)
 
+                    click_number = 0
                     def click(x, y):
+                        nonlocal click_number
                         move(x, y)
+                        click_number += 1
+                        # Wait for the preceding motion to reach the guest before
+                        # pressing; fixed host delays are insufficient under TCG load.
+                        inspect("click-position-" + str(click_number),
+                                "assert int(gdb.parse_and_eval('MousePositionX')) == " + str(x) + "\n" +
+                                "assert int(gdb.parse_and_eval('MousePositionY')) == " + str(y))
                         button(True)
                         button(False)
 
@@ -242,7 +250,83 @@ back = display["backbuffer"]
                         wait_text("Window demo ready.", offset)
                         return offset
 
+                    # Observe front/staging buffers independently before publication.
+                    def frame_gate(value, assertions=""):
+                        inspect("frame-gate-" + str(value), assertions + """
+import struct
+w = gdb.parse_and_eval("KernelWindowManager->focused")
+p = gdb.parse_and_eval("ready_queue")
+while int(p) and int(p["pid"]) != int(w["owner"]):
+    p = p["next"]
+va = """ + str(gate) + """
+entry = p["userSpace"]["leaf"]["entries"][(va - 0x400000000000) // 4096]
+physical = (int(entry["address"]) << 12) + (va & 4095)
+gdb.selected_inferior().write_memory(physical, struct.pack("<Q", """ + str(value) + """))
+""")
+
+                    offset = len(output())
+                    qmp.type("./USR/BIN/WINPROBE frames\n")
+                    wait_text("FRAME_STAGED", offset)
+                    frame_gate(1, """
+w = gdb.parse_and_eval("KernelWindowManager->focused")
+assert int(w["front"]["address"][0]) == 0xff112233
+assert int(w["staging"]["address"][0]) == 0xff445566
+assert int(fb["address"][130 * int(fb["pitch"]) + 100]) == 0xff112233
+""")
+                    wait_text("FRAME_RESIZED", offset)
+                    frame_gate(2, """
+w = gdb.parse_and_eval("KernelWindowManager->focused")
+assert int(w["front"]["width"]) == 640
+assert int(w["front"]["address"][0]) == 0xff445566
+assert int(w["staging"]["width"]) > 640
+assert int(fb["address"][31 * int(fb["pitch"]) + 1]) == 0xff445566
+""")
+                    wait_text("FRAME_PRESSURE_READY", offset)
+                    frame_gate(3, """
+# Only the retained 640x480 front survives CANCEL. Inject quota exhaustion.
+assert int(gdb.parse_and_eval("window_surface_pages")) == 300
+gdb.execute("set window_surface_pages = 16384")
+""")
+                    wait_text("FRAME_PRESSURE_OK", offset)
+                    frame_gate(4, """
+w = gdb.parse_and_eval("KernelWindowManager->focused")
+assert int(w["front"]["address"][0]) == 0xff445566
+assert int(w["maximised"]) == 1
+assert int(gdb.parse_and_eval("window_surface_pages")) == 16384
+gdb.execute("set window_surface_pages = 300")
+""")
+                    wait_text("FRAME_WAITING", offset)
+                    inspect("frame-blocking", """
+w = gdb.parse_and_eval("KernelWindowManager->focused")
+p = gdb.parse_and_eval("ready_queue")
+while int(p) and int(p["pid"]) != int(w["owner"]):
+    p = p["next"]
+assert int(p["state"]) == 6, "GUI did not block in poll"
+""")
+                    qmp.key("z")
+                    wait_text("FRAME_CLOSE_WAIT", offset)
+                    click(1904, 16)
+                    wait_text("WINDOW_FRAMES_OK", offset)
+                    wait_text("root@root:~$ ", offset)
+                    inspect("frame-reclaimed", """
+assert int(gdb.parse_and_eval("window_surface_pages")) == 0
+assert int(gdb.parse_and_eval("user_windows_live")) == 0
+""")
+                    move(0, 0)
+
                     offset = launch()
+                    # A sleeping demo makes no spontaneous syscall; deliver input
+                    # after the debugger has installed its CPL3 entry breakpoint.
+                    wake_marker = directory / "draw-waiting"
+                    wake_marker.unlink(missing_ok=True)
+                    wake_finished = threading.Event()
+                    def wake_sleeping_demo():
+                        while not wake_finished.wait(0.01):
+                            if wake_marker.exists():
+                                qmp.key("a")
+                                return
+                    wake_demo = threading.Thread(target=wake_sleeping_demo, daemon=True)
+                    wake_demo.start()
                     inspect("draw", """
 assert int(gdb.parse_and_eval("user_windows_live")) == 1, "Missing owned window"
 assert int(fb["address"][245 * int(fb["pitch"]) + 215]) == 0xffff00ff, "Missing magenta client pixels"
@@ -253,11 +337,15 @@ while int(p) and p["name"].string() != "~/USR/BIN/WINDOW":
 assert int(p) and int(p["userSpace"]), "Demo lacks private address space"
 bp = gdb.Breakpoint("*" + str(int(gdb.parse_and_eval("&syscall_handler"))), type=gdb.BP_HARDWARE_BREAKPOINT)
 bp.condition = "current_process->pid == " + str(int(p["pid"]))
+from pathlib import Path
+Path(""" + repr(str(directory / "draw-waiting")) + """).touch()
 gdb.execute("continue")
 frame = gdb.parse_and_eval("(Registers*)$rdi")
 assert int(frame["cs"]) & 3 == 3, "Window calls did not originate at CPL3"
 bp.delete()
 """)
+                    wake_finished.set()
+                    wake_demo.join(timeout=2)
                     qmp.call("stop")
                     qmp.call("screendump", {"filename": str(directory/"window.ppm")})
                     qmp.call("cont")
@@ -386,13 +474,13 @@ assert int(w["sizeX"]) == 240 and int(w["sizeY"]) == 230
                     button(True)
                     move(900, 800)
                     button(False)
-                    wait_text("WINDOW_RESIZE 320 240", offset)
-                    wait_text("WINDOW_PAINT 320 240", offset)
+                    wait_text("WINDOW_RESIZE 624 524", offset)
+                    wait_text("WINDOW_PAINT 624 524", offset)
                     inspect("large-client-paint", """
 w = gdb.parse_and_eval("KernelWindowManager->focused")
-assert int(w["drawArea"]["address"][220 * 320 + 300]) == (0xff000060 | (300 * 255 // 320) << 16 | (220 * 255 // 240) << 8)
+assert int(w["drawArea"]["address"][220 * 624 + 300]) == (0xff000060 | (300 * 255 // 624) << 16 | (220 * 255 // 524) << 8)
 """)
-                    move(596, 516)
+                    move(900, 800)
                     button(True)
                     move(290, 290)
                     button(False)
@@ -418,7 +506,7 @@ assert int(fb["address"][245 * int(fb["pitch"]) + 215]) == int(back["address"][2
 """)
 
                     offset = launch()
-                    qmp.key("c", control=True)
+                    qmp.key("esc", control=True, alt=True)
                     wait_text("^C\nroot@root:~$ ", offset)
 
                     offset = launch()
@@ -437,7 +525,7 @@ assert int(gdb.parse_and_eval("KernelWindowManager->focused")) == 0
                     click(250, 300)
                     inspect("focus-first", """
 manager = gdb.parse_and_eval("KernelWindowManager")
-assert int(manager["windows"]["_size"]) == 2
+assert int(manager["windows"]["count"]) == 2
 assert int(manager["focused"]["startX"]) == 200
 assert int(manager["windows"]["ptr"][1]) == int(manager["focused"])
 assert int(manager["windows"]["ptr"][0]["owner"]) != int(manager["focused"]["owner"])
@@ -483,7 +571,7 @@ assert int(gdb.parse_and_eval("KernelWindowManager->focused->startX")) == 200
                     inspect("focus-fallback", """
 assert int(gdb.parse_and_eval("KernelWindowManager->focused->startX")) == 450
 """)
-                    qmp.key("c", control=True)
+                    qmp.key("esc", control=True, alt=True)
                     inspect("background-interrupt", """
 assert int(gdb.parse_and_eval("user_windows_live")) == 0
 assert int(gdb.parse_and_eval("KernelWindowManager->focused")) == 0
@@ -527,8 +615,9 @@ gdb.selected_inferior().write_memory(physical, struct.pack("<Q", 1))
                     enter("kill " + pid, "Task stopped.")
                     inspect("cleanup", """
 assert int(gdb.parse_and_eval("user_windows_live")) == 0
-assert int(gdb.parse_and_eval("KernelWindowManager->windows._size")) == 0
-assert int(gdb.parse_and_eval("tasks_reaped")) == 14
+assert int(gdb.parse_and_eval("KernelWindowManager->windows.count")) == 0
+assert int(gdb.parse_and_eval("window_surface_pages")) == 0
+assert int(gdb.parse_and_eval("tasks_reaped")) == 15
 p = gdb.parse_and_eval("ready_queue")
 labels = []
 while int(p):

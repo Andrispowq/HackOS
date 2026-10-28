@@ -64,8 +64,8 @@ class QMP:
             if "return" in result:
                 return result["return"]
 
-    def key(self, key, shift=False, control=False):
-        keys = (["ctrl"] if control else []) + (["shift"] if shift else []) + [key]
+    def key(self, key, shift=False, control=False, alt=False):
+        keys = (["ctrl"] if control else []) + (["alt"] if alt else []) + (["shift"] if shift else []) + [key]
         self.call("send-key", {"keys": [{"type": "qcode", "data": k} for k in keys], "hold-time": 1})
         time.sleep(0.025)
 

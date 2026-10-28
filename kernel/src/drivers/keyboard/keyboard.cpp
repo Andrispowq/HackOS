@@ -1,5 +1,5 @@
 #include "keyboard.h"
-#include "input.h"
+#include "gui_input.h"
 #include "proc/tasking/process.h"
 
 #include "drivers/mouse/mouse.h"
@@ -8,25 +8,21 @@
 #include "arch/x86_64/interrupts/idt.h"
 #include "arch/x86_64/interrupts/guard.h"
 
-static KeyboardInput decoder;
+static GuiKeyboardInput decoder;
 static EventQueue<char, 255> terminalInput;
 
 static void keyboard_callback(Registers*)
 {
-    decoder.PushScancode(__inb(0x60));
-    decoder.TakeInterrupt();
-
-    char key;
-    while (decoder.Pop(key))
+    GuiKey key;
+    if (decoder.Push(__inb(0x60), key))
     {
-        QueueKey((uint8_t)key);
+        QueueGuiKey(key);
     }
 }
 
 void ClearKeyboard(bool queued)
 {
     InterruptGuard guard;
-    decoder.Clear();
     terminalInput.Clear();
 
     if (queued)
@@ -82,4 +78,10 @@ bool KeyboardReady()
 {
     InterruptGuard guard;
     return terminalInput.Ready();
+}
+
+uint32_t KeyboardModifiers()
+{
+    InterruptGuard guard;
+    return decoder.Modifiers();
 }

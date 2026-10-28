@@ -16,5 +16,6 @@ enum class KeyboardRead
 };
 KeyboardRead ReadKeyboard(char& ch);
 bool KeyboardReady();
+uint32_t KeyboardModifiers();
 
 #endif

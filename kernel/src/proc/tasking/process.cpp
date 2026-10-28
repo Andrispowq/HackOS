@@ -406,6 +406,7 @@ static void CompleteProcess(Process* child)
 
     if (child->systemShell && !child->authenticationAgent && child->sessionId)
     {
+        ClearSessionClipboard(child->sessionId);
         // Include detached/background descendants and runas identities. The
         // session ID is kernel-owned and cannot be changed by a user program.
         for (auto p = ready_queue; p; p = p->next)

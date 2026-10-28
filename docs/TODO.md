@@ -150,6 +150,35 @@ preflight, so this does not claim ASan coverage. Rerun fresh BIOS/UEFI builds an
 boot, account/login, shell/credentials, isolated ring-3 and window suites for
 future changes; prior results are not a substitute.
 
+## Graphical environment
+
+The following milestones turn the existing window demo into a usable desktop.
+Milestones 1 and 2 are implemented; later milestones need a separate request.
+
+1. **Window rendering foundation — implemented:** screen-relative normal sizes
+   up to 4096×2160, a shared 64 MiB surface budget, recoverable allocation with
+   rollback, generation-checked BEGIN/upload/PRESENT/CANCEL transactions,
+   preservation of the last committed image during resize, and blocking timed
+   window readiness mixed with streams in `poll`. The demo uses tiled atomic
+   frames and sleeps between events. See [the ABI](system/userspace.md#atomic-frame-submission-and-waits).
+2. **Input and interaction — implemented:** opt-in physical key-down/up,
+   repeat/modifier and US-layout text events; recoverable key/button snapshots;
+   Alt-Tab/Shift-Alt-Tab cycling, Alt-Esc terminal focus, Alt-F9/F10 window modes;
+   ordered, latched Alt-F4/X close requests with accept/reject; a focused-owner,
+   4 KiB session clipboard cleared on logout. GUI Ctrl-C is an application
+   shortcut; Ctrl-Alt-Esc explicitly terminates a stuck owner. `window
+   --interaction` demonstrates Tab navigation, copy/cut/paste, saving and
+   cancellable unsaved-change prompts. See [GUI input](system/userspace.md#gui-input-and-desktop-interaction).
+3. **Userspace GUI library:** clipped drawing/text/layout, widgets, dialogs,
+   selection/scrolling, keyboard navigation and consistent appearance.
+4. **Desktop and terminal:** authenticated desktop session, launcher/taskbar,
+   authorized session window management, independent terminal sessions and
+   shell job control, logout cleanup and desktop recovery.
+5. **Applications:** graphical editor, file manager, settings and login/setup
+   using existing permission, filesystem and authentication contracts.
+6. **Integrated hardening:** framebuffer formats, clipping/input/allocator
+   stress, damaged-region composition and latency measurements on BIOS/UEFI.
+
 ## Boot and memory
 
 - [x] Share boot-information declarations and layout assertions across both
@@ -254,7 +283,7 @@ future changes; prior results are not a substitute.
   and editor controls to the safe ABI (step 15).
 - [x] Add blocking input, process-group/job control, a user heap and allocation/formatting
   runtime helpers (step 17).
-- [ ] Add raw key-up/modifier events if a consumer needs them; decoded keys remain the terminal contract.
+- [x] Add opt-in GUI key-up/modifier/text events and state recovery; decoded keys remain the terminal contract.
 - [x] Add minimize/maximize/restore, a restore bar, and signed mouse-wheel
   events to the owned window API and standalone demo.
 - [x] Add bounded window dragging/resizing, focus/z-order, per-window input

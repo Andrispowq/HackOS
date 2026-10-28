@@ -24,7 +24,8 @@ from ring 3, or `user USR/BIN/RING3` for
 the print/preemption/exit demo. `shutdown` requests kernel ACPI power-off. The
 raw-pointer libc ABI is retired. Launch `window` for the ported
 window demo; drag its title, resize the bottom-right grip, click to focus,
-and type/click in the client. Close X, press Q, or use Ctrl-C. Program commands wait for
+and type/click in the client. Close X, press Q, or use Ctrl-Alt-Esc to force termination. Use
+`window --interaction` for Tab navigation, clipboard fields and save/close dialogs. Program commands wait for
 completion before showing the prompt; a separate trailing `&` launches in the
 background. Try `input` for interactive text input; Ctrl-C returns to
 the shell. Up/Down browses the fixed 256-command history, and `history` lists it.

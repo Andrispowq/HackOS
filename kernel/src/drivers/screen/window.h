@@ -5,6 +5,7 @@
 
 #include "framebuffer.h"
 #include "hackos/abi.h"
+#include "drivers/keyboard/gui_input.h"
 #include "hackos/runtime/event_queue.h"
 
 class Window
@@ -23,15 +24,49 @@ class Window
         return owner;
     }
 
-    void SetFocused(bool value);
+    void SetFocused(bool value, uint32_t modifiers = 0);
     void SetMouse(int32_t x, int32_t y, uint32_t buttons);
     HackosWindowState State() const;
     void SendEvent(uint32_t type, uint32_t key = 0);
     bool ReadEvent(HackosWindowEvent& event);
+    bool ReadEvent2(HackosWindowEvent2& event);
+
+    bool RichInput() const
+    {
+        return richInput;
+    }
+
+    void EnableInput();
+    void ResetInput(uint32_t modifiers);
+    void Key(const GuiKey& key);
+    void RequestClose();
+
+    bool ClosePending() const
+    {
+        return closePending;
+    }
+
+    void RejectClose();
+    HackosWindowInputState InputState() const;
     void InputOverflow();
     uint32_t Mode() const;
     void SaveNormalGeometry();
-    void RestoreNormalGeometry();
+    bool RestoreNormalGeometry();
+    void Release();
+    bool Initialise(uint32_t width, uint32_t height);
+    uint64_t Frame(uint64_t operation, HackosWindowFrame& frame);
+    Framebuffer* UploadBuffer(uint64_t generation);
+
+    bool EventsReady() const
+    {
+        return events.Ready() || (closePending && !closeDelivered);
+    }
+
+    bool IsFramed() const
+    {
+        return framed;
+    }
+
     void Draw(Framebuffer* framebuffer);
 
     //Getters
@@ -127,7 +162,7 @@ class Window
 
     //Setters
     void MoveWindow(uint32_t x, uint32_t y);
-    void ResizeWindow(uint32_t x, uint32_t y);
+    bool ResizeWindow(uint32_t x, uint32_t y);
 
     void SetCursorPosiiton(uint32_t x, uint32_t y);
     void SetTitle(const char* title);
@@ -179,7 +214,11 @@ class Window
     bool focused = false;
     int32_t mouseX = 0, mouseY = 0;
     uint32_t mouseButtons = 0;
-    EventQueue<HackosWindowEvent, 64> events;
+    EventQueue<HackosWindowEvent2, 64> events;
+    bool richInput = false, closePending = false, closeDelivered = false;
+    uint64_t pressedKeys[4] = {}, inputSerial = 0;
+    uint32_t modifiers = 0;
+    HackosWindowEvent2 MakeEvent(uint32_t type, uint32_t key = 0, uint32_t flags = 0) const;
 
     bool toBeClosed = false;
 
@@ -198,7 +237,11 @@ class Window
     uint32_t cursorX = 0, cursorY = 0;
     char title[30];
 
-    Framebuffer* drawArea;
+    Framebuffer front = {}, staging = {};
+    Framebuffer* drawArea = &front;
+    uint64_t generation = 1;
+    bool transaction = false;
+    bool framed = false;
 };
 
 #endif

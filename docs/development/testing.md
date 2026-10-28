@@ -817,3 +817,89 @@ Formatting and Python syntax checks passed. Results and hashes are recorded in
 `tests/out/loader-{bios,uefi}-validation.json` and
 `tests/out/loader-final-manifest.json`. Full x86-64 ASan remains a native CI
 requirement; the local existing host suite used the explicit UBSan fallback.
+
+## Window rendering foundation
+
+The existing `tests/qemu_windows.py --firmware bios` / `uefi` suite now runs a
+640×480 frame probe before interactive tests. GDB independently verifies that
+staging does not affect either the committed surface or displayed pixels,
+resize retains the old image, quota failure leaves geometry/pixels unchanged,
+and an idle GUI is blocked in scheduler I/O state. Guest checks cover invalid
+pointers/rectangles, transaction restart/cancel, stale generations, legacy-blit
+rejection after opt-in, mixed window/stream readiness, timeout, keyboard wake,
+close wake and released/foreign handles. The harness temporarily injects a full
+surface quota, restores accounting before further allocation, and checks zero
+surface pages after cleanup. Existing drag tests now cover clients above the
+old 320×240 limit.
+
+`python3 tests/surface_allocator.py` runs production bitmap/contiguous-page code
+with ASan+UBSan against a synthetic ownership map (only hardware halt instructions
+are replaced with traps), covering invalid requests,
+exact exhaustion, fragmented free space, failed-allocation accounting and
+release/reuse. It requires a native Linux C++ sanitizer runtime (set
+`SURFACE_CXX` to override `g++`) and runs in the host CI job. This isolated test
+does not claim coverage of the general kernel heap or hardware page mappings.
+
+The stream inheritance probe waits for the exited child to disappear from process
+records before reopening its former exclusive file. Exit-result collection can
+precede idle's file cleanup; the byte and shared-position assertions remain
+unchanged. Account/window cleanup checks inspect the new fixed window list and
+also require all surface pages to be reclaimed.
+
+Window foundation validation passed fresh BIOS/UEFI builds and all twelve guest
+suites on each path: boot, windows, accounts, shell, isolated users, files,
+storage, usability, streams, terminal, shell editing and filters. Both window
+captures were inspected. The existing host suite passed 208 checks with the
+explicit local x86-64 UBSan fallback, plus six boot-asset checks and the BIOS
+chain probe (`BOOT_LAYOUT_CC=clang-18` selected the container's compiler).
+The isolated surface allocator passed native ARM Linux ASan+UBSan. Full x86-64
+ASan remains a native CI requirement. Formatting (328 files), Python syntax,
+workflow lint and diff whitespace checks passed. The final firmware builds
+match every modified production source; results and hashes are in
+`tests/out/gui-final-validation.json` and `tests/out/gui-source-manifest.json`.
+
+## GUI input and desktop interaction
+
+`python3 tests/qemu_gui_input.py --firmware bios` / `uefi` (or `make -C tests
+test-gui-input FIRMWARE=...`) runs the GUI probe and interaction demo on disposable
+images. It verifies key transitions, repeats, modifiers/text, GUI Ctrl-C safety,
+forward/reverse window cycling, minimize/maximize, focus/capture reset while keys
+and buttons are held, ingress/window overflow, and ordered/coalesced close
+requests with rejection and acceptance. GDB injects ingress loss and inspects
+held-state recovery; it checks that recovering a lost Ctrl-C never fabricates a
+GUI key/copy gesture. Close requests survive a full window event queue.
+
+Clipboard checks include foreign/background denial, invalid buffers, 4096-byte
+bounds, atomic failure, short-read rejection and zeroing across logout/login.
+The visible diagnostic exercises Tab/Shift-Tab, selection/copy/cut/paste,
+pointer focus, cursor/Backspace/Delete editing, exact saved file bytes, successful
+save-and-close, unsaved-change cancellation/discard and save failure
+while another process holds an exclusive writer. Screenshots cover fields and
+the close dialog; glyph pixels verify the userspace PSF font path. Edits use
+explicit key releases and wait for empty input queues plus a blocked GUI owner,
+so concurrent TCG guests cannot turn host delays into overlapping key chords. Existing
+window tests assert the guest pointer position before clicks and use Ctrl-Alt-Esc
+for modern-window forced termination; legacy
+window probes retain their Ctrl-C compatibility checks.
+
+`python3 tests/gui_keyboard.py` runs the production keyboard decoder and existing
+line-buffer cases with a native ASan+UBSan runtime, independent of the x86 host
+assembly suite. It covers left/right modifiers, repeat/release, Caps Lock,
+extended/fake-shift/Pause sequences and bounded arbitrary input bytes. The
+ordinary host suite also includes the new GUI cases and pins syscall/record ABI
+sizes. CI runs both the native decoder suite and the new guest suite alongside
+the existing BIOS/UEFI regressions. Image packaging also checks the window demo
+against the userspace segment/page policy, catching misplaced constructor sections.
+
+Step-2 validation passed fresh BIOS/UEFI builds and all thirteen guest suites on
+both paths: the twelve foundation suites above plus GUI input/interaction. The
+final window and GUI suites use the final demo build; the other regressions use
+byte-identical packaged kernels. Fields and close-dialog screenshots were
+inspected on both paths. The host suite passed 210 checks with the explicit local
+x86-64 UBSan fallback, six boot-asset checks and the BIOS chain probe. All 13
+native keyboard/line-buffer cases passed ASan+UBSan. Formatting (331 files),
+Python syntax, workflow lint and diff whitespace checks passed. Final images
+and source snapshots are refreshed in `tests/out/build-bios` and
+`tests/out/build-uefi`; consolidated results and production-source hashes are in
+`tests/out/input-step2/final-validation.json` and
+`tests/out/input-step2/source-manifest.json`.

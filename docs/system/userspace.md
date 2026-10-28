@@ -179,8 +179,8 @@ Both Ctrl keys support Ctrl-C. With terminal focus it terminates the foreground
 process group with status 130 even if its members never read input or its queue
 is full. Idle records the target group; the scheduler terminates it only after
 preemption guards end. Deferred cleanup closes files/windows and frees user
-memory. With window focus the target is that window's owner, including background
-processes. The shell is protected; at its prompt Ctrl-C cancels the current line
+memory. With legacy window focus the target is that window's owner, including background
+processes. Rich-input windows receive Ctrl-C as a chord; Ctrl-Alt-Escape terminates their owner. The shell is protected; at its prompt Ctrl-C cancels the current line
 and history navigation. Ordinary children inherit the group, including `runas`
 descendants. A live owner delegates console ownership explicitly. If it exits with surviving
 group members, ownership returns to a surviving launcher or another member of
@@ -316,8 +316,8 @@ the owning process; sharing a UID never transfers handles or wait rights. Stream
 descriptors are explicitly inherited or mapped by spawn; see [streams](streams.md).
 Terminal backspace/clear and foreground handoff depend on terminal ownership,
 not root. `systemShell` identifies the protected terminal anchor only; it is no
-longer a power/kill/account privilege. Terminal Ctrl-C targets the foreground group; window Ctrl-C retains its
-window-owner target. Job control is authorized by the controller/child record,
+longer a power/kill/account privilege. Terminal Ctrl-C targets the foreground group; legacy window Ctrl-C retains its
+window-owner target; rich-input windows use Ctrl-Alt-Escape for forced termination. Job control is authorized by the controller/child record,
 not by a matching UID or an executable name.
 
 For example, `groupadd staff`, `useradd alice staff`, `usermod alice users`, then
@@ -408,6 +408,12 @@ return an error rather than being reinterpreted as new operations.
 | 82 | `terminal_set(key, value)` | Foreground owner only; set console appearance or reset defaults |
 | 83 | `terminal_cursor(back, visible)` | Owner only; back=0–255 cells from current output position, visible=0/1; reset blink phase; zero or error |
 | 84 | `readdir_batch(path, index, out, capacity)` | Copy up to 1–16 file-info records; return count, zero at end, or error; directory read/traverse permissions required |
+| 85 | `window_frame(handle, operation, frame)` | Begin, present or cancel an owned generation-checked frame |
+| 86 | `window_upload(handle, upload, pixels)` | Copy up to 1024 pixels into the matching pending frame |
+| 87 | `window_input(handle, operation, out)` | QUERY=0 or one-way ENABLE=1; copied GUI input snapshot |
+| 88 | `window_event2(handle, out)` | One GUI event; 1 delivered, 0 empty, error for invalid access |
+| 89 | `clipboard(operation, buffer, length)` | QUERY=0, READ=1, WRITE=2; focused session owner only, up to 4096 bytes |
+| 90 | `window_close_reply(handle, accept)` | 0 rejects, 1 closes/releases an owned pending close request |
 
 `HackosTerminalSettings` contains six uint32 fields: pixel `fontSize`, RGBA
 `bgColour`, RGBA `fontColour`, `columns`, `rows`, and zero `reserved`. The colours
@@ -451,7 +457,7 @@ Read validates the destination before advancing a file offset. Input events
 include Up/Down (128/129), Left/Right (130/131), Delete (132), Ctrl+S (19),
 Ctrl+X (24), Ctrl+Z (26), and `HACKOS_KEY_INTERRUPT` (3, protected shell/login prompt).
 Both Ctrl keys produce the editor controls regardless of Shift/Caps Lock;
-release events are not delivered. No syscall
+the decoded terminal API does not deliver release events. No syscall
 returns kernel addresses, virtual objects, format strings or `va_list` objects.
 
 Each process can own eight file handles. Monotonically allocated opaque tokens
@@ -502,7 +508,7 @@ print, timer preemption and exit. The standalone `WINDOW` program ports the old
 window demo onto owned handles and pixel uploads. Launch `./USR/BIN/WINDOW`,
 then drag its title bar, resize its bottom-right grip, click to focus, type to
 change the colour marker, and click the client to mark a position. Close X,
-press Q, or use Ctrl-C. Use the title-bar `-` / `+` / `R` controls or keys M / F / R
+press Q, or use Ctrl-Alt-Escape. Use the title-bar `-` / `+` / `R` controls or keys M / F / R
 to minimize, toggle maximize, or restore. Click a minimized window's bottom-bar
 tab to bring it back. Scrolling changes the colour marker and logs signed wheel
 steps. Background windows also receive focused keyboard input;
@@ -519,8 +525,8 @@ listed in [TODO](../TODO.md).
 
 `HackosWindowSpec` is 48 bytes: four `uint32_t` fields (`x`, `y`, `width`,
 `height`), followed by a 32-byte title buffer. Width/height specify the client
-area; the kernel adds a 30-pixel title bar. Normal client widths are 96–320 pixels,
-heights 30–240. Coordinates start at 1 and the complete decorated window must
+area; the kernel adds a 30-pixel title bar. Normal client widths are 96–4096 pixels,
+heights 30–2160, further bounded by the screen and window position. Coordinates start at 1 and the complete decorated window must
 fit the screen. Titles must terminate within 30 bytes and contain printable
 ASCII; long labels are visually clipped before the title-bar controls.
 
@@ -528,7 +534,7 @@ Each process may retain four handles, with a global limit of 16. Handles grant
 access only to their owner; spawning a child does not transfer them. There is
 no user mapping of window storage, framebuffer addresses or kernel objects.
 Closed handles are rejected, and all retained handles are released by idle when
-the process exits, faults, is killed or receives Ctrl-C.
+the process exits, faults or is terminated (including legacy Ctrl-C and Ctrl-Alt-Escape).
 
 `HackosWindowRect` contains four `uint32_t` fields (`x`, `y`, `width`, `height`)
 relative to the client area. Blits use tightly packed row-major 32-bit
@@ -542,13 +548,57 @@ The mouse X button removes the window; its handle remains reserved until
 `window_close` or process cleanup so the owner can observe `window_poll == 1`.
 Invalid, foreign and explicitly closed handles return `HACKOS_ERROR`. Polling
 does not block. Dragging, resizing, window modes, focus and input events are
-described below. Raw key-up events remain future work.
+described below. The opt-in GUI input API below adds physical key transitions and close negotiation.
 
 Idle updates mouse closure and flushes dirty drawing under a preemption guard.
 The compositor overlays windows onto a RAM copy of the console and presents
 changed spans to the physical display. Cursor-only motion reuses the composed
 scene. Window pixels never overwrite the console backbuffer;
 closing or reclaiming a window triggers redraw to restore the console beneath.
+
+### Atomic frame submission and waits
+
+The original `window_blit` remains available for legacy clients. New clients use:
+
+| Slot | Call | Contract |
+| --- | --- | --- |
+| 85 | `window_frame(handle, operation, frame)` | BEGIN=0, PRESENT=1, CANCEL=2; copied readable/writable `HackosWindowFrame` |
+| 86 | `window_upload(handle, upload, pixels)` | Copy at most 1024 packed pixels into the pending frame |
+
+`HackosWindowFrame` is 16 bytes: `uint64_t generation`, then `uint32_t width,
+height`. BEGIN allocates (or reuses) a black staging surface for current geometry,
+invalidates any prior transaction and returns a new generation and dimensions.
+The old committed image stays visible. The first successful BEGIN permanently
+opts this handle into framed rendering; legacy blits then return `HACKOS_ERROR`.
+
+`HackosWindowUpload` is 24 bytes: `uint64_t generation`, then `uint32_t x, y,
+width, height`. Uploads validate the whole rectangle and copy its entire user
+buffer before modifying staging. PRESENT swaps in staging as the committed
+image and invalidates the client bounds. Pixels not uploaded remain black.
+CANCEL discards staging without modifying the visible image. PRESENT is atomic
+with respect to composition, but is not a physical vertical-sync fence or a
+promise that the monitor has already displayed the frame. The compositor keeps
+its existing refresh pacing. Applications can tile directly from a small scratch
+buffer; no full-screen userspace allocation is required.
+
+Successful resize, another BEGIN, PRESENT or CANCEL makes old transaction
+operations return `HACKOS_WINDOW_STALE`. Tokens must be used with their original
+owned handle. Invalid pointers/rectangles/handles/operations return
+`HACKOS_ERROR` without consuming a transaction. Allocation failure preserves all
+existing state. Resize reserves its replacement before releasing old storage;
+a successful resize therefore leaves staging available for the next BEGIN.
+Repeated resizes keep only the last committed image and latest staging surface.
+
+Existing syscall 72 `poll` also accepts `{handle, HACKOS_POLL_WINDOW |
+HACKOS_POLL_READ, 0}`. READ reports queued window events or overflow; HANGUP
+reports mouse closure; INVALID reports a foreign, released or invalid handle.
+This does not consume events: use `window_event` after readiness. Other event
+masks combined with WINDOW are invalid. Mix window entries and ordinary stream
+entries within the existing 16-entry limit. Timeout 0 polls, finite milliseconds
+expire with 0 ready entries, and `HACKOS_WAIT_FOREVER` blocks without a deadline.
+Event arrival, overflow and closure wake waiters; predicate checks and blocking
+are IRQ-atomic and never suspend inside a preemption guard. A standalone blocking
+window wait is simply `poll` with one window entry.
 
 ### Window interaction and events
 
@@ -559,10 +609,12 @@ remaining visible window, or the terminal if none remain. Ownership remains enfo
 regardless of focus: another process cannot query or consume your window events.
 
 Drag the title bar to move, or the bottom-right 8-by-8 grip to resize. Geometry
-stays within the display and existing 96–320 by 30–240 client limits. Resize
-clears the client buffer and queues a resize event; repaint using the current
-state. Blits using obsolete geometry fail safely and can be retried after a
-state query. Dragging/resizing captures the pointer until left-button release.
+stays within the display and 96–4096 by 30–2160 client limits. A successful
+resize queues a resize event. Legacy clients receive a cleared buffer; framed
+clients retain their last committed image, clipped to the new client area with
+newly exposed space black, until they present a replacement. Allocation failure
+leaves geometry, pixels, generation and any pending frame unchanged. Legacy
+blits check current bounds; framed uploads additionally reject stale generations. Dragging/resizing captures the pointer until left-button release.
 A press inside the client similarly captures motion/release outside the window;
 client-relative coordinates are signed and may be negative or beyond its size.
 
@@ -578,10 +630,14 @@ Maximize is idempotent and unminimizes an already-maximized window.
 
 Maximize uses the display except for a one-pixel border and a reserved 28-pixel
 bottom bar. It disables manual dragging/resizing until restored. Displays above
-4096 by 2160 or below 98 by 90 are rejected. The compositor caps aggregate
-maximized client buffers plus a reservation for all 16 normal windows at 64 MiB.
-Maximize/normal restore clear the client buffer and emit MOVE, RESIZE and MODE;
-applications must repaint using the current geometry. Blits remain bounded to
+4096 by 2160 or below 98 by 90 are rejected. All front and staging surfaces, including temporary resize allocations, share
+a 64 MiB page-rounded budget. Allocation also requires contiguous physical pages
+in the supervisor identity map below 3 GiB; fragmentation or exhaustion returns
+a controlled error. Window metadata uses a fixed 16-object pool. No surface is
+allocated from the general kernel heap, and all surface pages are returned on
+close or owner cleanup.
+Successful maximize/normal restore invalidate frame generations and emit MOVE, RESIZE and MODE;
+applications must repaint using the current geometry. Framed clients retain the old image meanwhile. Blits remain bounded to
 1024 pixels, including for maximized clients. The demo tiles in both axes.
 
 `HackosWindowState` is 32 bytes: unsigned x/y/client width/client height, signed
@@ -609,9 +665,10 @@ owner cleanup. Events never expose a kernel pointer.
 IRQs only decode and enqueue bounded input. A shared 128-entry ingress queue
 orders keyboard and mouse input; idle applies a click's focus change before a
 following key. Input loss cancels pointer capture and reports overflow. Ctrl-C
-is latched separately so a full queue cannot mask it. With window focus Ctrl-C
+is latched separately so a full queue cannot mask it. With legacy window focus Ctrl-C
 terminates that window's owning process (and cleans all its windows), including
-background owners. Without window focus it retains terminal foreground/cancel
+background owners. Opt-in GUI clients receive Ctrl-C as a key chord instead;
+Ctrl-Alt-Esc explicitly terminates their focused owner. Without window focus it retains terminal foreground/cancel
 semantics. Keyboard typeahead is cleared on focus/terminal ownership changes.
 
 For two independent owners, launch `./USR/BIN/WINDOW &`, click the desktop,
@@ -619,8 +676,8 @@ then launch `./USR/BIN/WINDOW second &`. Switch focus by clicking their clients;
 only the focused demo reacts to typed keys. Each demo paints small bounded
 tiles, logs events, handles resize races, and recovers queue overflow. It processes
 at most 16 events before giving repainting a turn, so pointer traffic cannot
-keep a resized client black by preventing the queue from becoming empty. A
-completed upload checks current dimensions and retries if geometry changed.
+keep a resized client black by preventing the queue from becoming empty. The demo submits complete generation-checked frames and retries after a resize;
+between updates it blocks in `poll`, with a 16 ms retry delay on allocation failure.
 
 Composition and validated pixel uploads use clipped row copies with independent
 source/destination pitches. On x86-64 these copy whole 32-bit pixels, avoiding
@@ -629,8 +686,8 @@ paint only their edges; the client is copied once instead of first being filled
 with border colour. Idle coalesces dirty updates until at least 16 milliseconds after the previous
 frame, using the configured PIT frequency. A pending final frame stays dirty
 until displayed, even after uploads/input stop. Boot, fault and power-off paths
-can still force an immediate draw. Composition still redraws the full display;
-damage tracking and a frame-presentation API are not introduced by this change.
+can still force an immediate draw. Composition still redraws the full display in RAM; damage bounds limit
+comparison and video-memory writes. Frame submission is described below.
 
 ### Command display and directory listings
 
@@ -656,3 +713,93 @@ stable snapshots across directory mutations. The legacy single-record call remai
 available. `User::BufferedOutput` offers an explicit 1 KiB stdout buffer; callers
 must call `Flush()` and check its result. Failures remain sticky, and unrelated
 `User::Print` calls retain immediate-output behavior.
+
+### GUI input and desktop interaction
+
+`window_input(handle, ENABLE, out)` opts one owned window into the GUI event
+contract, clears its legacy queue and returns a copied state snapshot. Repeating
+ENABLE is idempotent. QUERY requires prior opt-in. `window_event` then rejects
+that handle; use `window_event2`. Legacy windows retain decoded press/repeat
+keys, immediate mouse closure and window-owner Ctrl-C termination. The terminal's
+decoded input, Ctrl-C/Ctrl-Z job control and existing stream API remain intact.
+
+`HackosWindowEvent2` is 48 bytes: the original 32-byte event, `uint32_t modifiers,
+flags`, and `uint64_t serial`. Geometry/pointer/focus fields keep their existing
+meaning. The additional types are KEY_DOWN=9, KEY_UP=10, TEXT=11,
+CLOSE_REQUEST=12 and INPUT_RESET=13. On key transitions, `event.key` is the
+set-1 physical base code with bit 7 set for E0-prefixed keys, never a raw byte
+stream. On TEXT it is a printable US-layout ASCII code point. Presses can emit
+KEY_DOWN followed by TEXT; releases never emit text. Ctrl/Alt chords do not
+emit text. Flags bit 0 marks typematic repeat. Modifiers are SHIFT=1, CTRL=2,
+ALT=4, CAPS=8, combining left/right modifiers. Enter, Tab, arrows, Backspace,
+Delete and Escape are physical-key events, not text. Pause/Print Screen and
+unsupported sequences are ignored. Unicode, IMEs, alternative layouts and
+Super-key shortcuts are not implemented.
+
+`HackosWindowInputState` is 56 bytes: four `uint64_t keys` words, `uint64_t
+serial`, then `uint32_t modifiers, buttons, focused, closePending`. Bit `key %
+64` in word `key / 64` records an accepted held key. The serial is an input
+reset epoch, separate from frame generations. On focus changes, queued GUI
+input and held-key/button state are cleared, the epoch advances, and RESET then
+FOCUS are delivered. Current modifiers are supplied on focus gain; key releases
+can therefore arrive without a matching press in the new target. A key held
+across a focus/reset boundary cannot start repeating actions there until a
+fresh press. Losing focus cancels pointer capture. Keyboard-driven focus changes
+suppress an already-held pointer button until release, preventing phantom clicks.
+
+Window-queue overflow discards incomplete events and reports OVERFLOW; query
+input, geometry and mode snapshots before continuing. Snapshots retain the
+latest processed releases, so dropped release events cannot leave a client
+stuck. Ingress overflow resets all GUI held state, cancels capture and suppresses
+held pointer buttons until release. Modifier decoding remains authoritative.
+Recovered Ctrl-C interrupts still reach the terminal/legacy windows; they never
+invent GUI copy gestures or synthetic held keys. The emergency terminate chord
+is latched independently of a full ingress queue.
+
+Desktop shortcuts operate in idle, never in the IRQ:
+
+| Shortcut | Action |
+| --- | --- |
+| Alt-Tab / Shift-Alt-Tab | Next/previous window in stable creation order; restore minimized targets |
+| Alt-Esc | Give keyboard focus to the terminal |
+| Alt-F4 | Request closure of the focused window |
+| Alt-F9 | Minimize the focused window |
+| Alt-F10 | Toggle maximize/normal geometry |
+| Ctrl-Alt-Esc | Terminate the focused window's owner, reclaiming all its windows |
+
+Reserved shortcut presses/repeats/releases are consumed by the manager. In GUI
+windows Ctrl-C/Ctrl-X/Ctrl-V/Ctrl-A/Ctrl-S are ordinary application key chords,
+not kernel editing commands. Applications handle widget Tab/Shift-Tab traversal,
+selection, copy/cut/paste and saving. Terminal ownership does not automatically
+change when Alt-Esc gives the terminal focus.
+
+X and Alt-F4 queue a close request after preceding input. Repeated requests
+coalesce; a separate pending latch survives overflow and focus changes. Poll
+reports unread close requests as READ, not HANGUP. The application may save,
+show a confirmation dialog, accept with `window_close_reply(handle, 1)` (which
+also releases the handle), or reject with argument 0. Invalid arguments/pointers
+never consume a request; replying without a pending request fails. Explicit
+`window_close`, exit, fault, kill and logout still clean up immediately or through
+the established reaper. A nonresponsive application can be terminated with
+Ctrl-Alt-Esc. Close negotiation is application cooperation, not a forced-save
+protocol.
+
+The clipboard is an opaque byte payload of at most 4096 bytes. QUERY requires
+null buffer/zero length and returns its size. READ returns the copied size;
+insufficient capacity returns `HACKOS_BUFFER_SMALL` without a partial copy.
+WRITE copies and validates the complete input before replacing contents;
+writing zero bytes clears it. Invalid pointers, operations or oversize requests
+leave contents unchanged. Access requires a nonzero authenticated session and
+ownership of the currently focused window, including for root. Background or
+foreign-session contents cannot be read. Descendants (including `runas`) share
+the authenticated session's clipboard when focused; this is session scope, not
+a per-UID clipboard. Session-controller termination/logout zeroes the payload.
+No clipboard content is logged by the kernel.
+
+`window --interaction` is the bounded interaction diagnostic: three 63-byte
+ASCII fields with Tab/Shift-Tab and mouse focus, cursor movement, Backspace/Delete,
+Ctrl-A selection and Ctrl-C/X/V. Ctrl-S saves all three LF-terminated fields to
+`/tmp/gui-notes.txt`. Failed saves preserve edits. Closing with unsaved edits
+shows Save and close / Discard / Cancel; Tab/Shift-Tab and Enter operate its
+buttons, Escape cancels, and pointer clicks also work. The normal gradient demo
+uses the same GUI input/close API. The reusable widget toolkit remains milestone 3.

@@ -1,11 +1,15 @@
 #include "hackos/user.h"
+#include "interaction.h"
+
+static bool interaction;
+static InteractionDemo interactionDemo;
 
 static bool trace;
 
 static bool Paint(uint64_t window, uint32_t accent, int32_t mouseX, int32_t mouseY)
 {
-    HackosWindowState state;
-    if (syscall_window_state(window, &state) != 0)
+    HackosWindowFrame state = {};
+    if (syscall_window_frame(window, HACKOS_WINDOW_BEGIN, &state) != 0)
     {
         return false;
     }
@@ -47,27 +51,21 @@ static bool Paint(uint64_t window, uint32_t accent, int32_t mouseX, int32_t mous
                         colour = 0xffffffff;
                     }
 
-                    pixels[row * width + column] = colour;
+                    pixels[row * width + column] = interaction ? interactionDemo.Pixel(x, y) : colour;
                 }
             }
 
-            HackosWindowRect rect = {firstX, firstY, width, height};
+            HackosWindowUpload rect = {state.generation, firstX, firstY, width, height};
             // Maximize can exceed one upload's width. Tile both dimensions,
             // and retry from a fresh snapshot if geometry changes mid-paint.
-            if (syscall_window_blit(window, &rect, pixels) != 0)
+            if (syscall_window_upload(window, &rect, pixels) != 0)
             {
                 return false;
             }
         }
     }
 
-    HackosWindowState current;
-    if (syscall_window_state(window, &current) != 0)
-    {
-        return false;
-    }
-
-    return current.width == state.width && current.height == state.height;
+    return syscall_window_frame(window, HACKOS_WINDOW_PRESENT, &state) == 0;
 }
 
 static void Log(const char* label, int64_t first, uint64_t second)
@@ -123,6 +121,13 @@ int main(int argc, char** argv)
         {
             trace = true;
         }
+        if (User::Equal(argv[i], "--interaction"))
+        {
+            interaction = true;
+            spec.width = 640;
+            spec.height = 280;
+            interactionDemo.LoadFont();
+        }
         if (User::Equal(argv[i], "second"))
         {
             second = true;
@@ -141,20 +146,37 @@ int main(int argc, char** argv)
         return 1;
     }
 
+    HackosWindowInputState inputState;
+    if (syscall_window_input(window, HACKOS_INPUT_ENABLE, &inputState) != 0)
+    {
+        syscall_window_close(window);
+        return 1;
+    }
     uint32_t accent = 0xffff00ff;
     int32_t scroll = 0;
     int32_t mouseX = -10, mouseY = -10;
     bool repaint = !Paint(window, accent, mouseX, mouseY);
-    User::Print("Window demo ready. Input test: click/drag in the client to place the white marker.\n"
-                "The gradient is a test pattern, not a colour picker. Type or scroll to recolour the small swatch.\n"
-                "Drag title, resize bottom-right; M minimizes, F maximizes/restores, R restores, Q closes.\n");
+    if (interaction)
+    {
+        User::Print("Window demo ready. Tab/Shift-Tab or click selects a field.\n"
+                    "Ctrl-A selects text; Ctrl-C/X/V copies, cuts and pastes. Ctrl-S saves.\n"
+                    "Alt-F4 requests close; unsaved edits can be saved, discarded or kept.\n");
+    }
+    else
+    {
+        User::Print(
+            "Window demo ready. Input test: click/drag in the client to place the white marker.\n"
+            "The gradient is a test pattern, not a colour picker. Type or scroll to recolour the small swatch.\n"
+            "Drag title, resize bottom-right; M minimizes, F maximizes/restores, R restores, Q closes.\n");
+    }
 
     unsigned pending = 0;
 
     while (syscall_window_poll(window) == 0)
     {
-        HackosWindowEvent event;
-        uint64_t result = syscall_window_event(window, &event);
+        HackosWindowEvent2 input = {};
+        uint64_t result = syscall_window_event2(window, &input);
+        auto event = input.event;
         if (result == HACKOS_ERROR)
         {
             break;
@@ -162,7 +184,20 @@ int main(int argc, char** argv)
 
         if (result == 1)
         {
-            if (event.type == HACKOS_WINDOW_KEY)
+            if (interaction && !interactionDemo.Event(window, input, repaint))
+            {
+                break;
+            }
+            if (event.type == HACKOS_WINDOW_CLOSE_REQUEST && !interaction)
+            {
+                syscall_window_close_reply(window, 1);
+                break;
+            }
+            if (event.type == HACKOS_WINDOW_TEXT)
+            {
+                event.type = HACKOS_WINDOW_KEY;
+            }
+            if (event.type == HACKOS_WINDOW_KEY && !interaction)
             {
                 if (event.key == 'q' || event.key == 'Q')
                 {
@@ -195,7 +230,7 @@ int main(int argc, char** argv)
                 Log("WINDOW_KEY ", event.key, 0);
                 repaint = true;
             }
-            else if (event.type == HACKOS_WINDOW_MOUSE)
+            else if (event.type == HACKOS_WINDOW_MOUSE && !interaction)
             {
                 if (event.buttons & 1)
                 {
@@ -244,8 +279,9 @@ int main(int argc, char** argv)
             {
                 Log("WINDOW_FOCUS ", event.focused, 0);
             }
-            else if (event.type == HACKOS_WINDOW_OVERFLOW)
+            else if (event.type == HACKOS_WINDOW_OVERFLOW || event.type == HACKOS_WINDOW_INPUT_RESET)
             {
+                syscall_window_input(window, HACKOS_INPUT_QUERY, &inputState);
                 HackosWindowState state;
                 if (syscall_window_state(window, &state) != 0)
                 {
@@ -283,7 +319,16 @@ int main(int argc, char** argv)
             }
         }
 
-        syscall_yield();
+        if (repaint && !(syscall_window_mode(window, HACKOS_WINDOW_QUERY) & HACKOS_WINDOW_MINIMIZED))
+        {
+            // Retry transient pressure without spinning or sleeping under a guard.
+            syscall_sleep(16);
+        }
+        else
+        {
+            HackosPollFd ready = {window, HACKOS_POLL_WINDOW | HACKOS_POLL_READ, 0};
+            syscall_poll(&ready, 1, HACKOS_WAIT_FOREVER);
+        }
     }
 
     syscall_window_close(window);

@@ -230,7 +230,8 @@ while int(p):
 assert count == 2
 assert int(gdb.parse_and_eval('terminalOwner')) == 2
 assert int(gdb.parse_and_eval('user_windows_live')) == 0
-assert int(gdb.parse_and_eval('KernelWindowManager->windows._size')) == 0
+assert int(gdb.parse_and_eval('KernelWindowManager->windows.count')) == 0
+assert int(gdb.parse_and_eval('window_surface_pages')) == 0
 assert int(gdb.parse_and_eval('user_pages_live')) == int(gdb.parse_and_eval('ready_queue->next->userSpace->ownedCount'))
 print('LOGOUT_RECLAIMED_OK')
 ''' + 'end\ndetach\nquit\n')

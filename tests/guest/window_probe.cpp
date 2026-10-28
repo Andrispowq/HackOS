@@ -15,8 +15,129 @@ static bool Check(bool condition)
     return condition;
 }
 
+static void Gate(uint64_t value, const char* message)
+{
+    User::Print(message);
+    while (event_gate < value)
+    {
+        syscall_sleep(10);
+    }
+}
+
+static int Frames()
+{
+    HackosWindowSpec spec = {100, 100, 640, 480, "Frame probe"};
+    uint64_t handle = syscall_window_create(&spec);
+    if (!Check(handle != HACKOS_ERROR))
+    {
+        return 1;
+    }
+    HackosWindowEvent event;
+    while (syscall_window_event(handle, &event) == 1)
+    {
+    }
+    HackosPollFd items[2] = {{handle, HACKOS_POLL_WINDOW | HACKOS_POLL_READ, 0}, {HACKOS_STDOUT, HACKOS_POLL_WRITE, 0}};
+    bool ok = syscall_poll(items, 1, 20) == 0;
+    ok = syscall_poll(items, 2, HACKOS_WAIT_FOREVER) == 1 && items[1].revents == HACKOS_POLL_WRITE && ok;
+    items[0].events |= HACKOS_POLL_WRITE;
+    ok = syscall_poll(items, 1, 0) == HACKOS_ERROR && ok;
+    items[0].events = HACKOS_POLL_WINDOW | HACKOS_POLL_READ;
+    HackosWindowFrame frame = {};
+    ok = syscall_window_frame(handle, HACKOS_WINDOW_BEGIN, (HackosWindowFrame*)0x100000) == HACKOS_ERROR && ok;
+    ok = syscall_window_frame(handle, HACKOS_WINDOW_BEGIN, &frame) == 0 && frame.width == 640 && frame.height == 480 &&
+         ok;
+    HackosWindowUpload upload = {frame.generation, 0, 0, 1, 1};
+    uint32_t pixel = 0xff112233;
+    ok = syscall_window_upload(handle, &upload, &pixel) == 0 && ok;
+    ok = syscall_window_upload(handle, &upload, (uint32_t*)0x100000) == HACKOS_ERROR && ok;
+    HackosWindowUpload bad = {frame.generation, 0xffffffff, 0, 1, 1};
+    ok = syscall_window_upload(handle, &bad, &pixel) == HACKOS_ERROR && ok;
+    bad = {frame.generation, 0, 0, 640, 2};
+    ok = syscall_window_upload(handle, &bad, &pixel) == HACKOS_ERROR && ok;
+    ok = syscall_window_frame(handle, HACKOS_WINDOW_PRESENT, &frame) == 0 && ok;
+    ok = syscall_window_upload(handle, &upload, &pixel) == HACKOS_WINDOW_STALE && ok;
+    HackosWindowRect legacy = {0, 0, 1, 1};
+    ok = syscall_window_blit(handle, &legacy, &pixel) == HACKOS_ERROR && ok;
+    ok = syscall_window_frame(handle, HACKOS_WINDOW_BEGIN, &frame) == 0 && ok;
+    upload.generation = frame.generation;
+    pixel = 0xff445566;
+    ok = syscall_window_upload(handle, &upload, &pixel) == 0 && ok;
+    if (!Check(ok))
+    {
+        return 1;
+    }
+    Gate(1, "FRAME_STAGED\n");
+    ok = syscall_window_frame(handle, HACKOS_WINDOW_PRESENT, &frame) == 0;
+    ok = syscall_window_frame(handle, HACKOS_WINDOW_BEGIN, &frame) == 0 && ok;
+    upload.generation = frame.generation;
+    ok = syscall_window_mode(handle, HACKOS_WINDOW_MAXIMIZE) == HACKOS_WINDOW_MAXIMIZED && ok;
+    ok = syscall_window_upload(handle, &upload, &pixel) == HACKOS_WINDOW_STALE && ok;
+    ok = syscall_window_frame(handle, HACKOS_WINDOW_PRESENT, &frame) == HACKOS_WINDOW_STALE && ok;
+    if (!Check(ok))
+    {
+        return 1;
+    }
+    Gate(2, "FRAME_RESIZED\n");
+    ok = syscall_window_frame(handle, HACKOS_WINDOW_BEGIN, &frame) == 0;
+    HackosWindowFrame old = frame;
+    ok = syscall_window_frame(handle, HACKOS_WINDOW_BEGIN, &frame) == 0 && frame.generation != old.generation && ok;
+    ok = syscall_window_frame(handle, HACKOS_WINDOW_CANCEL, &old) == HACKOS_WINDOW_STALE && ok;
+    ok = syscall_window_frame(handle, HACKOS_WINDOW_CANCEL, &frame) == 0 && ok;
+    if (!Check(ok))
+    {
+        return 1;
+    }
+    Gate(3, "FRAME_PRESSURE_READY\n");
+    ok = syscall_window_frame(handle, HACKOS_WINDOW_BEGIN, &frame) == HACKOS_ERROR;
+    ok = syscall_window_mode(handle, HACKOS_WINDOW_RESTORE) == HACKOS_ERROR && ok;
+    HackosWindowState state;
+    ok = syscall_window_state(handle, &state) == 0 && state.x == 1 && state.width > 640 && ok;
+    if (!Check(ok))
+    {
+        return 1;
+    }
+    Gate(4, "FRAME_PRESSURE_OK\n");
+    ok = syscall_window_frame(handle, HACKOS_WINDOW_BEGIN, &frame) == 0;
+    ok = syscall_window_frame(handle, HACKOS_WINDOW_PRESENT, &frame) == 0 && ok;
+    while (syscall_window_event(handle, &event) == 1)
+    {
+    }
+    if (!Check(ok))
+    {
+        return 1;
+    }
+    User::Print("FRAME_WAITING\n");
+    ok = syscall_poll(items, 1, HACKOS_WAIT_FOREVER) == 1 && items[0].revents == HACKOS_POLL_READ;
+    ok = syscall_window_event(handle, &event) == 1 && event.type == HACKOS_WINDOW_KEY && event.key == 'z' && ok;
+    if (!Check(ok))
+    {
+        return 1;
+    }
+    User::Print("FRAME_CLOSE_WAIT\n");
+    do
+    {
+        ok = syscall_poll(items, 1, HACKOS_WAIT_FOREVER) == 1 && ok;
+        while (syscall_window_event(handle, &event) == 1)
+        {
+        }
+    } while (ok && items[0].revents == HACKOS_POLL_READ);
+    ok = items[0].revents == HACKOS_POLL_HANGUP && ok;
+    ok = syscall_window_close(handle) == 0 && ok;
+    ok = syscall_poll(items, 1, 0) == 1 && items[0].revents == HACKOS_POLL_INVALID && ok;
+    if (!Check(ok))
+    {
+        return 1;
+    }
+    User::Print("WINDOW_FRAMES_OK\n");
+    return 0;
+}
+
 int main(int argc, char** argv)
 {
+    if (argc == 2 && User::Equal(argv[1], "frames"))
+    {
+        return Frames();
+    }
     HackosWindowSpec spec = {100, 100, 200, 170, "Window probe"};
     HackosWindowRect rect = {0, 0, 1, 1};
     uint32_t pixel = 0xffabcdef;
@@ -37,6 +158,12 @@ int main(int argc, char** argv)
         ok = syscall_window_mode(handle, HACKOS_WINDOW_MAXIMIZE) == HACKOS_ERROR && ok;
         ok = syscall_window_close(handle) == HACKOS_ERROR && ok;
         ok = syscall_window_blit(handle, &rect, &pixel) == HACKOS_ERROR && ok;
+        HackosWindowFrame frame = {};
+        HackosWindowUpload upload = {};
+        ok = syscall_window_frame(handle, HACKOS_WINDOW_BEGIN, &frame) == HACKOS_ERROR && ok;
+        ok = syscall_window_upload(handle, &upload, &pixel) == HACKOS_ERROR && ok;
+        HackosPollFd poll = {handle, HACKOS_POLL_WINDOW | HACKOS_POLL_READ, 0};
+        ok = syscall_poll(&poll, 1, 0) == 1 && poll.revents == HACKOS_POLL_INVALID && ok;
         return Check(ok) ? 0 : 1;
     }
 
@@ -81,6 +208,11 @@ int main(int argc, char** argv)
 
     if (argc == 2)
     {
+        HackosWindowFrame pending = {};
+        if (!Check(syscall_window_frame(handle, HACKOS_WINDOW_BEGIN, &pending) == 0))
+        {
+            return 1;
+        }
         if (User::Equal(argv[1], "fault") || User::Equal(argv[1], "minimized"))
         {
             if (!Check(syscall_window_mode(handle, HACKOS_WINDOW_MINIMIZE) == HACKOS_WINDOW_MINIMIZED))

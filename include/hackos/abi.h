@@ -108,6 +108,24 @@ struct HackosWindowSpec
     char title[32];
 };
 
+constexpr uint64_t HACKOS_WINDOW_STALE = ~10ULL;
+constexpr uint64_t HACKOS_WINDOW_BEGIN = 0, HACKOS_WINDOW_PRESENT = 1, HACKOS_WINDOW_CANCEL = 2;
+
+struct HackosWindowFrame
+{
+    uint64_t generation;
+    uint32_t width, height;
+};
+
+struct HackosWindowUpload
+{
+    uint64_t generation;
+    uint32_t x, y, width, height;
+};
+
+static_assert(sizeof(HackosWindowFrame) == 16, "window frame ABI");
+static_assert(sizeof(HackosWindowUpload) == 24, "window upload ABI");
+
 struct HackosWindowRect
 {
     uint32_t x, y, width, height;
@@ -149,6 +167,38 @@ constexpr uint64_t HACKOS_WINDOW_MINIMIZE = 1;
 constexpr uint64_t HACKOS_WINDOW_MAXIMIZE = 2;
 constexpr uint64_t HACKOS_WINDOW_RESTORE = 3;
 
+// GUI input is opt-in; the original decoded-key window ABI remains available.
+constexpr uint32_t HACKOS_WINDOW_KEY_DOWN = 9, HACKOS_WINDOW_KEY_UP = 10;
+constexpr uint32_t HACKOS_WINDOW_TEXT = 11, HACKOS_WINDOW_CLOSE_REQUEST = 12, HACKOS_WINDOW_INPUT_RESET = 13;
+constexpr uint32_t HACKOS_MOD_SHIFT = 1, HACKOS_MOD_CTRL = 2, HACKOS_MOD_ALT = 4, HACKOS_MOD_CAPS = 8;
+constexpr uint32_t HACKOS_KEY_REPEAT = 1;
+constexpr uint64_t HACKOS_INPUT_QUERY = 0, HACKOS_INPUT_ENABLE = 1;
+constexpr uint64_t HACKOS_CLIPBOARD_QUERY = 0, HACKOS_CLIPBOARD_READ = 1, HACKOS_CLIPBOARD_WRITE = 2;
+constexpr uint64_t HACKOS_CLIPBOARD_LIMIT = 4096;
+constexpr uint64_t HACKOS_BUFFER_SMALL = ~11ULL;
+
+// Physical key IDs: set-1 base code, with bit 7 set for E0-prefixed keys.
+constexpr uint32_t HACKOS_PHYSICAL_ESCAPE = 0x01, HACKOS_PHYSICAL_TAB = 0x0f;
+constexpr uint32_t HACKOS_PHYSICAL_ENTER = 0x1c, HACKOS_PHYSICAL_BACKSPACE = 0x0e;
+constexpr uint32_t HACKOS_PHYSICAL_A = 0x1e, HACKOS_PHYSICAL_C = 0x2e, HACKOS_PHYSICAL_X = 0x2d;
+constexpr uint32_t HACKOS_PHYSICAL_V = 0x2f, HACKOS_PHYSICAL_S = 0x1f;
+
+struct HackosWindowEvent2
+{
+    HackosWindowEvent event;
+    uint32_t modifiers, flags;
+    uint64_t serial;
+};
+
+struct HackosWindowInputState
+{
+    uint64_t keys[4], serial;
+    uint32_t modifiers, buttons, focused, closePending;
+};
+
+static_assert(sizeof(HackosWindowEvent2) == 48, "GUI event ABI");
+static_assert(sizeof(HackosWindowInputState) == 56, "GUI input state ABI");
+
 // Stream descriptors are local indices; legacy file tokens retain their ABI.
 constexpr uint64_t HACKOS_STDIN = 0, HACKOS_STDOUT = 1, HACKOS_STDERR = 2;
 constexpr uint64_t HACKOS_FD_LIMIT = 16;
@@ -161,6 +211,7 @@ constexpr uint64_t HACKOS_BROKEN_PIPE = ~9ULL;
 constexpr uint64_t HACKOS_OPEN_TRUNCATE = 8;
 constexpr uint64_t HACKOS_OPEN_APPEND = 16;
 constexpr uint32_t HACKOS_POLL_READ = 1, HACKOS_POLL_WRITE = 2;
+constexpr uint32_t HACKOS_POLL_WINDOW = 32; // fd is an owned window handle; request READ.
 constexpr uint32_t HACKOS_POLL_HANGUP = 4, HACKOS_POLL_ERROR = 8, HACKOS_POLL_INVALID = 16;
 
 struct HackosPollFd

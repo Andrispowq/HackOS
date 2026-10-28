@@ -80,3 +80,15 @@ test-boot-loader:
 	$(PYTHON) boot_loader.py
 test-loader:
 	$(PYTHON) qemu_loader.py --firmware $(FIRMWARE)
+
+.PHONY: test-surface-allocator
+test-surface-allocator:
+	python3 surface_allocator.py
+
+.PHONY: test-gui-input
+test-gui-input:
+	python3 qemu_gui_input.py --firmware $(FIRMWARE)
+
+.PHONY: test-gui-keyboard
+test-gui-keyboard:
+	python3 gui_keyboard.py

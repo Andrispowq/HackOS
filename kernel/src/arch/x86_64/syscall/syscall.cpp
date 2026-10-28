@@ -1475,6 +1475,24 @@ static void syscall_handler(Registers* r)
     case HACKOS_SYS_spawn_as:
         r->rax = UserSpawnAs((const char*)r->rdi, r->rsi, (const char* const*)r->rdx, r->rcx, r->r8);
         break;
+    case HACKOS_SYS_window_input:
+        r->rax = UserWindowInput(r->rdi, r->rsi, (HackosWindowInputState*)r->rdx);
+        break;
+    case HACKOS_SYS_window_event2:
+        r->rax = UserWindowEvent2(r->rdi, (HackosWindowEvent2*)r->rsi);
+        break;
+    case HACKOS_SYS_window_close_reply:
+        r->rax = UserWindowCloseReply(r->rdi, r->rsi);
+        break;
+    case HACKOS_SYS_clipboard:
+        r->rax = UserClipboard(r->rdi, (void*)r->rsi, r->rdx);
+        break;
+    case HACKOS_SYS_window_frame:
+        r->rax = UserWindowFrame(r->rdi, r->rsi, (HackosWindowFrame*)r->rdx);
+        break;
+    case HACKOS_SYS_window_upload:
+        r->rax = UserWindowUpload(r->rdi, (const HackosWindowUpload*)r->rsi, (const uint32_t*)r->rdx);
+        break;
     case HACKOS_SYS_window_mode:
         r->rax = UserWindowMode(r->rdi, r->rsi);
         break;

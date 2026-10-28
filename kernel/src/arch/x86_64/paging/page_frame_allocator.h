@@ -18,6 +18,7 @@ class PageFrameAllocator
 
     void* RequestPage();
     void* TryRequestPage();
+    void* TryRequestSurfacePages(uint64_t count);
 
     uint64_t GetFreeRAM() const
     {

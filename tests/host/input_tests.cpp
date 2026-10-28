@@ -289,3 +289,56 @@ TEST(line_buffer_middle_editing_and_boundaries)
     CHECK(line.Push('\n') == LineBuffer::Overflow);
     return 0;
 }
+
+#include "drivers/keyboard/gui_input.h"
+
+TEST(gui_keys_modifiers_text_repeat_and_release)
+{
+    GuiKeyboardInput keyboard;
+    GuiKey key;
+    CHECK(keyboard.Push(0x2a, key) && key.down && key.modifiers == HACKOS_MOD_SHIFT);
+    CHECK(keyboard.Push(0x1e, key) && key.key == HACKOS_PHYSICAL_A && key.text == 'A' && !key.flags);
+    CHECK(keyboard.Push(0x1e, key) && key.flags == HACKOS_KEY_REPEAT && key.text == 'A');
+    CHECK(keyboard.Push(0x9e, key) && !key.down && !key.text);
+    CHECK(keyboard.Push(0xaa, key) && key.modifiers == 0);
+    CHECK(keyboard.Push(0x1d, key) && key.modifiers == HACKOS_MOD_CTRL);
+    CHECK(keyboard.Push(0x2e, key) && key.decoded == 3 && !key.text);
+    CHECK(keyboard.Push(0xae, key) && !key.down);
+    CHECK(keyboard.Push(0x9d, key) && !key.modifiers);
+    CHECK(!keyboard.Push(0xe0, key));
+    CHECK(keyboard.Push(0x38, key) && key.key == 0xb8 && key.modifiers == HACKOS_MOD_ALT);
+    CHECK(keyboard.Push(0x1e, key) && !key.text);
+    CHECK(!keyboard.Push(0xe0, key));
+    CHECK(keyboard.Push(0xb8, key) && !key.modifiers);
+    CHECK(keyboard.Push(0x9e, key) && !key.down);
+    CHECK(keyboard.Push(0x1e, key) && key.text == 'a' && !key.flags);
+    return 0;
+}
+
+TEST(gui_caps_special_sequences_and_bounds)
+{
+    GuiKeyboardInput keyboard;
+    GuiKey key;
+    CHECK(keyboard.Push(0x3a, key) && key.modifiers == HACKOS_MOD_CAPS);
+    CHECK(keyboard.Push(0x3a, key) && key.modifiers == HACKOS_MOD_CAPS);
+    CHECK(keyboard.Push(0xba, key));
+    CHECK(keyboard.Push(0x1e, key) && key.text == 'A');
+    const uint8_t ignored[] = {0xe0, 0x2a, 0xe0, 0x37, 0xe0, 0xb7, 0xe0, 0xaa, 0xe1, 0x1d, 0x45, 0xe1, 0x9d, 0xc5};
+    for (auto byte : ignored)
+    {
+        CHECK(!keyboard.Push(byte, key));
+    }
+    CHECK(!keyboard.Push(0xe0, key));
+    CHECK(keyboard.Push(0x4b, key) && key.key == 0xcb && !key.text);
+    CHECK(!keyboard.Push(0xe0, key));
+    CHECK(keyboard.Push(0xcb, key) && !key.down && key.key == 0xcb);
+    for (unsigned i = 0; i < 4096; ++i)
+    {
+        if (keyboard.Push(i & 255, key))
+        {
+            CHECK(key.key < 256 && !(key.modifiers & ~15U));
+            CHECK(!key.text || (key.down && key.text >= 32 && key.text <= 126));
+        }
+    }
+    return 0;
+}
