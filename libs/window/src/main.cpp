@@ -173,7 +173,7 @@ int main(int argc, char** argv)
                 }
 
                 accent = 0xff000000 | (event.key * 0x12345 & 0xffffff);
-                Log("WINDOW_KEY ", event.key, 0);
+                //Log("WINDOW_KEY ", event.key, 0);
                 repaint = true;
             }
             else if (event.type == HACKOS_WINDOW_MOUSE)
@@ -182,7 +182,7 @@ int main(int argc, char** argv)
                 {
                     mouseX = event.x;
                     mouseY = event.y;
-                    Log("WINDOW_MOUSE ", (uint32_t)mouseX, (uint32_t)mouseY);
+                    //Log("WINDOW_MOUSE ", (uint32_t)mouseX, (uint32_t)mouseY);
                     repaint = true;
                 }
             }
@@ -201,12 +201,12 @@ int main(int argc, char** argv)
                 }
 
                 accent = 0xff000000 | ((uint32_t)(scroll + 255) * 0x12345 & 0xffffff);
-                Log("WINDOW_WHEEL ", delta, 0);
+                //Log("WINDOW_WHEEL ", delta, 0);
                 repaint = true;
             }
             else if (event.type == HACKOS_WINDOW_MODE)
             {
-                Log("WINDOW_MODE ", event.key, 0);
+                //Log("WINDOW_MODE ", event.key, 0);
                 if (!(event.key & HACKOS_WINDOW_MINIMIZED))
                 {
                     repaint = true;
@@ -214,16 +214,16 @@ int main(int argc, char** argv)
             }
             else if (event.type == HACKOS_WINDOW_RESIZE)
             {
-                Log("WINDOW_RESIZE ", event.width, event.height);
+                //Log("WINDOW_RESIZE ", event.width, event.height);
                 repaint = true;
             }
             else if (event.type == HACKOS_WINDOW_MOVE)
             {
-                Log("WINDOW_MOVE ", event.x, event.y);
+                //Log("WINDOW_MOVE ", event.x, event.y);
             }
             else if (event.type == HACKOS_WINDOW_FOCUS)
             {
-                Log("WINDOW_FOCUS ", event.focused, 0);
+                //Log("WINDOW_FOCUS ", event.focused, 0);
             }
             else if (event.type == HACKOS_WINDOW_OVERFLOW)
             {
@@ -235,7 +235,7 @@ int main(int argc, char** argv)
 
                 mouseX = state.mouseX;
                 mouseY = state.mouseY;
-                User::Print("WINDOW_OVERFLOW: state restored\n");
+                //User::Print("WINDOW_OVERFLOW: state restored\n");
                 repaint = true;
             }
         }
@@ -256,7 +256,7 @@ int main(int argc, char** argv)
                 HackosWindowState state;
                 if (syscall_window_state(window, &state) == 0)
                 {
-                    Log("WINDOW_PAINT ", state.width, state.height);
+                    //Log("WINDOW_PAINT ", state.width, state.height);
                 }
             }
         }
