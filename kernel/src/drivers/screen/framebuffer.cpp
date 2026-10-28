@@ -146,9 +146,28 @@ void Framebuffer::CopyFrom(const Framebuffer& source, uint32_t x, uint32_t y)
         uint32_t* destination = address + (uint64_t)(y + row) * pitch + x;
         const uint32_t* pixels = source.address + (uint64_t)row * source.pitch;
 #if defined(__x86_64__)
-        // Copy whole pixels, including to uncached video memory. Byte-sized
-        // copies and per-pixel function calls are particularly costly in TCG.
-        uint64_t count = columns;
+        // SSE2 is part of the kernel's saved context. Unaligned loads/stores
+        // support clipped windows and padded scanlines without over-reading.
+        uint32_t remaining = columns;
+        while (remaining >= 16)
+        {
+            asm volatile("movdqu 0(%1), %%xmm0\n\t"
+                         "movdqu 16(%1), %%xmm1\n\t"
+                         "movdqu 32(%1), %%xmm2\n\t"
+                         "movdqu 48(%1), %%xmm3\n\t"
+                         "movdqu %%xmm0, 0(%0)\n\t"
+                         "movdqu %%xmm1, 16(%0)\n\t"
+                         "movdqu %%xmm2, 32(%0)\n\t"
+                         "movdqu %%xmm3, 48(%0)"
+                         :
+                         : "r"(destination), "r"(pixels)
+                         : "xmm0", "xmm1", "xmm2", "xmm3", "memory");
+            destination += 16;
+            pixels += 16;
+            remaining -= 16;
+        }
+
+        uint64_t count = remaining;
         asm volatile("cld\n\t"
                      "rep movsl"
                      : "+D"(destination), "+S"(pixels), "+c"(count)
@@ -157,5 +176,156 @@ void Framebuffer::CopyFrom(const Framebuffer& source, uint32_t x, uint32_t y)
 #else
         memcpy(destination, pixels, (uint64_t)columns * sizeof(uint32_t));
 #endif
+    }
+}
+
+void Framebuffer::CopyRegion(const Framebuffer& source, uint32_t x, uint32_t y, uint32_t columns, uint32_t rows)
+{
+    if (x >= width || y >= height || x >= source.width || y >= source.height)
+    {
+        return;
+    }
+
+    Framebuffer region = source;
+    region.address += (uint64_t)y * source.pitch + x;
+    region.width = columns < source.width - x ? columns : source.width - x;
+    region.height = rows < source.height - y ? rows : source.height - y;
+    CopyFrom(region, x, y);
+}
+
+static bool PixelsDiffer(const uint32_t* current, const uint32_t* saved, uint32_t count)
+{
+#if defined(__x86_64__)
+    if (count == 32)
+    {
+        uint32_t mask;
+        // Fixed blocks avoid a branch for every four pixels in the common
+        // unchanged case. Every load stays within this complete 32-pixel span.
+        asm volatile("movdqu 0(%1), %%xmm1\n\t"
+                     "movdqu 0(%2), %%xmm2\n\t"
+                     "pcmpeqd %%xmm2, %%xmm1\n\t"
+                     "movdqa %%xmm1, %%xmm0\n\t"
+                     "movdqu 16(%1), %%xmm1\n\t"
+                     "movdqu 16(%2), %%xmm2\n\t"
+                     "pcmpeqd %%xmm2, %%xmm1\n\t"
+                     "pand %%xmm1, %%xmm0\n\t"
+                     "movdqu 32(%1), %%xmm1\n\t"
+                     "movdqu 32(%2), %%xmm2\n\t"
+                     "pcmpeqd %%xmm2, %%xmm1\n\t"
+                     "pand %%xmm1, %%xmm0\n\t"
+                     "movdqu 48(%1), %%xmm1\n\t"
+                     "movdqu 48(%2), %%xmm2\n\t"
+                     "pcmpeqd %%xmm2, %%xmm1\n\t"
+                     "pand %%xmm1, %%xmm0\n\t"
+                     "movdqu 64(%1), %%xmm1\n\t"
+                     "movdqu 64(%2), %%xmm2\n\t"
+                     "pcmpeqd %%xmm2, %%xmm1\n\t"
+                     "pand %%xmm1, %%xmm0\n\t"
+                     "movdqu 80(%1), %%xmm1\n\t"
+                     "movdqu 80(%2), %%xmm2\n\t"
+                     "pcmpeqd %%xmm2, %%xmm1\n\t"
+                     "pand %%xmm1, %%xmm0\n\t"
+                     "movdqu 96(%1), %%xmm1\n\t"
+                     "movdqu 96(%2), %%xmm2\n\t"
+                     "pcmpeqd %%xmm2, %%xmm1\n\t"
+                     "pand %%xmm1, %%xmm0\n\t"
+                     "movdqu 112(%1), %%xmm1\n\t"
+                     "movdqu 112(%2), %%xmm2\n\t"
+                     "pcmpeqd %%xmm2, %%xmm1\n\t"
+                     "pand %%xmm1, %%xmm0\n\t"
+                     "pmovmskb %%xmm0, %0"
+                     : "=r"(mask)
+                     : "r"(current), "r"(saved)
+                     : "xmm0", "xmm1", "xmm2", "memory");
+        return mask != 0xffff;
+    }
+#endif
+    for (uint32_t i = 0; i < count; ++i)
+    {
+        if (current[i] != saved[i])
+        {
+            return true;
+        }
+    }
+
+    return false;
+}
+
+uint64_t Framebuffer::PresentChanged(const Framebuffer& source, Framebuffer& previous, bool force)
+{
+    if (source.width != width || source.height != height || previous.width != width || previous.height != height)
+    {
+        return 0;
+    }
+
+    uint64_t pixels = 0;
+    for (uint32_t y = 0; y < height; ++y)
+    {
+        const uint32_t* current = source.address + (uint64_t)y * source.pitch;
+        uint32_t* saved = previous.address + (uint64_t)y * previous.pitch;
+        // Group differences into 32-pixel spans to bound comparisons and copies.
+        uint32_t start = width;
+        for (uint32_t x = 0; x < width;)
+        {
+            uint32_t count = width - x < 32 ? width - x : 32;
+            bool changed = force || PixelsDiffer(current + x, saved + x, count);
+
+            if (changed && start == width)
+            {
+                start = x;
+            }
+
+            uint32_t end = x + count;
+            if (start != width && (!changed || end == width))
+            {
+                uint32_t length = (changed ? end : x) - start;
+                CopyRegion(source, start, y, length, 1);
+                previous.CopyRegion(source, start, y, length, 1);
+                pixels += length;
+                start = width;
+            }
+
+            x = end;
+        }
+    }
+
+    return pixels;
+}
+
+void FramebufferDamage::Include(uint32_t x, uint32_t y, uint32_t width, uint32_t height, uint32_t screenWidth,
+                                uint32_t screenHeight)
+{
+    if (!width || !height || x >= screenWidth || y >= screenHeight)
+    {
+        return;
+    }
+
+    uint32_t endX = x + (width < screenWidth - x ? width : screenWidth - x);
+    uint32_t endY = y + (height < screenHeight - y ? height : screenHeight - y);
+    if (Empty())
+    {
+        left = x;
+        top = y;
+        right = endX;
+        bottom = endY;
+    }
+    else
+    {
+        if (x < left)
+        {
+            left = x;
+        }
+        if (y < top)
+        {
+            top = y;
+        }
+        if (endX > right)
+        {
+            right = endX;
+        }
+        if (endY > bottom)
+        {
+            bottom = endY;
+        }
     }
 }

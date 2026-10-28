@@ -28,7 +28,7 @@ static int32_t Clamp(int32_t value, int32_t minimum, int32_t maximum)
 
 WindowManager::WindowManager()
 {
-    drawBuffer = Display::SharedDisplay()->framebuffer;
+    drawBuffer = Display::SharedDisplay()->composition;
 }
 
 WindowManager::~WindowManager()
@@ -70,7 +70,7 @@ void WindowManager::Focus(Window* window)
         focused->SetFocused(true);
     }
 
-    Display::SharedDisplay()->dirty = true;
+    Display::SharedDisplay()->Invalidate();
 }
 
 void WindowManager::Keyboard(uint32_t key)
@@ -311,7 +311,7 @@ void WindowManager::Update()
             Wheel(state.x, state.y, state.wheel);
         }
 
-        Display::SharedDisplay()->dirty = true;
+        Display::SharedDisplay()->cursorDirty = true;
     }
 }
 
@@ -380,7 +380,7 @@ void WindowManager::DestroyWindow(Window* window)
                 FocusTop();
             }
 
-            Display::SharedDisplay()->dirty = true;
+            Display::SharedDisplay()->Invalidate();
             return;
         }
     }
@@ -547,7 +547,7 @@ uint64_t WindowManager::ChangeMode(Window* window, uint64_t operation)
         window->SendEvent(HACKOS_WINDOW_MODE, window->Mode());
     }
 
-    Display::SharedDisplay()->dirty = true;
+    Display::SharedDisplay()->Invalidate();
     return window->Mode();
 }
 

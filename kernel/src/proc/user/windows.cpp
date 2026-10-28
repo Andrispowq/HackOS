@@ -77,7 +77,7 @@ uint64_t UserWindowCreate(const HackosWindowSpec* source)
             window->SetTitle(spec.title);
             process->windows[i] = window->GetWindowID();
             user_windows_live++;
-            Display::SharedDisplay()->dirty = true;
+            Display::SharedDisplay()->Invalidate();
             return process->windows[i];
         }
     }
@@ -124,7 +124,11 @@ uint64_t UserWindowBlit(uint64_t handle, const HackosWindowRect* source, const u
     Framebuffer upload = {copy, rect.width, rect.height, 32, rect.width};
     buffer->CopyFrom(upload, rect.x, rect.y);
 
-    Display::SharedDisplay()->dirty = true;
+    if (!window->GetMinimised())
+    {
+        Display::SharedDisplay()->InvalidateRect(window->GetStartX() + rect.x, window->GetStartY() + 30 + rect.y,
+                                                 rect.width, rect.height);
+    }
     return 0;
 }
 
@@ -150,7 +154,7 @@ uint64_t UserWindowClose(uint64_t handle)
     KernelWindowManager->DestroyWindowByID(handle);
     process->windows[slot] = 0;
     user_windows_live--;
-    Display::SharedDisplay()->dirty = true;
+    Display::SharedDisplay()->Invalidate();
     return 0;
 }
 
@@ -163,7 +167,7 @@ void ReleaseUserWindows(Process* process)
             KernelWindowManager->DestroyWindowByID(handle);
             handle = 0;
             user_windows_live--;
-            Display::SharedDisplay()->dirty = true;
+            Display::SharedDisplay()->Invalidate();
         }
     }
 }

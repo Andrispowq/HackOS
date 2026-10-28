@@ -22,6 +22,9 @@ class Display
 
     void DrawBackbuffer();
     void Refresh();
+    void Invalidate();
+    void InvalidateRect(uint32_t x, uint32_t y, uint32_t width, uint32_t height);
+    void InitialiseComposition(uint64_t memory, uint64_t bytes);
 
     static Display* SharedDisplay();
 
@@ -33,9 +36,20 @@ class Display
     Framebuffer backbuffer;
     PSF1_FONT* font;
     bool dirty;
+    bool cursorDirty = false;
+    Framebuffer composition;
+
+    // Debugger-visible counters; no serial output in the rendering hot path.
+    uint64_t framesPresented = 0;
+    uint64_t sceneFrames = 0;
+    uint64_t pixelsPresented = 0;
 
   private:
     uint64_t lastFrameTick = 0;
+    Framebuffer previous;
+    FramebufferDamage damage;
+    bool presented = false;
+    uint32_t cursorX = 0, cursorY = 0;
 };
 
 /* Public kernel API */

@@ -333,10 +333,26 @@ unsigned ReadMouse(MouseState& state)
     return 0;
 }
 
-void DrawMouse()
+void GetMousePosition(uint32_t& x, uint32_t& y)
 {
     InterruptGuard guard;
-    Display::SharedDisplay()->framebuffer.DrawMouseCursor(MousePointer, MousePositionX, MousePositionY, 0xffffffff);
+    x = MousePositionX;
+    y = MousePositionY;
+}
+
+void DrawMouse(Framebuffer& framebuffer, uint32_t x, uint32_t y)
+{
+    // The scene is retained in RAM; no device reads or cursor-save buffer needed.
+    for (uint32_t row = 0; row < 16; ++row)
+    {
+        for (uint32_t column = 0; column < 16; ++column)
+        {
+            if (MousePointer[row * 2 + column / 8] & (0x80 >> (column % 8)))
+            {
+                framebuffer.PutPixel(x + column, y + row, 0xffffffff);
+            }
+        }
+    }
 }
 
 void QueueKey(uint32_t key)

@@ -688,3 +688,55 @@ languages for x86-64 and requires packed and 32-bit builds to fail assertions
 validate pointed-to font/map/ACPI data and framebuffer geometry, then require
 IRQ initialization and repeated timer interrupts. Run these after fresh
 `tests/build_images.py` builds; results live in `tests/out/qemu-{bios,uefi}`.
+
+## Graphics presentation performance
+
+`python3 tests/qemu_windows.py --firmware bios --profile` adds seven samples
+for small-window, maximized-window and desktop frames. Scene samples change one
+visible client pixel (or console pixel on the desktop), mark its bounds damaged
+and request composition; cursor samples move the pointer without
+changing scene content; full samples force an unconditional presentation.
+`--profile-only` stops after the small/maximized samples, and
+`--build-directory /absolute/path/to/bios` selects a saved image, debug ELF and
+source tree for before/after comparisons. Run comparisons sequentially on an
+otherwise idle host. JSON timings include debugger round trips and host scheduling;
+they are not hardware FPS measurements or CI performance thresholds.
+
+The profiling checks also assert that cursor-only frames do not increment scene
+composition/presentation counters and that the old cursor footprint is restored.
+The regular window suite covers drag/resize, overlapping windows, focus changes,
+minimize/maximize/restore, uploads and owner cleanup. Host tests compare changed
+span presentation against full-frame output over repeated scene changes. They
+check clipped damage unions, partial views that preserve surrounding pixels,
+clipped copies and distinct padded pitches. Deliberately different device-buffer
+contents verify that unchanged RAM causes no device writes.
+The SSE2 fast paths retain scalar tails; the kernel already saves SSE state on
+interrupts. Native ARM sanitizer runs exercise the portable renderer path;
+x86-64 host and guest checks exercise the SSE2 paths.
+
+The graphics optimization's sequential local QEMU comparison used seven samples
+per case at 1920x1080. Median compositor wall times (including debugger overhead):
+
+| Scene | Update | Before | After |
+| --- | --- | ---: | ---: |
+| Small window | One visible pixel | 137.5 ms | 26.0 ms |
+| Maximized window | One visible pixel | 188.4 ms | 61.2 ms |
+| Small window | Cursor only | 136.3 ms | 1.7 ms |
+| Maximized window | Cursor only | 188.1 ms | 2.1 ms |
+| Small window | Forced full presentation | 136.8 ms | 96.6 ms |
+| Maximized window | Forced full presentation | 189.4 ms | 123.2 ms |
+
+Raw samples and medians are under `tests/out/graphics-{reference,final}-timings/`
+and `tests/out/graphics-comparison.json`. These are workload-dependent diagnostics,
+not frame-rate guarantees; scene composition still traverses the full RAM image.
+
+Final graphics validation passed 204 x86-64 UBSan host checks, 18 focused native
+ARM Linux ASan/UBSan renderer checks, six boot-asset checks, the BIOS chain probe,
+fresh BIOS/UEFI builds, and boot, windows, shell, terminal, streams, usability,
+filters and isolated-user suites on both paths. Final window captures were
+inspected. The stripped kernel is 248,136 bytes within the 393,216-byte BIOS
+slot. Formatting and Python syntax checks passed. Source hashes and guest suite
+results are in `tests/out/graphics-final-manifest.json` and
+`tests/out/graphics-{bios,uefi}-validation.json`. The translated x86-64 ASan
+runtime failed its empty-program preflight; full x86-64 ASan remains a native
+CI requirement.

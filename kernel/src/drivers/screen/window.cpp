@@ -129,14 +129,22 @@ void Window::Draw(Framebuffer* framebuffer)
     }
 }
 
+void Window::Invalidate()
+{
+    Display::SharedDisplay()->InvalidateRect(startX ? startX - 1 : 0, startY ? startY - 1 : 0, sizeX + 2, sizeY + 2);
+}
+
 void Window::MoveWindow(uint32_t x, uint32_t y)
 {
+    Invalidate();
     this->startX = x;
     this->startY = y;
+    Invalidate();
 }
 
 void Window::ResizeWindow(uint32_t x, uint32_t y)
 {
+    Invalidate();
     if (y < (navbar_height + 30))
     {
         y = navbar_height + 30;
@@ -156,6 +164,7 @@ void Window::ResizeWindow(uint32_t x, uint32_t y)
     drawArea->width = sizeX;
     drawArea->height = size_y;
     drawArea->pitch = sizeX;
+    Invalidate();
 }
 
 void Window::SetCursorPosiiton(uint32_t x, uint32_t y)

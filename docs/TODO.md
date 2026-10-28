@@ -155,21 +155,46 @@ future changes; prior results are not a substitute.
   loaders and the kernel. Widen the eight-bit memory-map count.
 - [ ] Centralize BIOS slot constants across assembly, image construction and
   tests. Reconcile the unused EFI linker script with the active kernel entry.
-- [ ] Remove the fixed BIOS kernel slot as a growth bottleneck. Increasing the
-  reservation beyond the current 384 KiB is explicitly acceptable; do not distort otherwise
-  sensible kernel changes just to retain that limit. When increasing it, update
-  loader read counts/offsets and ELF size bounds, partition extents, image-packaging
-  assertions and the documented layout together; check staging-buffer/memory-map limits.
-  Prefer investigating `kernel.elf` as a normal FAT32 file if a small, bounded
-  loader change can support it. UEFI already loads the kernel as a file; BIOS
-  stage 2 currently reads fixed sectors before entering long mode and has no
-  filesystem API. Evaluate a minimal read-only FAT32 reader over the existing
-  BIOS disk-read path, with file reads before the mode switch, rather than
-  importing the kernel's VFS/device stack or requiring a large refactor. Keep
-  the ELF-loading/handoff contract, validate file size and cluster chains, and
-  handle fragmented, missing, truncated and corrupt kernel files explicitly.
-  Test a kernel larger than the old slot, packaging/partition bounds and fresh
-  BIOS/UEFI boots. Step 14 enlarged the fixed reservation; the FAT32-file loader remains deferred.
+- [ ] Replace the fixed BIOS kernel slot with a minimal read-only FAT32 loader
+  for root-directory `KERNEL.ELF`, following the agreed approach below. This
+  removes the fixed slot, not all size limits: available RAM, filesystem
+  capacity, supported address ranges and FAT32's 4 GiB minus one byte file-size
+  limit still apply. Implementation remains deferred until requested.
+
+  1. Keep stage 1 loading stage 2 from reserved sectors. Keep the current FAT32
+     partition offset (LBA 846) and raw font loading initially; move only
+     `kernel.elf` into FAT32 and stop packaging/reading its old raw slot.
+     Stage 2 retains its own 32 KiB reservation, which must still be checked.
+  2. Add a small read-only FAT32 reader over BIOS disk services, without
+     importing the kernel VFS/device stack. Locate the FAT32 partition,
+     validate geometry and partition bounds, find the root-directory 8.3 name
+     `KERNEL.ELF`, and follow its cluster chain. No long-filename support is
+     needed. Support fragmented files and reject missing, truncated, corrupt,
+     out-of-range or cyclic chains with bounded traversal and clear failures.
+  3. Read and validate the ELF header and program headers first. Check file
+     bounds, arithmetic overflow, segment sizes, destination memory and entry
+     point before loading. Preserve the existing ELF and `KernelInfo` contracts.
+  4. Stream loadable segments into their final memory locations through a small
+     reusable low-memory disk buffer, then zero BSS. Remove the fixed
+     `0x20000..0x80000` whole-file staging requirement. BIOS reads happen in real
+     mode; provide an explicit bridge for copying above 1 MiB, such as returning
+     to protected mode for copies between BIOS reads. Adding FAT32 code only to
+     the existing 64-bit `loader_main` does not provide BIOS disk access.
+  5. Reserve actual kernel segment ranges before allocating page tables or other
+     loader memory. Replace the fixed kernel-area reservation below 2 MiB and
+     prevent overlap with the loader, stack, bounce buffer, handoff records and
+     firmware-reserved memory. Enter long mode and call the validated entry
+     point with the existing boot-information ABI.
+  6. Align BIOS and UEFI on the same kernel filename, ELF validation/loading
+     rules and handoff, sharing logic where practical. Keep BIOS FAT32/disk
+     access and VBE/E820 separate from UEFI firmware file access and GOP/memory
+     services. A single dual-firmware disk image is separate work.
+  7. Update image packaging, loader constants, ELF bounds, boot-asset assertions
+     and boot documentation together. Verify a kernel larger than 384 KiB,
+     fragmented files, malformed-file rejection and partition bounds. Run fresh
+     BIOS/UEFI boots and compare loaded segments and zeroed BSS before entry;
+     run the interactive and lifecycle regression suites required by AGENTS.md.
+
 - [ ] Strengthen BIOS ELF validation and both loaders' malformed-input cleanup.
   Extend firmware tests to missing files, unsupported GOP formats and map overflow.
 - [x] Add bounded COM1 diagnostics before kernel graphics and in both C loaders (step 18).

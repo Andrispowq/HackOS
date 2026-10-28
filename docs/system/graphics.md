@@ -27,8 +27,30 @@ conversion; the UEFI loader currently accepts BGR output only.
 
 [InitialiseDisplay](../../kernel/src/drivers/screen/screen.cpp) maps the hardware
 framebuffer with cache-control flags and allocates a software backbuffer at
-virtual address `0xD0000000`. `Display::DrawBackbuffer` copies the entire software
-buffer into the hardware buffer, then composites visible windows over it.
+virtual address `0xD0000000`. Two additional page-backed RAM buffers follow it:
+composition and the previously presented scene. They cost two framebuffer-sized
+allocations (about 15.8 MiB extra at 1920x1080 with an unpadded pitch).
+
+When scene content changes, `Display::DrawBackbuffer` copies the console into
+composition RAM and draws visible windows and the restore bar there. It compares
+the damaged bounds with the previous scene in 32-pixel horizontal blocks,
+coalesces adjacent changed blocks, and copies only changed spans to video memory and the saved
+scene. The first presentation is unconditional. Comparison never reads device
+memory, and all copies respect pitch and screen edges. Text cells, window uploads
+and old/new window geometry contribute clipped damage bounds, merged until presentation. Clears, scrolling, focus/mode changes and
+window lifecycle changes invalidate the full screen. Scene changes still
+recompose the whole screen in RAM, but comparisons and device writes are bounded
+by damage. Widely separated changes can expand the union to a large rectangle;
+this is not a clipped scene renderer or GPU acceleration.
+
+Cursor-only input takes a separate path: restore the previous 16x16 footprint
+from composition RAM and draw the cursor at a single captured position. It does
+not recompose or scan the scene. Window geometry, focus, modes, uploads, removal
+and console updates still invalidate scene content. Frames remain coalesced by
+the existing 16 ms minimum tick interval; this is not a guaranteed 60 FPS rate.
+The compositor remains under the single-CPU preemption guard so window buffers
+cannot be resized or freed during composition. Framebuffer cache policy is
+unchanged; write-combining and SMP require separate work.
 
 The `Display` singleton owns console state: foreground/background colour,
 cursor position, character size, and rows/columns. `puts` and `putc` render
@@ -44,7 +66,7 @@ pixels. User uploads are tightly packed pixel arrays, not framebuffer objects.
 
 [Window](../../kernel/src/drivers/screen/window.cpp) provides per-window state
 and drawing. [WindowManager](../../kernel/src/drivers/screen/window_manager.cpp)
-owns a list of windows, applies focus, dragging, resizing and mouse closure, draws onto the physical display,
+owns a list of windows, applies focus, dragging, resizing and mouse closure, draws into composition RAM,
 and resolves window IDs. Window pixels do not alter the console backbuffer.
 
 Userspace uses process-owned opaque handles through `window_create`,
@@ -83,3 +105,10 @@ release and clamp geometry to screen/ABI limits. Client presses capture mouse
 motion and release, including outside the client. Fixed per-window event queues
 and an explicit overflow/state-query contract let user programs recover input
 loss; details are in [userspace](userspace.md#window-interaction-and-events).
+
+Optional `tests/qemu_windows.py --firmware bios --profile` measurements time
+scene and cursor frames with small/maximized/no windows. They include debugger
+round trips and host scheduling, so compare on the same emulator/host rather
+than treating them as hardware frame times. `display.framesPresented`,
+`sceneFrames` and `pixelsPresented` are debugger-visible cumulative counters;
+`pixelsPresented` counts scene spans only, excluding cursor restoration/drawing.

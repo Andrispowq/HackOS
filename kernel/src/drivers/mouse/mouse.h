@@ -29,7 +29,9 @@ struct MouseState
 
 // 0 empty, 1 packet, 2 overflow with the latest state.
 unsigned ReadMouse(MouseState& state);
-void DrawMouse();
+class Framebuffer;
+void GetMousePosition(uint32_t& x, uint32_t& y);
+void DrawMouse(Framebuffer& framebuffer, uint32_t x, uint32_t y);
 void QueueKey(uint32_t key);
 void DiscardQueuedKeys();
 

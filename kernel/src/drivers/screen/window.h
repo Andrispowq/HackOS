@@ -173,6 +173,7 @@ class Window
     }
 
   private:
+    void Invalidate();
     uint32_t normalX = 0, normalY = 0, normalWidth = 0, normalHeight = 0;
     uint64_t owner = 0;
     bool focused = false;

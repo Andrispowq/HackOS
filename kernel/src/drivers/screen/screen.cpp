@@ -55,6 +55,7 @@ void InitialiseDisplay(Framebuffer framebuffer, PSF1_FONT* font)
     display.backbuffer = backbuffer;
 
     display.framebuffer = framebuffer;
+    display.InitialiseComposition((backbufferMemory + fb_size + 8191) & ~4095ULL, fb_size);
     display.console.Configure(HACKOS_TERMINAL_RESET, 0, framebuffer.width, framebuffer.height);
     display.font = font;
 }
@@ -75,31 +76,97 @@ void Display::Refresh()
 {
     // Coalesce small user uploads and cursor events between frames. Keep dirty
     // set until the final update is displayed, even when input has stopped.
-    if (dirty && tick - lastFrameTick >= TimerTicksForMilliseconds(16))
+    if ((dirty || cursorDirty) && tick - lastFrameTick >= TimerTicksForMilliseconds(16))
     {
         DrawBackbuffer();
+    }
+}
+
+void Display::InitialiseComposition(uint64_t memory, uint64_t bytes)
+{
+    uint64_t allocation = (bytes + 4095) & ~4095ULL;
+    for (uint64_t offset = 0; offset < allocation * 2; offset += 4096)
+    {
+        KernelDirectory.MapMemory(memory + offset, (uint64_t)PageFrameAllocator::SharedAllocator()->RequestPage());
+    }
+
+    composition = framebuffer;
+    composition.address = (uint32_t*)memory;
+    previous = framebuffer;
+    previous.address = (uint32_t*)(memory + allocation);
+    // The first presentation is unconditional, so previous needs no clearing.
+}
+
+void Display::Invalidate()
+{
+    InvalidateRect(0, 0, framebuffer.width, framebuffer.height);
+}
+
+void Display::InvalidateRect(uint32_t x, uint32_t y, uint32_t width, uint32_t height)
+{
+    damage.Include(x, y, width, height, framebuffer.width, framebuffer.height);
+    if (!damage.Empty())
+    {
+        dirty = true;
     }
 }
 
 void Display::DrawBackbuffer()
 {
     PreemptionGuard guard;
-    dirty = false;
-    framebuffer.CopyFrom(backbuffer, 0, 0);
+    // Restore from the last composed scene, never read device memory. This also
+    // removes the cursor before comparing/presenting a changed scene.
+    if (presented && KernelWindowManager)
+    {
+        framebuffer.CopyRegion(composition, cursorX, cursorY, 16, 16);
+    }
+
+    if (dirty || !presented)
+    {
+        composition.CopyFrom(backbuffer, 0, 0);
+        if (KernelWindowManager)
+        {
+            KernelWindowManager->Draw();
+        }
+
+        if (!presented || damage.Empty())
+        {
+            pixelsPresented += framebuffer.PresentChanged(composition, previous, !presented);
+        }
+        else
+        {
+            Framebuffer target = framebuffer, current = composition, saved = previous;
+            Framebuffer* buffers[] = {&target, &current, &saved};
+            for (auto buffer : buffers)
+            {
+                buffer->address += (uint64_t)damage.top * buffer->pitch + damage.left;
+                buffer->width = damage.right - damage.left;
+                buffer->height = damage.bottom - damage.top;
+            }
+
+            pixelsPresented += target.PresentChanged(current, saved, false);
+        }
+        ++sceneFrames;
+    }
 
     if (KernelWindowManager)
     {
-        KernelWindowManager->Draw();
-        DrawMouse();
+        GetMousePosition(cursorX, cursorY);
+        DrawMouse(framebuffer, cursorX, cursorY);
     }
 
+    dirty = false;
+    damage = {};
+    cursorDirty = false;
+    presented = true;
+    ++framesPresented;
     lastFrameTick = tick;
 }
 
 void Display::clear()
 {
     PreemptionGuard guard;
-    dirty = true;
+    Invalidate();
     backbuffer.Clear(console.Background());
 }
 
@@ -140,6 +207,7 @@ void putchar_at_xy(Framebuffer fb, char character, uint32_t x, uint32_t y)
 static void empty_char_at(Framebuffer& fb, uint32_t x, uint32_t y)
 {
     const Console& console = display.console;
+    display.InvalidateRect(x * console.char_width, y * console.char_height, console.char_width, console.char_height);
     fb.DrawRect(x * console.char_width, y * console.char_height, console.char_width, console.char_height,
                 console.Background());
 }
@@ -147,7 +215,6 @@ static void empty_char_at(Framebuffer& fb, uint32_t x, uint32_t y)
 int Display::putc(char ch)
 {
     PreemptionGuard guard;
-    dirty = true;
     SerialCharacter(ch);
     // QEMU's optional debug console mirrors text independently of the framebuffer.
     asm volatile("outb %0, $0xe9" ::"a"((uint8_t)ch));
@@ -209,6 +276,7 @@ int Display::putc(char ch)
     if (y >= height)
     {
         console.Scroll(backbuffer);
+        Invalidate();
         y = height - 1;
     }
 

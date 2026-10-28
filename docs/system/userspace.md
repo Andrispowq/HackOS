@@ -531,8 +531,9 @@ does not block. Dragging, resizing, window modes, focus and input events are
 described below. Raw key-up events remain future work.
 
 Idle updates mouse closure and flushes dirty drawing under a preemption guard.
-The compositor overlays windows onto the physical display after copying the
-console backbuffer. Window pixels never overwrite the console backbuffer;
+The compositor overlays windows onto a RAM copy of the console and presents
+changed spans to the physical display. Cursor-only motion reuses the composed
+scene. Window pixels never overwrite the console backbuffer;
 closing or reclaiming a window triggers redraw to restore the console beneath.
 
 ### Window interaction and events

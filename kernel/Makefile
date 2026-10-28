@@ -41,6 +41,9 @@ include $(COMMON_DIR)/runtime.mk
 # debug information, frame pointers and all freestanding/interrupt ABI flags.
 $(OBJ_DIR)/drivers/screen/window.o $(OBJ_DIR)/drivers/screen/window_manager.o $(OBJ_DIR)/proc/user/windows.o $(OBJ_DIR)/drivers/mouse/mouse.o: CFLAGS += -Os
 
+# Pixel loops and RAM comparisons run once per damaged frame.
+$(OBJ_DIR)/drivers/screen/framebuffer.o $(OBJ_DIR)/drivers/screen/console.o: CFLAGS += -O2
+
 $(OBJ_DIR)/security/crypto.o: CFLAGS += -O2
 
 # Credential validation shares the fixed BIOS payload budget with the syscall

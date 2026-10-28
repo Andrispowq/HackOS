@@ -229,7 +229,8 @@ framebuffer requires a graphical window or VNC: `-nographic` does not turn it
 into a text console.
 
 The kernel compiles the account registry and syscall dispatcher, plus `window.cpp`, `window_manager.cpp`, `proc/user/windows.cpp`
-and `mouse.cpp` with `-Os`; password hashing uses `-O2` for its bounded work factor.
+and `mouse.cpp` with `-Os`; password hashing uses `-O2` for its bounded work factor. Framebuffer and console
+pixel loops also use `-O2`; freestanding and interrupt ABI flags remain intact.
 The BIOS kernel reservation is now 384 KiB. Debug information,
 frame pointers, freestanding flags and the no-red-zone policy are retained.
 
