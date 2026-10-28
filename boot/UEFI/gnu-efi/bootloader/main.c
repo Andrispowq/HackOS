@@ -16,47 +16,7 @@ static void SerialLog(const char* text)
 
 typedef unsigned long long size_t;
 
-typedef struct
-{
-    unsigned int* address;
-    unsigned int width, height, bpp, pitch;
-} Framebuffer;
-
-#define PSF1_MAGIC0 0x36
-#define PSF1_MAGIC1 0x04
-
-typedef struct
-{
-    unsigned char magic[2];
-    unsigned char mode;
-    unsigned char charsize;
-} PSF1_HEADER;
-
-typedef struct
-{
-    PSF1_HEADER* psf1_Header;
-    void* glyphBuffer;
-} PSF1_FONT;
-
-typedef struct memory_map_entry
-{
-    uint64_t address;
-    uint64_t length;
-    uint32_t type;
-    uint32_t extended_attributes;
-} MemoryMapEntry;
-
-typedef struct _bootinfo
-{
-    Framebuffer framebuffer;
-    PSF1_FONT* font;
-    MemoryMapEntry* memMap;
-    uint64_t memMapEntrySize;
-    void* rsdp;
-    uint8_t memMapEntries;
-    uint8_t rsdp_revision;
-    uint8_t booted_from_BIOS;
-} BOOTINFO;
+#include "../../../../include/hackos/boot_info.h"
 
 static int EqualBytes(const void* a, const void* b, UINTN size)
 {
@@ -274,7 +234,7 @@ EFI_STATUS efi_main(EFI_HANDLE image, EFI_SYSTEM_TABLE* system)
         return status;
     }
 
-    BOOTINFO info = {0};
+    KernelInfo info = {0};
     info.font = LoadFont(image);
     if (!info.font)
     {
@@ -324,7 +284,7 @@ EFI_STATUS efi_main(EFI_HANDLE image, EFI_SYSTEM_TABLE* system)
         return EFI_NOT_FOUND;
     }
 
-    info.rsdp_revision = ((UINT8*)info.rsdp)[15];
+    info.rsdp_version = ((UINT8*)info.rsdp)[15];
     info.memMapEntrySize = sizeof(MemoryMapEntry);
     // The shared boot ABI has an 8-bit entry count. Reject overflow instead of truncating it.
     info.memMap = AllocatePool(255 * sizeof(MemoryMapEntry));
@@ -366,9 +326,9 @@ EFI_STATUS efi_main(EFI_HANDLE image, EFI_SYSTEM_TABLE* system)
         {
             EFI_MEMORY_DESCRIPTOR* descriptor = (EFI_MEMORY_DESCRIPTOR*)((UINT8*)map + i * stride);
             info.memMap[i].address = descriptor->PhysicalStart;
-            info.memMap[i].length = descriptor->NumberOfPages * 4096;
+            info.memMap[i].size = descriptor->NumberOfPages * 4096;
             info.memMap[i].type = descriptor->Type;
-            info.memMap[i].extended_attributes = descriptor->Attribute;
+            info.memMap[i].attributes = descriptor->Attribute;
         }
 
         // No allocations, logging or protocol calls between the final map and ExitBootServices.
@@ -376,7 +336,7 @@ EFI_STATUS efi_main(EFI_HANDLE image, EFI_SYSTEM_TABLE* system)
         if (status == EFI_SUCCESS)
         {
             __asm__ volatile("cli");
-            typedef int(__attribute__((sysv_abi)) * KernelEntry)(BOOTINFO*);
+            typedef int(__attribute__((sysv_abi)) * KernelEntry)(KernelInfo*);
             ((KernelEntry)entry)(&info);
             break;
         }

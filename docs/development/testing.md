@@ -676,3 +676,15 @@ loaded host had median Enter-to-shell times of 7.35 → 3.58 seconds for BIOS an
 latency guarantees. Separate debugger samples attributed most login time to
 hashing. Timing data and focused checks are under `tests/out/login-performance/`;
 the full x86-64 host suite still requires ASan+UBSan in native x86-64 CI.
+
+## Shared boot-information ABI
+
+Every loader/kernel build compiles the assertions in `include/hackos/boot_info.h`
+in its own C or C++ environment. The image/asset suite also compiles both
+languages for x86-64 and requires packed and 32-bit builds to fail assertions
+(`BOOT_LAYOUT_CC` may select a Clang executable).
+`tests/qemu_boot.py --firmware bios` and
+`--firmware uefi` independently decode the 64-byte handoff at kernel entry,
+validate pointed-to font/map/ACPI data and framebuffer geometry, then require
+IRQ initialization and repeated timer interrupts. Run these after fresh
+`tests/build_images.py` builds; results live in `tests/out/qemu-{bios,uefi}`.

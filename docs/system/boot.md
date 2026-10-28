@@ -73,20 +73,22 @@ are rejected rather than silently truncated.
 
 ## Shared boot information
 
-The structure is declared three times: `KernelInfo` in
-[BIOS stage 2](../../boot/BIOS/stage_2/src/second_stage.c), `BOOTINFO` in the
-[UEFI application](../../boot/UEFI/gnu-efi/bootloader/main.c), and `KernelInfo` in
-[the kernel](../../kernel/src/init/kernelInit.h).
+Both loaders and the kernel include [hackos/boot_info.h](../../include/hackos/boot_info.h).
+It defines the 64-byte `KernelInfo`, 24-byte `BootFramebuffer`, 24-byte
+`MemoryMapEntry`, and PSF1 header/font records in freestanding C and C++.
+Compile-time assertions pin every field offset, record size and alignment,
+including eight-byte pointers. The kernel copies the framebuffer data into its
+own drawing class; the ABI contains no C++ methods or firmware-specific types.
 
 | Field | Meaning |
 | --- | --- |
-| `framebuffer` | Pixel-buffer address, dimensions, bits per pixel, and pitch |
+| `framebuffer` | Pixel-buffer address, dimensions, bits per pixel, and pitch in 32-bit pixels |
 | `font` | Pointer to PSF1 metadata and glyph storage |
 | `memMap` | Pointer to converted memory-map entries |
 | `memMapEntrySize` | Entry size supplied by the loader |
 | `rsdp` | ACPI root pointer |
 | `memMapEntries` | Entry count, currently only eight bits |
-| `rsdp_version` / `rsdp_revision` | Loader-specific ACPI version field |
+| `rsdp_version` | Actual ACPI RSDP revision byte |
 | `booted_from_BIOS` | Selects BIOS versus EFI interpretation in the kernel |
 
 Field order, integer widths, pointer widths, alignment, and the layouts of
@@ -95,8 +97,16 @@ values; converting the entry shape does not normalize those values. The kernel
 currently uses the boot-mode flag to select usable memory types.
 
 The loaders' referenced data must remain accessible after the kernel replaces
-page tables. A shared ABI header and layout assertions would make this contract
-less fragile, including a wider memory-map entry count.
+page tables. The existing eight-bit entry count and natural layout are preserved. Map entries
+use byte `size` and 32-bit `attributes`; UEFI retains the low 32 attribute bits.
+Widening these fields requires a coordinated ABI change. BIOS passes E820 type
+numbers; UEFI passes EFI types. Loader-owned pointers are borrowed by the kernel,
+not freed during handoff. Both loaders zero-initialize the handoff record.
+
+The QEMU boot test decodes the raw handoff independently at the exact SysV entry
+(`RDI`), checks geometry, font bytes, map stride/count and usable regions, boot
+origin and RSDP checksum/revision, then observes IRQ setup and repeated timer
+interrupts. It also compares every loaded ELF segment and BSS against the build.
 
 ## Linker contracts
 

@@ -95,8 +95,8 @@ uint64_t ReadHardware(uint64_t section, uint64_t index, HackosHardwareInfo& info
         info.system.timerHz = TimerFrequency();
         if (kInfo->rsdp)
         {
-            info.system.acpiRevision = kInfo->rsdp->Revision;
-            Text(info.system.oem, kInfo->rsdp->OEMID, 6);
+            info.system.acpiRevision = ((ACPI::RSDP*)kInfo->rsdp)->Revision;
+            Text(info.system.oem, ((ACPI::RSDP*)kInfo->rsdp)->OEMID, 6);
         }
 
         break;
@@ -147,11 +147,11 @@ uint64_t ReadHardware(uint64_t section, uint64_t index, HackosHardwareInfo& info
         break;
     case HACKOS_HW_ACPI:
     {
-        if (!kInfo->rsdp || index >= kInfo->rsdp->GetTableCount())
+        if (!kInfo->rsdp || index >= ((ACPI::RSDP*)kInfo->rsdp)->GetTableCount())
         {
             return 0;
         }
-        auto table = kInfo->rsdp->Get(index);
+        auto table = ((ACPI::RSDP*)kInfo->rsdp)->Get(index);
         if (!table)
         {
             return HACKOS_ERROR;

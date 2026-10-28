@@ -85,6 +85,8 @@ CFLAGS += -Wno-error=unused-parameter -Wno-error=unused-variable
 
 all:	$(TARGETS)
 
+main.o: $(SRCDIR)/../../../../include/hackos/boot_info.h $(SRCDIR)/../../../../include/hackos/serial.h
+
 clean:
 	rm -f $(TARGETS) *~ *.o *.so
 

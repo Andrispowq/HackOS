@@ -241,6 +241,22 @@ def images(args):
         assert len(data)>=4+(512 if data[2]&1 else 256)*data[3],"glyph data truncated"
         assert len(data)<=12*512,"font exceeds BIOS slot"
     report.check("font_asset",font)
+    def boot_layout():
+        # Compile the shared header in both languages without a hosted sysroot.
+        # Deliberately incompatible packing/pointer width must fail assertions.
+        for language, standard in (("c", "gnu11"), ("c++", "gnu++17")):
+            source = directory / ("boot-layout.c" if language == "c" else "boot-layout.cpp")
+            source.write_text('#include "hackos/boot_info.h"\nKernelInfo info;\n')
+            base = [os.environ.get("BOOT_LAYOUT_CC", "clang"), "-target", "x86_64-none-elf",
+                    "-x", language, "-std=" + standard, "-ffreestanding", "-fsyntax-only",
+                    "-I", ROOT / "include", source]
+            require_success(command(base), "shared boot layout " + language)
+            for flags in (("-fpack-struct=1",), ("-m32",)):
+                result = command([*base, *flags])
+                assert result.returncode != 0 and "static assertion failed" in result.stdout, result.stdout
+        return "C/C++ accept the x86-64 ABI and reject packed/32-bit layouts."
+    report.check("boot_information_layout", boot_layout)
+
     report.check("usertest_elf",lambda:validate_elf((ROOT/"util/usertest/usertest.elf").read_bytes()))
     return report.finish()
 

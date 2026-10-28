@@ -151,7 +151,9 @@ void InitialiseDisplay(KernelInfo* info)
     InitialiseIDT();
     InitPaging(map);
 
-    InitialiseDisplay(info->framebuffer, info->font);
+    const BootFramebuffer& boot = info->framebuffer;
+    Framebuffer framebuffer = {boot.address, boot.width, boot.height, boot.bpp, boot.pitch};
+    InitialiseDisplay(framebuffer, info->font);
     clrscr();
 
     kprintf("Welcome to the HackOS kernel!\n");

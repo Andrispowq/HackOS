@@ -1207,7 +1207,7 @@ static uint64_t UserPower(uint64_t operation)
 
     if (operation == 0)
     {
-        auto fadt = kInfo->rsdp ? (ACPI::FADT*)kInfo->rsdp->GetSystemTable("FACP") : nullptr;
+        auto fadt = kInfo->rsdp ? (ACPI::FADT*)((ACPI::RSDP*)kInfo->rsdp)->GetSystemTable("FACP") : nullptr;
         if (!fadt)
         {
             return HACKOS_ERROR;

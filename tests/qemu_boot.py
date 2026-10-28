@@ -71,6 +71,32 @@ for symbol in ["kernel_main", "InitialiseIRQ()", "timer_callback"]:
                 actual = bytes(gdb.selected_inferior().read_memory(virtual, memory))
                 assert actual == expected, 'Loader corrupted ELF segment at ' + hex(virtual)
         print('HACKOS_MILESTONE=elf_segments', flush=True)
+        # Decode the wire format independently of the kernel's debug types.
+        read = lambda address, size: bytes(gdb.selected_inferior().read_memory(address, size))
+        handoff = int(gdb.parse_and_eval("$rdi"))
+        assert handoff and handoff % 8 == 0, 'Unaligned boot information'
+        fields = struct.unpack('<QIIIIQQQQBBB5x', read(handoff, 64))
+        pixels, width, height, bpp, pitch, font, mmap, stride, rsdp, count, revision, bios = fields
+        assert bios == ''' + repr(firmware == "bios") + ''', 'Wrong boot path flag'
+        assert width > 0 and height > 0 and bpp == 32 and pitch >= width, "Invalid framebuffer geometry"
+        assert pixels and pixels % 4 == 0, "Invalid framebuffer address"
+        read(pixels + (height - 1) * pitch * 4, width * 4)
+        header, glyphs = struct.unpack('<QQ', read(font, 16))
+        magic, mode, charsize = struct.unpack('<HBB', read(header, 4))
+        assert magic == 0x0436 and charsize == 16, "Invalid PSF1 font"
+        expected_font = open(''' + repr(str(ROOT / 'util/fonts/zap-light16.psf')) + ''', 'rb').read()
+        assert read(header, 4) == expected_font[:4], 'Font header differs'
+        glyph_size = charsize * (512 if mode & 1 else 256)
+        assert read(glyphs, glyph_size) == expected_font[4:4 + glyph_size], 'Font glyphs differ'
+        assert mmap and mmap % 8 == 0 and stride == 24 and count > 0, "Invalid memory map shape"
+        entries = list(struct.iter_unpack('<QQII', read(mmap, count * stride)))
+        usable = (1,) if bios else (7,)
+        assert any(size and kind in usable for address, size, kind, attributes in entries), "No usable memory"
+        assert all(address + size <= 2**64 for address, size, kind, attributes in entries), "Memory extent overflow"
+        acpi = read(rsdp, 20)
+        assert acpi[:8] == b'RSD PTR ' and sum(acpi) % 256 == 0, 'Invalid ACPI RSDP'
+        assert revision == acpi[15], 'RSDP revision differs from handoff'
+        print('HACKOS_MILESTONE=boot_information', flush=True)
 
     if symbol == "timer_callback" and not ''' + repr(self_test) + ''':
         ticks = int(gdb.parse_and_eval("tick"))
@@ -109,7 +135,7 @@ quit
                         raise AssertionError(f"Kernel did not reach all milestones in {timeout}s; see gdb.log and guest.log") from exc
                     (directory/"gdb.log").write_text(result.stdout)
                     assert result.returncode == 0, f"GDB exited {result.returncode}; see gdb.log"
-                    for milestone in ("kernel_main","InitialiseIRQ()","timer_callback", *(() if self_test else ("repeated_timer", "elf_segments"))):
+                    for milestone in ("kernel_main","InitialiseIRQ()","timer_callback", *(() if self_test else ("repeated_timer", "elf_segments", "boot_information"))):
                         assert "HACKOS_MILESTONE="+milestone in result.stdout, f"Missing milestone {milestone}"
                     return ("Debugger runner reached test-only labels; no kernel/IRQ coverage." if self_test else
                             "Reached kernel entry, IRQ initialization, and repeated timer interrupts.")

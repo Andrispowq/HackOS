@@ -15,11 +15,9 @@ struct FramebufferInfo
     uint16_t max_height;
 } __attribute__((packed));
 
-typedef struct _framebuffer
-{
-    uint32_t* address;
-    uint32_t width, height, bpp, pitch;
-} FRAMEBUFFER;
+#include "hackos/boot_info.h"
+
+typedef BootFramebuffer FRAMEBUFFER;
 
 FRAMEBUFFER PrepareFramebuffer(struct FramebufferInfo* info);
 

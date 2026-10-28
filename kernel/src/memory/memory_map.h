@@ -3,13 +3,7 @@
 
 #include "lib/stdint.h"
 
-struct MemoryMapEntry
-{
-    uint64_t address;
-    uint64_t size;
-    uint32_t type;
-    uint32_t attributes;
-};
+#include "hackos/boot_info.h"
 
 class MemoryMap
 {

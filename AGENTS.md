@@ -129,11 +129,12 @@ ELF entry using the SysV ABI. The packaged fallback is `EFI/BOOT/BOOTX64.EFI`;
 the font is `UTIL/FONTS/zap-light16.psf`. The loader checks the final memory-map
 key, retries a stale key, and rejects more than 255 descriptors.
 
-The boot handoff structure is separately declared in BIOS `second_stage.c`,
-UEFI `bootloader/main.c` (`BOOTINFO`), and kernel `init/kernelInit.h`
-(`KernelInfo`). Preserve field order, widths, padding, and the nested
-framebuffer/font/memory-map layouts across all three. The BIOS/EFI memory type
+The boot handoff and nested framebuffer/font/memory-map records are shared in
+`include/hackos/boot_info.h`. C/C++ assertions pin sizes, alignment and every
+field offset. Keep the 64-byte `KernelInfo` and 24-byte map-entry ABI consistent;
+`rsdp_version` carries the actual ACPI revision. The BIOS/EFI memory type
 numbers differ; the kernel uses `booted_from_BIOS` to select interpretation.
+`tests/qemu_boot.py` independently decodes the handoff on both boot paths.
 
 `kernel_main` initializes display/GDT/IDT/paging, then heap, devices/filesystems,
 ACPI/PCI, windows, syscalls and tasking. It validates account storage and loads the unprivileged login agent before

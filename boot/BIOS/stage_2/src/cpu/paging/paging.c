@@ -147,7 +147,7 @@ void InitPaging(MemoryMapEntry* entries)
         }
 
         uint64_t start = (entries[i].address + 4095) & ~4095ULL;
-        uint64_t end = entries[i].address + entries[i].length;
+        uint64_t end = entries[i].address + entries[i].size;
         if (end > 0x1000000)
         {
             end = 0x1000000;

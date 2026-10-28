@@ -28,18 +28,6 @@ static void SerialLog(const char* text)
 
 struct tm start_time;
 
-struct KernelInfo
-{
-    FRAMEBUFFER framebuffer;
-    PSF1_FONT* font;
-    MemoryMapEntry* memMap;
-    uint64_t memMapEntrySize;
-    void* rsdp;
-    uint8_t memMapEntries;
-    uint8_t rsdp_version;
-    uint8_t booted_from_BIOS;
-};
-
 extern uint64_t end;
 uint64_t free_mem_addr;
 
@@ -59,13 +47,13 @@ void loader_main(struct FramebufferInfo* info)
     for (uint8_t i = 0; i < MemoryRegionCount; ++i)
     {
         MemoryMapEntry* entry = entries + i;
-        if (!entry->length || entry->length > ~0ULL - entry->address ||
+        if (!entry->size || entry->size > ~0ULL - entry->address ||
             (entry->type == 2 && entry->address >= 0x100000000ULL))
         {
             continue;
         }
 
-        uint64_t last = (entry->address + entry->length - 1) & ~4095ULL;
+        uint64_t last = (entry->address + entry->size - 1) & ~4095ULL;
         for (uint64_t address = entry->address & ~4095ULL;; address += 4096)
         {
             MapMemory(address, address);
@@ -106,14 +94,14 @@ void loader_main(struct FramebufferInfo* info)
 
     PrepareProgram(header, kernelMemory);
 
-    struct KernelInfo kernelInfo;
+    struct KernelInfo kernelInfo = {0};
     kernelInfo.framebuffer = get_current_display()->framebuffer;
     kernelInfo.font = font;
     kernelInfo.memMap = entries;
     kernelInfo.rsdp = rsdp;
     kernelInfo.memMapEntrySize = sizeof(MemoryMapEntry);
     kernelInfo.memMapEntries = MemoryRegionCount;
-    kernelInfo.rsdp_version = version;
+    kernelInfo.rsdp_version = rsdp ? rsdp->revision : 0;
     kernelInfo.booted_from_BIOS = 1;
 
     int (*kernel_main)(struct KernelInfo*) = (int (*)(struct KernelInfo*))header->e_entry;

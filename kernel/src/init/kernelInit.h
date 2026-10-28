@@ -20,17 +20,7 @@
 #include "lib/stdio.h"
 #include "lib/font/font.h"
 
-struct KernelInfo
-{
-    Framebuffer framebuffer;
-    PSF1_FONT* font;
-    MemoryMapEntry* memMap;
-    uint64_t memMapEntrySize;
-    ACPI::RSDP* rsdp;
-    uint8_t memMapEntries;
-    uint8_t rsdp_version;
-    uint8_t booted_from_BIOS;
-};
+#include "hackos/boot_info.h"
 
 void InitialiseDisplay(struct KernelInfo* info);
 void InitialiseKernel(struct KernelInfo* info);
