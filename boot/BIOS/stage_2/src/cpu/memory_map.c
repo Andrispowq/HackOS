@@ -2,5 +2,5 @@
 
 MemoryMapEntry* GetMemoryRegions()
 {
-    return (MemoryMapEntry*)0x5000;
+    return (MemoryMapEntry*)0x30000;
 }

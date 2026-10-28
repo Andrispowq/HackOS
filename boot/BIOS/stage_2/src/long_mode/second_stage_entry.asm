@@ -3,13 +3,14 @@
 
 extern loader_main
 
-section .must_be_top
+section .entry
 
 global _start
 global BeginPM
 global MemoryRegionCount
 
 extern ReadDisk
+extern BiosBootDrive
 
 _start:
 	jmp 	_start_text
@@ -17,22 +18,12 @@ _start:
 section .text
 
 _start_text:
-    ; Read 768 sectors in BIOS-safe 32 KiB chunks to 0x20000..0x80000.
-    push es
-    mov eax, 78
-    mov bp, 0x2000
-    mov di, 12
-.kernel_chunk:
-    mov es, bp
-    xor bx, bx
-    mov cx, 64
-    call ReadDisk
-    movzx eax, ax ; some BIOSes clobber upper register halves
-    add eax, 64
-    add bp, 0x0800
-    dec di
-    jnz .kernel_chunk
-    pop es
+    mov [BiosBootDrive], dl
+    ; Enable A20 before using memory above 1 MiB.
+    in al, 0x92
+    or al, 2
+    and al, 0xfe
+    out 0x92, al
 
 	; Load the font to 0x6000
 	mov 	cx, 12
@@ -91,7 +82,7 @@ Start64Bit:
 
 	mov 	rsp, default_stack_pointer
 	mov 	rbp, rsp
-	
+
 	mov 	rdi, vbe_final_info_block
 	call 	loader_main
 
@@ -115,7 +106,7 @@ VIDEO_ERROR: db "ERROR: video mode not supported!", 0x00
 
 MemoryRegionCount: db 0
 
-KERNEL_STACK_SIZE   equ 8192 
+KERNEL_STACK_SIZE   equ 8192
 
 section .bss
 align 16

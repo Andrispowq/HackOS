@@ -74,3 +74,9 @@ test-shell-editing:
 	$(PYTHON) qemu_shell_editing.py --firmware $(FIRMWARE)
 test-listing-performance:
 	$(PYTHON) qemu_listing_performance.py --firmware $(FIRMWARE)
+
+.PHONY: test-boot-loader test-loader
+test-boot-loader:
+	$(PYTHON) boot_loader.py
+test-loader:
+	$(PYTHON) qemu_loader.py --firmware $(FIRMWARE)

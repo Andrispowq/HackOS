@@ -138,7 +138,8 @@ alone, and verify both BIOS and UEFI for each implementation step.
     The shell supports four-stage jobs, ordered file/descriptor redirection,
     foreground/background control and exact-byte `cat` streams. COM1 diagnostics
     cover both C loaders, kernel entry, terminal output, lifecycle and faults.
-    BIOS staging now reserves the complete 384 KiB kernel buffer; boot tests compare
+    At step 18 BIOS staging reserved the complete 384 KiB kernel buffer (now
+    replaced by FAT32 streaming); boot tests compare
     loaded ELF segments byte for byte. See [streams and waits](system/streams.md).
 
 The remaining subsystem lists below are the broader hardening backlog. Later
@@ -151,15 +152,19 @@ future changes; prior results are not a substitute.
 
 ## Boot and memory
 
-- [ ] Share boot-information declarations and add layout assertions across both
-  loaders and the kernel. Widen the eight-bit memory-map count.
+- [x] Share boot-information declarations and layout assertions across both
+  loaders and the kernel.
+- [ ] Widen the eight-bit memory-map count.
 - [ ] Centralize BIOS slot constants across assembly, image construction and
   tests. Reconcile the unused EFI linker script with the active kernel entry.
-- [ ] Replace the fixed BIOS kernel slot with a minimal read-only FAT32 loader
+- [x] Replace the fixed BIOS kernel slot with a minimal read-only FAT32 loader
   for root-directory `KERNEL.ELF`, following the agreed approach below. This
   removes the fixed slot, not all size limits: available RAM, filesystem
   capacity, supported address ranges and FAT32's 4 GiB minus one byte file-size
-  limit still apply. Implementation remains deferred until requested.
+  limit still apply. Implemented with the shared ELF validator, a real-mode disk
+  bridge and low-memory bootstrap tables; see [boot contracts](system/boot.md).
+  The agreed plan below records the scope; tables now use six checked pages below
+  1 MiB, so accepted kernel destinations cannot overlap loader allocations.
 
   1. Keep stage 1 loading stage 2 from reserved sectors. Keep the current FAT32
      partition offset (LBA 846) and raw font loading initially; move only
@@ -195,8 +200,9 @@ future changes; prior results are not a substitute.
      BIOS/UEFI boots and compare loaded segments and zeroed BSS before entry;
      run the interactive and lifecycle regression suites required by AGENTS.md.
 
-- [ ] Strengthen BIOS ELF validation and both loaders' malformed-input cleanup.
-  Extend firmware tests to missing files, unsupported GOP formats and map overflow.
+- [x] Share BIOS/UEFI ELF validation and reject malformed kernel files; free partial
+  UEFI kernel allocations on load failure.
+- [ ] Extend firmware tests to unsupported GOP formats and map overflow.
 - [x] Add bounded COM1 diagnostics before kernel graphics and in both C loaders (step 18).
 - [ ] Extend serial diagnostics to BIOS real-mode MBR/stage-1/video failures.
 - [ ] Replace dense physical-page bookkeeping for highly sparse memory maps;

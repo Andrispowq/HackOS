@@ -88,7 +88,8 @@ enum Elf_Type
 
 #define ET_EXEC 0x02 // ELF is executable
 
-Elf64_Ehdr* LoadProgram(void* address, uint64_t* mem);
-void PrepareProgram(Elf64_Ehdr* header, uint64_t memory);
+int BootMemoryUsable(uint64_t start, uint64_t size);
+int InspectKernel(void);
+uint64_t LoadKernel(void);
 
 #endif

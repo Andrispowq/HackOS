@@ -102,9 +102,12 @@ describes `tests/`, test containers, and the GitHub Actions workflow.
 
 BIOS: MBR relocates from `0x7c00` to `0x0600`, finds the active partition, and
 loads stage 1 at `0x7c00`. Stage 1 loads stage 2 at `0x8000`. Stage 2 reads the
-font to `0x6000` and kernel ELF to `0x20000`, requests 1920x1080x32 VBE graphics,
+font to `0x6000`, requests 1920x1080x32 VBE graphics,
 collects the memory map, enables long mode/SSE, and calls `loader_main`.
-The ELF loader places the kernel at its linked addresses and calls `kernel_main`.
+Stage 2 reads root `KERNEL.ELF` from FAT32 through a real-mode INT 13h bridge,
+validates its segments against E820 RAM, streams them into linked addresses, and
+calls `kernel_main`. A 512-byte bounce buffer at `0x20000`, E820 map at `0x30000`
+and six bootstrap page-table pages at `0x40000` remain below 1 MiB.
 
 The BIOS image uses 512-byte sectors and fixed offsets shared by
 `tools/make_image.py`, the MBR partition table, and stage-1/stage-2 assembly:
@@ -115,15 +118,16 @@ The BIOS image uses 512-byte sectors and fixed offsets shared by
 | Stage 1 | 1 | 1 | 512 |
 | Stage 2 | 2 | 64 | 32,768 |
 | PSF font | 66 | 12 | 6,144 |
-| Stripped kernel ELF | 78 | 768 | 393,216 |
+| Unused compatibility gap | 78 | 768 | — |
 | FAT32 data partition | 846 | 93,750 | 48,000,000 |
 
-The image packager in `tools/make_image.py` rejects oversized payloads. Any
+Both images store `KERNEL.ELF` in FAT32; the old raw slot stays empty.
+The image packager in `tools/make_image.py` rejects oversized stages/font. Any
 change to these limits must update all readers, writers and image assertions.
 FAT32 discovery on BIOS reads the relocated MBR at `0x0600`; on UEFI it assumes
 a filesystem beginning at LBA 0.
 
-UEFI: `efi_main` opens `kernel.elf`, loads ELF segments, obtains GOP graphics,
+UEFI: `efi_main` opens `KERNEL.ELF`, loads ELF segments, obtains GOP graphics,
 a PSF1 font, ACPI and memory-map data, calls `ExitBootServices`, then calls the
 ELF entry using the SysV ABI. The packaged fallback is `EFI/BOOT/BOOTX64.EFI`;
 the font is `UTIL/FONTS/zap-light16.psf`. The loader checks the final memory-map
@@ -168,12 +172,14 @@ in the kernel; command parsing and line editing run in the ring-3 shell.
   parallel compilation. Keep frame pointers, freestanding flags and no-red-zone
   policy. Clean when changing compiler or flags; `tools/build.py` always uses a
   fresh source copy and writes separate `out/bios` / `out/uefi` artifacts.
-- The BIOS boot kernel strips symbols to fit its fixed slot; retain the separate
+- The packaged boot kernel strips symbols to save filesystem space; retain the separate
   debug ELF. MBR and stage 1 each must be exactly 512 bytes. Never substitute old
   binaries to hide a build failure.
 - For boot changes, test BIOS and UEFI separately in QEMU using the existing
   `q35` device topology. Check ELF class, machine, entry point, and load segments
   with target `readelf`, and compare BIOS payload sizes to the table above.
+  Run `tests/boot_loader.py` and `tests/qemu_loader.py --firmware bios` / `uefi`
+  for sanitized parser checks, large fragmented kernels and malformed-input rejection.
   Run `tests/qemu_accounts.py`, `tests/qemu_shell.py`, `tests/qemu_user.py`,
   `tests/qemu_windows.py`, `tests/qemu_files.py`, `tests/qemu_storage.py` and
   `tests/qemu_usability.py` and `tests/qemu_streams.py` with

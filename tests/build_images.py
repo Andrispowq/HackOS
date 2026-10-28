@@ -97,7 +97,7 @@ def build(firmware):
             assert len(pages) + 4 <= 64, f'{path.name}: exceeds private image/stack page limit'
         if firmware == "bios":
             for name, limit in [("mbr.bin",512),("bootloader.bin",512),
-                                ("second_stage.bin",32768),("kernel.elf",393216)]:
+                                ("second_stage.bin",32768)]:
                 size = (work/"bin"/name).stat().st_size
                 assert 0 < size <= limit, f"{name}: {size} bytes exceeds its {limit}-byte slot"
             assert (work/"util/fonts/zap-light16.psf").stat().st_size <= 6144
@@ -110,9 +110,10 @@ def build(firmware):
             data = image.read_bytes()
             assert len(data) == (846+93750)*512, "BIOS image extent mismatch"
             for start, path in [(0,"bin/mbr.bin"),(1,"bin/bootloader.bin"),(2,"bin/second_stage.bin"),
-                                (66,"util/fonts/zap-light16.psf"),(78,"bin/kernel.elf")]:
+                                (66,"util/fonts/zap-light16.psf")]:
                 payload = (work/path).read_bytes()
                 assert data[start*512:start*512+len(payload)] == payload, f"wrong payload at LBA {start}"
+            assert not any(data[78*512:846*512]), "old raw kernel slot must be empty"
             fs_image = str(image) + "@@" + str(846*512)
         else:
             fs_image = str(image)
@@ -122,6 +123,9 @@ def build(firmware):
             assert efi[pe:pe+4] == b"PE\0\0" and struct.unpack_from("<H",efi,pe+4)[0] == 0x8664
             for name in ("/kernel.elf", "/EFI/BOOT/BOOTX64.EFI", "/startup.nsh"):
                 require_success(command(["mdir","-a","-i",fs_image,"::"+name]), "image file " + name)
+        extracted = directory / "packaged-kernel.elf"
+        require_success(command(["mcopy", "-o", "-i", fs_image, "::/KERNEL.ELF", extracted]), "read packaged kernel")
+        assert extracted.read_bytes() == kernel, "FAT32 kernel differs"
         for name in ("/UTIL/FONTS/zap-light16.psf", "/USR/BIN/usertest.elf", "/USR/BIN/test", "/USR/BIN/shell", "/USR/BIN/login", "/SYSTEM/ACCT0.DAT", "/SYSTEM/ACCT1.DAT", "/USR/BIN/ring3", "/USR/BIN/input", "/USR/BIN/window", *["/USR/BIN/" + name for name in ("help", "clear", "terminal", "echo", "time", "sysinfo", "ps", "kill", "ls", "wd", "cat", "read", "grep", "wc", "head", "tail", "tee", "more", "sort", "uniq", "cut", "tr", "shutdown", "restart", "id", "whoami", "users", "groups", "useradd", "groupadd", "usermod", "runas", "passwd", "xxd", "mkdir", "rm", "mv", "edit", "chmod", "chown")]):
             require_success(command(["mdir","-a","-i",fs_image,"::"+name]), "image file " + name)
         shutil.copy2(image, directory/"HackOS.img")

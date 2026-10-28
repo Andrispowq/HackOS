@@ -12,8 +12,7 @@ def package(firmware):
     output = ROOT / 'bin'
     output.mkdir(exist_ok=True)
     slots = [(0, 512, 'bin/mbr.bin'), (1, 512, 'bin/bootloader.bin'),
-             (2, 32768, 'bin/second_stage.bin'), (66, 6144, 'util/fonts/zap-light16.psf'),
-             (78, 393216, 'bin/kernel.elf')]
+             (2, 32768, 'bin/second_stage.bin'), (66, 6144, 'util/fonts/zap-light16.psf')]
     if firmware == 'bios':
         for _, limit, name in slots:
             size = (ROOT / name).stat().st_size
@@ -41,13 +40,13 @@ def package(firmware):
         for slot in (0, 1):
             mtool('mcopy', empty_accounts, f'::/SYSTEM/ACCT{slot}.DAT')
             mtool('mattrib', '+h', '+s', f'::/SYSTEM/ACCT{slot}.DAT')
+        mtool('mcopy', ROOT / 'bin/kernel.elf', '::/KERNEL.ELF')
         image = Path(temporary) / 'HackOS.img'
         if firmware == 'uefi':
             mtool('mmd', '::/EFI', '::/EFI/BOOT')
             efi = ROOT / 'boot/UEFI/gnu-efi/x86_64/bootloader/main.efi'
             mtool('mcopy', efi, '::/EFI/BOOT/BOOTX64.EFI')
             mtool('mcopy', ROOT / 'kernel/startup.nsh', '::/startup.nsh')
-            mtool('mcopy', ROOT / 'bin/kernel.elf', '::/kernel.elf')
             fat.rename(image)
         else:
             with image.open('wb') as f:

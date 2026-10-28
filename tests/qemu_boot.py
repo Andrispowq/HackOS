@@ -13,8 +13,8 @@ from common import ROOT, OUT, Report, command, require_success
 from run import validate_elf, assemble_loaders
 
 
-def boot(firmware, image, elf, timeout=60, self_test=False, variant="success"):
-    name = "qemu-harness/"+variant if self_test else "qemu-" + firmware
+def boot(firmware, image, elf, timeout=60, self_test=False, variant="success", report_name=None):
+    name = report_name or ("qemu-harness/"+variant if self_test else "qemu-" + firmware)
     directory = OUT / name
     report = Report(name, directory)
     case = "debugger_probe" if self_test else "kernel_boot"

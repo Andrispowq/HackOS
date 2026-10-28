@@ -777,3 +777,43 @@ suite after making middle editing opt-in for the shared input helper. Their
 kernels and the loadable segments of all 44 other compared programs match the
 broad regression builds; the final shell/input sources received the focused
 checks. Full translated x86-64 ASan remains unavailable as described above.
+
+## FAT32 boot loader regressions
+
+`python3 tests/boot_loader.py` (or `make -C tests test-boot-loader`) compiles the
+production BIOS FAT32 reader and shared ELF validator with ASan/UBSan. It checks
+a 600,000-byte fragmented file in a fragmented root directory, random and
+cross-sector reads, EOF, disk failures, malformed geometry, partition bounds,
+invalid FAT entries, truncated/cyclic chains, and malformed ELF headers/ranges.
+The sector adapter reads an image file; firmware mode transitions are covered
+separately by QEMU. Use a native sanitizer runtime (the native ARM Linux GCC
+runtime also works for these portable C sources).
+
+`python3 tests/qemu_loader.py --firmware bios` (and `uefi`), or
+`make -C tests test-loader FIRMWARE=...`, adds a 512 KiB file-backed segment at
+2 MiB plus 64 KiB BSS to the fresh kernel, relocates its FAT chain into
+nonadjacent clusters, and boots it. GDB compares all loaded bytes and BSS before
+entry, checks the unchanged handoff, then observes repeated timer interrupts.
+Separate disposable images must emit explicit serial rejection for missing,
+malformed and overlapping ELF files; BIOS also rejects corrupt/truncated FAT
+chains and a volume extending past its partition. A timeout never counts as
+successful rejection. No old raw-slot fallback is present.
+
+The normal image test verifies `KERNEL.ELF` bytes in FAT32 on both paths and
+requires BIOS LBAs 78–845 to remain zero. Historical size reports earlier in
+this document describe the retired fixed-slot implementation.
+Reports are under `tests/out/boot-loader/` and `tests/out/qemu-loader-{bios,uefi}/`.
+Both suites run in CI alongside the existing boot and interactive regressions.
+
+FAT32 loader validation passed 208 existing x86-64 UBSan checks, six boot-asset
+checks, the BIOS chain probe, 15 native ARM Linux ASan/UBSan boot-parser groups,
+nine BIOS and six UEFI loader cases, and fresh boot/handoff/timer checks on both
+paths. Account, shell, isolated-user, window, file/editor, storage, usability and
+stream suites passed on both firmware paths. Window captures were inspected.
+The clean final BIOS stage 2 is 28,928 bytes within its unchanged 32 KiB slot.
+Final and regression builds have matching kernel/userspace loadable segments;
+the BIOS loader is byte-identical and UEFI differs only in PE header metadata.
+Formatting and Python syntax checks passed. Results and hashes are recorded in
+`tests/out/loader-{bios,uefi}-validation.json` and
+`tests/out/loader-final-manifest.json`. Full x86-64 ASan remains a native CI
+requirement; the local existing host suite used the explicit UBSan fallback.

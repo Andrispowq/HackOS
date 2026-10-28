@@ -37,30 +37,24 @@ void loader_main(struct FramebufferInfo* info)
     SerialLog("HackOS BIOS loader\n");
     free_mem_addr = (uint64_t)&end;
 
-    //Initialise the Interrupt Descriptor Table, and paging
+    // Validate the disk image and RAM before mapping segment destinations.
     MemoryMapEntry* entries = GetMemoryRegions();
 
-    InstallISR();
-    InitPaging(entries);
-
-    // High reserved PCI windows are mapped by device drivers when needed.
-    for (uint8_t i = 0; i < MemoryRegionCount; ++i)
+    if (!InspectKernel())
     {
-        MemoryMapEntry* entry = entries + i;
-        if (!entry->size || entry->size > ~0ULL - entry->address ||
-            (entry->type == 2 && entry->address >= 0x100000000ULL))
+        SerialLog("BIOS: invalid FAT32 KERNEL.ELF or destination memory\n");
+        for (;;)
         {
-            continue;
+            asm("cli; hlt");
         }
+    }
 
-        uint64_t last = (entry->address + entry->size - 1) & ~4095ULL;
-        for (uint64_t address = entry->address & ~4095ULL;; address += 4096)
+    if (!InitPaging())
+    {
+        SerialLog("BIOS: no safe low memory for page tables\n");
+        for (;;)
         {
-            MapMemory(address, address);
-            if (address == last)
-            {
-                break;
-            }
+            asm("cli; hlt");
         }
     }
 
@@ -79,20 +73,18 @@ void loader_main(struct FramebufferInfo* info)
     kprintf("Welcome to the HackOS!\n");
     kprintf("[%x:%x:%x]: Starting the initialisation!\n", start_time.hour, start_time.minute, start_time.second);
 
-    // The entry stub stages up to 768 kernel sectors from LBA 78 at 0x20000.
-    uint64_t kernelMemory;
-    Elf64_Ehdr* header = LoadProgram((void*)0x20000, &kernelMemory);
-    if (!header)
+    uint64_t entry = LoadKernel();
+    if (!entry)
     {
-        SerialLog("BIOS: ELF header not supported\n");
-        kprintf("ELF header not supported!\n");
-        while (1)
+        SerialLog("BIOS: kernel disk read failed\n");
+        for (;;)
         {
-            asm("hlt");
+            asm("cli; hlt");
         }
     }
 
-    PrepareProgram(header, kernelMemory);
+    // BIOS INT 13h still needs firmware PIC vectors until the final read.
+    InstallISR();
 
     struct KernelInfo kernelInfo = {0};
     kernelInfo.framebuffer = get_current_display()->framebuffer;
@@ -104,7 +96,7 @@ void loader_main(struct FramebufferInfo* info)
     kernelInfo.rsdp_version = rsdp ? rsdp->revision : 0;
     kernelInfo.booted_from_BIOS = 1;
 
-    int (*kernel_main)(struct KernelInfo*) = (int (*)(struct KernelInfo*))header->e_entry;
+    int (*kernel_main)(struct KernelInfo*) = (int (*)(struct KernelInfo*))entry;
     int ret = kernel_main(&kernelInfo);
 
     kprintf("Kernel returned with code %d!\n", ret);

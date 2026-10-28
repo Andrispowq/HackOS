@@ -13,16 +13,36 @@ they access disks, select a video mode, and collect firmware information.
 2. [Stage 1](../../boot/BIOS/stage_1/boot_loader.asm) runs at `0x7c00`, enables
    A20, reads 64 sectors beginning at LBA 2 into `0x8000`, and jumps there.
 3. The [stage-2 assembly entry](../../boot/BIOS/stage_2/src/long_mode/second_stage_entry.asm)
-   reads the kernel ELF to `0x20000` and the PSF font to `0x6000`. It requests
+   reads the PSF font to `0x6000`. It requests
    1920x1080, 32-bit VBE graphics, gathers a memory map, switches through
    protected mode into long mode, enables SSE, and calls `loader_main`.
-4. [loader_main](../../boot/BIOS/stage_2/src/second_stage.c) prepares paging,
-   finds the ACPI root, initializes the font/display, and uses the
-   [BIOS ELF loader](../../boot/BIOS/stage_2/src/elf_loader/elf.c) to load the
-   kernel's segments and call its entry point.
+4. [loader_main](../../boot/BIOS/stage_2/src/second_stage.c) discovers the unique
+   FAT32 MBR partition and opens root-directory `KERNEL.ELF` by its 8.3 name.
+   It validates the complete file chain, ELF headers and destination RAM before
+   installing its final bootstrap page tables. It streams segment bytes into
+   their linked physical addresses, zeroes BSS, and calls the validated entry.
 
-The loader is tied to the generated disk layout. It does not find the kernel
-by walking FAT32 directories.
+The read-only FAT32 reader checks 512-byte geometry, FAT capacity, partition
+bounds, active-FAT selection, root/file chains and the exact file length.
+Fragmented files and root directories work; missing, cyclic, truncated, bad or
+out-of-range chains fail closed. Long filenames are unnecessary for `KERNEL.ELF`.
+The active MBR partition still holds stage 1; FAT32 is a separate partition.
+
+The [disk bridge](../../boot/BIOS/stage_2/src/long_mode/bios_disk.asm) preserves the
+boot drive and long-mode calling state, returns through protected mode to real
+mode for INT 13h extended reads, and restores long mode before C copies data.
+Each read uses a reusable 512-byte bounce buffer at `0x20000`. Firmware PIC
+vectors stay intact until all disk reads finish. No whole-kernel staging area
+is needed.
+
+The E820 handoff lives at `0x30000` (up to 255 entries; overflow/failure rejects
+boot). Six checked RAM pages at `0x40000..0x46000` identity-map the supported
+0–4 GiB address space with 2 MiB pages. These tables, the loader/stack, font and
+buffers stay below 1 MiB, outside every accepted kernel segment. The kernel
+already reserves low memory, preserving the tables until it installs its own.
+This avoids allocating bootstrap tables beside the kernel where its early bump
+allocator could overwrite them. E820 usable RAM must cover every destination;
+overlapping firmware-reserved regions are rejected.
 
 ## BIOS image layout
 
@@ -35,16 +55,18 @@ the second contains the FAT32 filesystem.
 | Stage 1 | 1 | 1 | 512 |
 | Stage 2 | 2 | 64 | 32,768 |
 | PSF font | 66 | 12 | 6,144 |
-| Stripped kernel ELF | 78 | 768 | 393,216 |
+| Unused compatibility gap | 78 | 768 | — |
 | FAT32 data | 846 | 93,750 | 48,000,000 |
 
 These numbers appear in [make_image.py](../../tools/make_image.py), the MBR
 partition table, and the stage-1/stage-2 assembly. Changing only one breaks the
 image contract. Packaging rejects oversized payloads and writes complete files.
 The boot kernel has all symbols stripped; a separate ELF retains debug symbols.
-Stage 2 reads twelve 64-sector chunks into `0x20000..0x7ffff`, below the
-VGA/firmware region. Step 14 expanded this reservation from 128 KiB to 384 KiB.
-A bounded FAT32 kernel-file loader remains a follow-up in TODO.
+Both images store the stripped kernel as root-directory `KERNEL.ELF` in FAT32.
+The old raw kernel slot is zero-filled and never read. Keeping FAT32 at LBA 846
+avoids an unrelated partition-layout migration. Stage 2 retains its 32 KiB
+limit, enforced by the linker and packager; kernel size is governed by the
+filesystem, available RAM and the ELF address rules below.
 
 The relocated MBR at `0x0600` is also used later by the kernel's FAT32 discovery.
 That memory must stay intact while the filesystem is initialized.
@@ -52,7 +74,7 @@ That memory must stay intact while the filesystem is initialized.
 ## UEFI path
 
 The [UEFI application](../../boot/UEFI/gnu-efi/bootloader/main.c) uses GNU-EFI
-to open `kernel.elf` on its volume, validate the basic ELF identity, allocate
+to open `KERNEL.ELF` on its volume, apply the shared ELF validation, allocate
 memory for loadable segments, and read them into place. It obtains a GOP
 framebuffer, loads a PSF1 font, collects the EFI memory map and ACPI root, then
 calls `ExitBootServices` before entering the kernel.
@@ -70,6 +92,24 @@ are called after a successful exit. See the
 [UEFI boot-services contract](https://uefi.org/specs/UEFI/2.10/07_Services_Boot_Services.html).
 The shared eight-bit map count remains a limitation: maps exceeding 255 entries
 are rejected rather than silently truncated.
+
+## Shared ELF contract
+
+Both paths use [boot_elf.h](../../include/hackos/boot_elf.h). The kernel must be
+little-endian ELF64, x86-64, ET_EXEC, with current version and exact header sizes.
+At most 128 program headers are accepted; header tables and file-backed segment
+ranges must fit the actual file. PT_INTERP and PT_DYNAMIC are rejected.
+Load segments use identical virtual/physical, page-aligned addresses from
+1 MiB to below 4 GiB. File size cannot exceed memory size; alignment must be a
+power of two with congruent file/address offsets. Rounded destination pages may
+not overlap, arithmetic may not overflow, and the entry must lie in file-backed
+bytes of an executable segment. BSS is zeroed before entry. BIOS checks E820 RAM;
+UEFI reserves each destination with AllocateAddress and frees partial kernel
+allocations if loading fails. Both validate all headers before writing segments.
+
+The removed 384 KiB slot is not a claim of unlimited kernels: the packaged
+48 MB volume, FAT32's 4 GiB-minus-one-byte file limit, available destination RAM,
+128 program headers and the supported physical address range still apply.
 
 ## Shared boot information
 
@@ -120,14 +160,10 @@ instead. It should not be selected without reconciling that entry symbol.
 
 Related work is listed in [TODO](../TODO.md).
 
-## Loader diagnostics and staging protection
+## Loader diagnostics
 
-The BIOS stage-2 page allocator reserves the entire ELF staging range
-`0x20000..0x80000`, matching all 768 sectors read from LBA 78. An older
-`0x50000` cutoff could overwrite staged data when the kernel grew past 192 KiB;
-step 18 corrects it without changing the disk layout. Boot regressions compare
-both firmware paths' loaded ELF segments, including zeroed BSS, before executing
-the kernel entry point.
-
-Both C loaders and kernel entry emit bounded COM1 diagnostics. See
-[serial logging](streams.md#serial-diagnostics) for capture and coverage limits.
+Both C loaders and kernel entry emit bounded COM1 diagnostics, including explicit
+kernel-file/validation failures. See [serial logging](streams.md#serial-diagnostics)
+for capture and coverage limits. Boot regressions compare loaded segment bytes
+and BSS before entry on both firmware paths, including a fragmented kernel
+larger than the former raw slot.

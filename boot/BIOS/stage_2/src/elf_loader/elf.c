@@ -1,64 +1,92 @@
 #include "elf.h"
-
+#include <hackos/boot_elf.h>
+#include "../fat32/boot_fat.h"
 #include "libc/memory.h"
-#include "cpu/paging/paging.h"
+#include "cpu/memory_map.h"
 
-static uint8_t elf_check_file(Elf64_Ehdr* hdr)
+static Elf64_Ehdr header;
+static Elf64_Phdr segments[HACKOS_BOOT_PHNUM];
+extern int BiosReadSector(uint32_t lba);
+
+static int DiskRead(uint32_t lba, void* output)
 {
-    if (!hdr)
+    if (!BiosReadSector(lba))
+    {
+        return 0;
+    }
+    memcpy(output, (void*)0x20000, 512);
+    return 1;
+}
+
+int BootMemoryUsable(uint64_t start, uint64_t size)
+{
+    MemoryMapEntry* entries = GetMemoryRegions();
+    uint64_t end = start + size;
+    int found = 0;
+    for (unsigned i = 0; i < MemoryRegionCount; ++i)
+    {
+        MemoryMapEntry* e = entries + i;
+        if (e->size > ~0ULL - e->address)
+        {
+            return 0;
+        }
+        uint64_t last = e->address + e->size;
+        if (e->type != 1 && start < last && e->address < end)
+        {
+            return 0;
+        }
+        if (e->type == 1 && start >= e->address && end <= last)
+        {
+            found = 1;
+        }
+    }
+
+    return found;
+}
+
+int InspectKernel(void)
+{
+    extern uint64_t end;
+    if (!BootMemoryUsable(0x8000, (uint64_t)&end + 8192 - 0x8000) || !BootMemoryUsable(0x20000, 512) ||
+        !BootMemoryUsable(0x30000, 255 * 24))
+    {
+        return 0;
+    }
+    if (!BootFatOpen(DiskRead) || !BootFatRead(0, &header, sizeof(header)) ||
+        !HackosBootElfHeader(&header, BootFatSize()) ||
+        !BootFatRead(header.e_phoff, segments, header.e_phnum * sizeof(Elf64_Phdr)) ||
+        !HackosBootElfSegments(&header, segments, BootFatSize()))
     {
         return 0;
     }
 
-    if (memcmp(&hdr->e_ident[EI_MAG0], ELFMAG, 4) != 0 || hdr->e_ident[EI_CLASS] != ELFCLASS64 ||
-        hdr->e_ident[EI_DATA] != ELFDATA2LSB || hdr->e_type != ET_EXEC || hdr->e_machine != EM_X86_64 ||
-        hdr->e_version != EV_CURRENT)
+    for (unsigned i = 0; i < header.e_phnum; ++i)
     {
-        return 0;
+        Elf64_Phdr* p = segments + i;
+        if (p->p_type == PT_LOAD && p->p_memsz && !BootMemoryUsable(p->p_paddr, (p->p_memsz + 4095) & ~4095ULL))
+        {
+            return 0;
+        }
     }
 
     return 1;
 }
 
-Elf64_Ehdr* LoadProgram(void* address, uint64_t* mem)
+uint64_t LoadKernel(void)
 {
-    uint64_t memory = (uint64_t)address;
-    *mem = memory;
-
-    Elf64_Ehdr* header = (Elf64_Ehdr*)memory;
-    if (elf_check_file(header) != 0 && header->e_phentsize == sizeof(Elf64_Phdr) && header->e_phoff <= 512 * 768 &&
-        header->e_phnum && header->e_phnum <= (512 * 768 - header->e_phoff) / sizeof(Elf64_Phdr))
+    for (unsigned i = 0; i < header.e_phnum; ++i)
     {
-        return header;
+        Elf64_Phdr* p = segments + i;
+        if (p->p_type != PT_LOAD || !p->p_memsz)
+        {
+            continue;
+        }
+        if (!BootFatRead(p->p_offset, (void*)p->p_paddr, p->p_filesz))
+        {
+            return 0;
+        }
+        memset((void*)(p->p_paddr + p->p_filesz), 0, p->p_memsz - p->p_filesz);
     }
 
-    return 0;
-}
-
-void PrepareProgram(Elf64_Ehdr* header, uint64_t memory)
-{
-    Elf64_Phdr* phdrs = (Elf64_Phdr*)(memory + header->e_phoff);
-    for (Elf64_Phdr* phdr = phdrs; (uint64_t)phdr < (uint64_t)phdrs + header->e_phnum * header->e_phentsize;
-         phdr = (Elf64_Phdr*)((uint64_t)phdr + header->e_phentsize))
-    {
-        switch (phdr->p_type)
-        {
-        case PT_LOAD:
-        {
-            uint32_t pages = (phdr->p_memsz + 0x1000 - 1) / 0x1000;
-            Elf64_Addr segment = phdr->p_paddr;
-
-            for (uint64_t i = segment; i < segment + pages * 0x1000; i += 0x1000)
-            {
-                MapMemory(i, i);
-            }
-
-            uint64_t off = memory + phdr->p_offset;
-            uint64_t size = phdr->p_filesz;
-            memset((void*)segment, 0, phdr->p_memsz);
-            memcpy((void*)segment, (void*)off, size);
-            break;
-        }
-        }
-    }
+    return header.e_entry;
 }

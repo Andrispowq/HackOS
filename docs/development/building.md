@@ -190,8 +190,8 @@ python3 tools/run_qemu.py --firmware bios --image out/bios/HackOS.img
 ## Images and debugging
 
 [make_image.py](../../tools/make_image.py) creates FAT32 images with mtools,
-without mounts or root privileges. It checks every BIOS payload against its
-fixed sector allocation before creating the image, writes complete payloads,
+without mounts or root privileges. It checks the BIOS stages and raw font against their
+fixed sector allocations before creating the image, writes complete payloads,
 and only replaces the output after packaging succeeds. The boot copy of the
 kernel is stripped; `kernel/bin/kernel.elf` retains debug symbols. UEFI uses
 `EFI/BOOT/BOOTX64.EFI` and `UTIL/FONTS/zap-light16.psf`.
@@ -231,7 +231,8 @@ into a text console.
 The kernel compiles the account registry and syscall dispatcher, plus `window.cpp`, `window_manager.cpp`, `proc/user/windows.cpp`
 and `mouse.cpp` with `-Os`; password hashing uses `-O2` for its bounded work factor. Framebuffer and console
 pixel loops also use `-O2`; freestanding and interrupt ABI flags remain intact.
-The BIOS kernel reservation is now 384 KiB. Debug information,
+Both firmware paths load `KERNEL.ELF` from FAT32; there is no fixed kernel disk
+slot. Stage 2 still has a 32 KiB reservation. Debug information,
 frame pointers, freestanding flags and the no-red-zone policy are retained.
 
 ## Source formatting

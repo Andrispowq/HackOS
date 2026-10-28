@@ -8,7 +8,8 @@ SECTIONS
 
 	.boot :
 	{
-		*(.must_be_top)
+		*(.entry)
+        *(.must_be_top)
 	}
 
     .text : ALIGN(0x1000)
@@ -37,3 +38,7 @@ SECTIONS
 
     end = .; _end = .; __end = .;
 }
+
+ASSERT(SIZEOF(.boot) <= 0x1000, "BIOS real-mode bridge exceeds low-memory entry page")
+ASSERT(ADDR(.data) + SIZEOF(.data) <= 0x10000, "BIOS stage 2 exceeds its 32 KiB disk reservation")
+ASSERT(end + 8192 < 0x20000, "BIOS loader overlaps disk bounce buffer")

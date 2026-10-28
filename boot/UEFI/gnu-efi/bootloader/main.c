@@ -3,6 +3,7 @@
 #include <efi.h>
 #include <efilib.h>
 #include <elf.h>
+#include "../../../../include/hackos/boot_elf.h"
 
 static int serialAvailable;
 
@@ -128,12 +129,7 @@ static EFI_STATUS LoadKernel(EFI_FILE* file, UINT64* entry)
     UINT64 fileSize = info->FileSize;
     FreePool(info);
     Elf64_Ehdr header;
-    if (EFI_ERROR(ReadAt(file, 0, &header, sizeof header)) || !EqualBytes(header.e_ident, ELFMAG, SELFMAG) ||
-        header.e_ident[EI_CLASS] != ELFCLASS64 || header.e_ident[EI_DATA] != ELFDATA2LSB ||
-        header.e_ident[EI_VERSION] != EV_CURRENT || header.e_type != ET_EXEC || header.e_machine != EM_X86_64 ||
-        header.e_version != EV_CURRENT || header.e_ehsize != sizeof header ||
-        header.e_phentsize != sizeof(Elf64_Phdr) || !header.e_phnum || header.e_phoff > fileSize ||
-        header.e_phnum > (fileSize - header.e_phoff) / sizeof(Elf64_Phdr))
+    if (EFI_ERROR(ReadAt(file, 0, &header, sizeof header)) || !HackosBootElfHeader(&header, fileSize))
     {
         return EFI_LOAD_ERROR;
     }
@@ -146,36 +142,14 @@ static EFI_STATUS LoadKernel(EFI_FILE* file, UINT64* entry)
     }
 
     EFI_STATUS status = ReadAt(file, header.e_phoff, segments, bytes);
-    int entryFound = 0;
+    UINTN allocated = 0;
     if (EFI_ERROR(status))
     {
         FreePool(segments);
         return status;
     }
 
-    for (UINTN i = 0; i < header.e_phnum; ++i)
-    {
-        Elf64_Phdr* p = &segments[i];
-        if (p->p_type != PT_LOAD)
-        {
-            continue;
-        }
-
-        if (p->p_filesz > p->p_memsz || p->p_offset > fileSize || p->p_filesz > fileSize - p->p_offset ||
-            p->p_vaddr != p->p_paddr || p->p_paddr < 0x100000 || p->p_paddr % 4096 ||
-            p->p_memsz > (~(UINT64)0) - p->p_paddr - 4095)
-        {
-            status = EFI_LOAD_ERROR;
-            goto done;
-        }
-
-        if ((p->p_flags & 1) && header.e_entry >= p->p_vaddr && header.e_entry - p->p_vaddr < p->p_memsz)
-        {
-            entryFound = 1;
-        }
-    }
-
-    if (!entryFound)
+    if (!HackosBootElfSegments(&header, segments, fileSize))
     {
         status = EFI_LOAD_ERROR;
         goto done;
@@ -196,6 +170,7 @@ static EFI_STATUS LoadKernel(EFI_FILE* file, UINT64* entry)
             goto done;
         }
 
+        allocated = i + 1;
         SetMem((void*)address, p->p_memsz, 0);
         status = ReadAt(file, p->p_offset, (void*)address, p->p_filesz);
         if (EFI_ERROR(status))
@@ -206,6 +181,18 @@ static EFI_STATUS LoadKernel(EFI_FILE* file, UINT64* entry)
 
     *entry = header.e_entry;
 done:
+    if (EFI_ERROR(status))
+    {
+        for (UINTN i = 0; i < allocated; ++i)
+        {
+            Elf64_Phdr* p = &segments[i];
+            if (p->p_type == PT_LOAD && p->p_memsz)
+            {
+                BS->FreePages(p->p_paddr, (p->p_memsz + 4095) / 4096);
+            }
+        }
+    }
+
     FreePool(segments);
     return status;
 }
@@ -216,7 +203,7 @@ EFI_STATUS efi_main(EFI_HANDLE image, EFI_SYSTEM_TABLE* system)
     SerialLog("HackOS UEFI loader\n");
     InitializeLib(image, system);
     BS->SetWatchdogTimer(0, 0, 0, NULL);
-    EFI_FILE* kernel = LoadFile(L"\\kernel.elf", image);
+    EFI_FILE* kernel = LoadFile(L"\\KERNEL.ELF", image);
     if (!kernel)
     {
         SerialLog("UEFI: Cannot open kernel.elf\n");
