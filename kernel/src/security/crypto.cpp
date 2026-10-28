@@ -38,7 +38,7 @@ struct Hash
     uint64_t bytes = 0;
     unsigned used = 0;
 
-    void Transform()
+    static void Compress(uint32_t state[8], uint32_t (&words)[64])
     {
         static const uint32_t constants[64] = {
             0x428a2f98, 0x71374491, 0xb5c0fbcf, 0xe9b5dba5, 0x3956c25b, 0x59f111f1, 0x923f82a4, 0xab1c5ed5,
@@ -49,13 +49,6 @@ struct Hash
             0xa2bfe8a1, 0xa81a664b, 0xc24b8b70, 0xc76c51a3, 0xd192e819, 0xd6990624, 0xf40e3585, 0x106aa070,
             0x19a4c116, 0x1e376c08, 0x2748774c, 0x34b0bcb5, 0x391c0cb3, 0x4ed8aa4a, 0x5b9cca4f, 0x682e6ff3,
             0x748f82ee, 0x78a5636f, 0x84c87814, 0x8cc70208, 0x90befffa, 0xa4506ceb, 0xbef9a3f7, 0xc67178f2};
-        uint32_t words[64];
-        for (unsigned i = 0; i < 16; ++i)
-        {
-            words[i] = (uint32_t)block[i * 4] << 24 | (uint32_t)block[i * 4 + 1] << 16 |
-                       (uint32_t)block[i * 4 + 2] << 8 | block[i * 4 + 3];
-        }
-
         for (unsigned i = 16; i < 64; ++i)
         {
             uint32_t a = words[i - 15], b = words[i - 2];
@@ -88,7 +81,35 @@ struct Hash
         state[5] += f;
         state[6] += g;
         state[7] += h;
+    }
+
+    void Transform()
+    {
+        uint32_t words[64];
+        for (unsigned i = 0; i < 16; ++i)
+        {
+            words[i] = (uint32_t)block[i * 4] << 24 | (uint32_t)block[i * 4 + 1] << 16 |
+                       (uint32_t)block[i * 4 + 2] << 8 | block[i * 4 + 3];
+        }
+
+        Compress(state, words);
         SecureErase(words, sizeof(words));
+    }
+
+    // After the cached 64-byte HMAC pad, a 32-byte digest always needs one
+    // compression block. Keep digest words in SHA order between iterations.
+    // The caller initializes words[9..14] to zero and erases the reused schedule.
+    static void DigestBlock(const uint32_t prefix[8], uint32_t value[8], uint32_t (&words)[64])
+    {
+        for (unsigned i = 0; i < 8; ++i)
+        {
+            words[i] = value[i];
+            value[i] = prefix[i];
+        }
+
+        words[8] = 0x80000000;
+        words[15] = (64 + 32) * 8;
+        Compress(value, words);
     }
 
     void Update(const void* input, uint64_t length)
@@ -175,20 +196,32 @@ void Pbkdf2Sha256(const char* password, uint64_t length, const uint8_t* salt, ui
     Hash last = outer;
     last.Update(value, 32);
     last.Finish(value);
-    memcpy(digest, value, 32);
+    uint32_t current[8], result[8], words[64] = {};
+    for (unsigned j = 0; j < 8; ++j)
+    {
+        current[j] = (uint32_t)value[j * 4] << 24 | (uint32_t)value[j * 4 + 1] << 16 | (uint32_t)value[j * 4 + 2] << 8 |
+                     value[j * 4 + 3];
+        result[j] = current[j];
+    }
+
     for (uint32_t i = 1; i < iterations; ++i)
     {
-        Hash in = inner, out = outer;
-        in.Update(value, 32);
-        in.Finish(value);
-        out.Update(value, 32);
-        out.Finish(value);
-        for (unsigned j = 0; j < 32; ++j)
+        Hash::DigestBlock(inner.state, current, words);
+        Hash::DigestBlock(outer.state, current, words);
+        for (unsigned j = 0; j < 8; ++j)
         {
-            digest[j] ^= value[j];
+            result[j] ^= current[j];
         }
     }
 
+    for (unsigned j = 0; j < 32; ++j)
+    {
+        digest[j] = result[j / 4] >> (24 - (j % 4) * 8);
+    }
+
+    SecureErase(words, sizeof(words));
+    SecureErase(current, sizeof(current));
+    SecureErase(result, sizeof(result));
     SecureErase(&inner, sizeof(inner));
     SecureErase(&outer, sizeof(outer));
     SecureErase(key, sizeof(key));

@@ -53,6 +53,10 @@ Each enabled password stores a 16-byte random salt, a 32-byte PBKDF2-HMAC-SHA256
 derived value and a fixed 600,000 iteration count. SHA-256/HMAC/PBKDF2 live in
 `kernel/src/security/crypto.cpp`; host vectors and Python's independent
 `hashlib.pbkdf2_hmac` verify them. Long passwords are prehashed once for HMAC.
+The repeated HMAC rounds reuse a fixed, padded 32-byte digest block and keep
+intermediate digests as SHA-256 words, avoiding byte feeding and whole-context
+copies. The reusable schedule and intermediate values are securely erased before
+return. This changes neither the work factor nor the stored representation.
 Comparison accumulates all digest differences. This follows the PBKDF2 structure
 in [RFC 8018](https://www.rfc-editor.org/rfc/rfc8018.html) and the SHA-256 work
 factor in [OWASP's password storage guidance](https://cheatsheetseries.owasp.org/cheatsheets/Password_Storage_Cheat_Sheet.html).

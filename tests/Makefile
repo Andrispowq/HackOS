@@ -64,3 +64,7 @@ test-text-tools:
 .PHONY: test-terminal
 test-terminal:
 	$(PYTHON) qemu_terminal.py --firmware $(FIRMWARE)
+
+.PHONY: test-login-performance
+test-login-performance:
+	$(PYTHON) qemu_login_performance.py --firmware $(FIRMWARE)

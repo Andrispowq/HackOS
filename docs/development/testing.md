@@ -648,3 +648,31 @@ Screenshot pixels and previews were checked. The BIOS kernel is 227,552 bytes
 within its 393,216-byte slot. Formatting, Python syntax and workflow lint passed.
 Source hashes are in `tests/out/terminal-build-manifest.json`; guest suite results
 are in `tests/out/terminal-{bios,uefi}-validation.json`.
+
+## Login performance checks
+
+`python3 tests/qemu_login_performance.py --firmware bios` (or `uefi`) creates a
+disposable account image and measures three real logins. Set `GDB` to the target
+debugger as for the other guest suites. It reports Enter-to-shell wall time and
+time inside production `Pbkdf2Sha256` separately in
+`tests/out/qemu-login-performance-{bios,uefi}/timings.json`. The remainder includes
+QMP polling, debugger detach and shell startup; these are diagnostic timings, not
+a machine-independent performance assertion. Use an otherwise idle host for
+comparisons; `--samples` selects 1–20 logins.
+
+The crypto host tests include independent PBKDF2 vectors at the 64-byte HMAC key
+boundary, embedded NULs, empty inputs and salt lengths spanning SHA-256 padding
+and block boundaries. The account suite independently verifies the full
+600,000-iteration stored digest and exercises existing accounts after reboot.
+
+Login optimization validation passed 199 host checks with UBSan, 100 independent
+crypto comparisons (including three full-cost hashes) with native Linux
+ASan+UBSan, five boot-asset checks, fresh BIOS/UEFI builds and all six account-suite
+checks on each firmware path. Both new images also authenticated an account
+created by the old implementation, leaving both account slots byte-identical.
+Five debugger-free samples per case on the local
+loaded host had median Enter-to-shell times of 7.35 → 3.58 seconds for BIOS and
+7.86 → 3.27 seconds for UEFI; these are workload-dependent measurements, not
+latency guarantees. Separate debugger samples attributed most login time to
+hashing. Timing data and focused checks are under `tests/out/login-performance/`;
+the full x86-64 host suite still requires ASan+UBSan in native x86-64 CI.

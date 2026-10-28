@@ -243,3 +243,40 @@ TEST(pbkdf2_sha256_long_password)
     CHECK(Hex(hash, "d43a18cd77bafc1a4b0c6025dbbf29c7e6d67acce6ad02a736d4a3003b6a3c26"));
     return 0;
 }
+
+TEST(pbkdf2_sha256_padding_boundaries)
+{
+    // Expected digests come from Python hashlib.pbkdf2_hmac, including embedded NULs.
+    char password[128];
+    uint8_t salt[128], hash[32];
+    for (unsigned i = 0; i < 128; ++i)
+    {
+        password[i] = (char)i;
+        salt[i] = 127 - i;
+    }
+
+    struct Vector
+    {
+        unsigned passwordLength, saltLength, iterations;
+        const char* expected;
+    };
+
+    const Vector vectors[] = {
+        {0, 0, 1, "f7ce0b653d2d72a4108cf5abe912ffdd777616dbbb27a70e8204f3ae2d0f6fad"},
+        {8, 16, 2, "c2d7adb36bfbdf6592914b58ada47023ef1ab00f2b197420a7377821c89ab6cc"},
+        {63, 51, 3, "a233c9dfd948507ae62fea05ffc3448b0d12ee6e92bef7d21cf1782d6c3b436e"},
+        {64, 52, 17, "b40ab7a7973e63fee2714642185a281fd462cd01fff6f8093191c3eeeb99d00c"},
+        {65, 55, 2, "3790a819b65f040af85b7ad148ef0d4b0d08aaf020c029284a1ee8efda51d60f"},
+        {127, 56, 3, "1b28fb5d0d23ee17d5a70f3e903a68cd5554d73db73a5122682e130c947d93e2"},
+        {128, 60, 17, "c29b37e15011837f2ccbccc93b26e992dc4080ab199da759fd4c839d865052e8"},
+        {128, 64, 2, "b101caeead4804c78f22d3095d024b5be2afc71f3a7afa93b41eeb91c7856552"},
+        {65, 128, 4096, "716eed898d50dd58108a6eb70c448b5cf65cb9808f43def86462ed8269eb4b6e"},
+    };
+    for (const auto& vector : vectors)
+    {
+        Pbkdf2Sha256(password, vector.passwordLength, salt, vector.saltLength, vector.iterations, hash);
+        CHECK(Hex(hash, vector.expected));
+    }
+
+    return 0;
+}
