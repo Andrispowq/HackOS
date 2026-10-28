@@ -53,6 +53,7 @@ clean:
 	$(MAKE) -C libs/commands clean
 	$(MAKE) -C libs/test clean
 	$(MAKE) -C libs/input clean
+	$(MAKE) -C libs/gui clean
 	$(MAKE) -C libs/window clean
 	$(MAKE) -C libs/ring3 clean
 	rm -rf boot/UEFI/gnu-efi/x86_64

@@ -37,7 +37,8 @@ flowchart TD
 | [common](../../common/) | Shared freestanding memory/string routines, containers and syscall wrappers |
 | [include/hackos](../../include/hackos/) | Shared types and experimental syscall ABI catalogue |
 | [kernel/src/lib](../../kernel/src/lib/) | Kernel allocation/output adapters and compatibility includes |
-| [libs](../../libs/) | Userspace runtime, shell, and example program |
+| [libs](../../libs/) | Userspace runtime, shell, and example programs |
+| [libs/gui](../../libs/gui/) | [Userspace GUI library](gui.md): drawing, layout, widgets and dialogs |
 | [util](../../util/) | Fonts, retained program fixture, copied program outputs, and host utilities |
 
 ## Kernel startup

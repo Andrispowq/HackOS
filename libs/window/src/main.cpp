@@ -111,8 +111,22 @@ static void Log(const char* label, int64_t first, uint64_t second)
     syscall_user_write(line, length);
 }
 
+int WidgetDemo(bool trace);
+
 int main(int argc, char** argv)
 {
+    for (int i = 1; i < argc; ++i)
+    {
+        if (User::Equal(argv[i], "--widgets"))
+        {
+            bool tracing = false;
+            for (int j = 1; j < argc; ++j)
+            {
+                tracing |= User::Equal(argv[j], "--trace");
+            }
+            return WidgetDemo(tracing);
+        }
+    }
     HackosWindowSpec spec = {200, 200, 200, 170, "Window input demo"};
     bool second = false;
     for (int i = 1; i < argc; ++i)

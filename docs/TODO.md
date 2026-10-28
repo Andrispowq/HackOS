@@ -153,7 +153,7 @@ future changes; prior results are not a substitute.
 ## Graphical environment
 
 The following milestones turn the existing window demo into a usable desktop.
-Milestones 1 and 2 are implemented; later milestones need a separate request.
+Milestones 1–3 are implemented; later milestones need a separate request.
 
 1. **Window rendering foundation — implemented:** screen-relative normal sizes
    up to 4096×2160, a shared 64 MiB surface budget, recoverable allocation with
@@ -169,8 +169,12 @@ Milestones 1 and 2 are implemented; later milestones need a separate request.
    shortcut; Ctrl-Alt-Esc explicitly terminates a stuck owner. `window
    --interaction` demonstrates Tab navigation, copy/cut/paste, saving and
    cancellable unsaved-change prompts. See [GUI input](system/userspace.md#gui-input-and-desktop-interaction).
-3. **Userspace GUI library:** clipped drawing/text/layout, widgets, dialogs,
-   selection/scrolling, keyboard navigation and consistent appearance.
+3. **Userspace GUI library — implemented:** `libgui.a` provides clipped drawing
+   and PSF text, nested row/column layout, themed labels/buttons/checkboxes,
+   selectable text fields, scrolling lists, focus traversal and modal dialogs.
+   Its window adapter handles atomic tiled painting, input reset recovery and
+   blocking waits. `window --widgets` demonstrates the reusable library.
+   See [GUI library](system/gui.md) for API, ownership and bounds.
 4. **Desktop and terminal:** authenticated desktop session, launcher/taskbar,
    authorized session window management, independent terminal sessions and
    shell job control, logout cleanup and desktop recovery.

@@ -802,4 +802,5 @@ Ctrl-A selection and Ctrl-C/X/V. Ctrl-S saves all three LF-terminated fields to
 `/tmp/gui-notes.txt`. Failed saves preserve edits. Closing with unsaved edits
 shows Save and close / Discard / Cancel; Tab/Shift-Tab and Enter operate its
 buttons, Escape cancels, and pointer clicks also work. The normal gradient demo
-uses the same GUI input/close API. The reusable widget toolkit remains milestone 3.
+uses the same GUI input/close API. The reusable toolkit is documented in [Userspace GUI library](gui.md);
+`window --widgets` exercises its drawing, layout, widgets and dialogs.

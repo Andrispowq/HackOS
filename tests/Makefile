@@ -92,3 +92,9 @@ test-gui-input:
 .PHONY: test-gui-keyboard
 test-gui-keyboard:
 	python3 gui_keyboard.py
+
+.PHONY: test-gui-library test-gui-widgets
+test-gui-library:
+	$(PYTHON) gui_library.py
+test-gui-widgets:
+	$(PYTHON) qemu_gui_library.py --firmware $(FIRMWARE)

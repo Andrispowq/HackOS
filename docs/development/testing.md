@@ -903,3 +903,46 @@ and source snapshots are refreshed in `tests/out/build-bios` and
 `tests/out/build-uefi`; consolidated results and production-source hashes are in
 `tests/out/input-step2/final-validation.json` and
 `tests/out/input-step2/source-manifest.json`.
+
+## Userspace GUI library
+
+`python3 tests/gui_library.py` (or `make -C tests test-gui-library`) compiles the
+production `libs/gui` core and window adapter with native ASan+UBSan and strict
+compiler warnings. The core checks cover extreme/clipped drawing, PSF glyphs,
+flex sizing and resize, hidden/disabled subtrees, capacity rejection, partial
+selection, clipboard failure atomicity, pointer cancellation, list scrolling,
+modal isolation/focus restoration, paired Space-text suppression, visible scroll
+indicators and 5000 bounded layout/input/render stress
+iterations. Explicit syscall adapters test malformed/truncated font input,
+creation cleanup, bounded frame uploads, stale upload/present cancellation,
+reset snapshots, close replies and timed window waits. These tests do not
+substitute drawing or widget implementations.
+
+`python3 tests/qemu_gui_library.py --firmware bios` / `uefi` (or `make -C tests
+test-gui-widgets FIRMWARE=...`) runs `window --widgets --trace` on a disposable
+image. GDB independently reads the GUI tree from its owner's private physical
+frames, checks committed pixels and blocked idle state, and verifies cleanup.
+The suite exercises disabled-control traversal, About/close interaction, partial
+selection and clipboard edits, checkboxes, list navigation, pointer selection,
+modal input confinement, cancel/accept, maximize/restore and input-loss recovery.
+Editing waits for empty ingress/window queues and a blocked application; pointer
+clicks verify guest coordinates. Screenshots capture normal and maximized widgets
+and the modal dialog. CI runs both the native and firmware suites alongside the
+existing GUI input and window regressions.
+
+Step-3 validation passed fresh BIOS/UEFI builds and all fourteen guest suites on
+both paths: the thirteen step-2 suites plus the GUI library suite. The final
+widget tests cover the final library/demo sources; earlier regressions use
+byte-identical packaged kernels. Normal, modal and maximized screenshots were
+inspected on both paths. Native GUI ASan+UBSan checks passed all 21 core groups,
+5000 stress iterations and platform-adapter checks. The full host run used the
+explicit local x86-64 UBSan fallback: 209 checks passed within the harness and
+one storage interruption case exceeded its 15-second limit; that case passed
+when run directly with the same binary and fixture. Six boot-asset checks and
+the BIOS chain probe passed. Initial guest timeouts and one pointer-position
+assertion passed on reduced-concurrency/isolated reruns without changing their
+assertions. Formatting (337 files), Python syntax, workflow lint and diff
+whitespace checks passed. Final images and source snapshots are available in
+`tests/out/build-bios` and `tests/out/build-uefi`; consolidated results and
+production-source hashes are in `tests/out/gui-step3/final-validation.json`
+and `tests/out/gui-step3/source-manifest.json`.

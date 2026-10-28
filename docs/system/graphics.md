@@ -159,3 +159,7 @@ The 4 KiB session clipboard requires the focused window owner and is zeroed on
 logout. `window --interaction` demonstrates keyboard field/dialog navigation,
 clipboard editing, saved text and cancellable close requests using the existing
 bounded frame renderer. See [the GUI input ABI](userspace.md#gui-input-and-desktop-interaction).
+
+The userspace [GUI library](gui.md) renders themed widgets and dialogs through
+the same atomic frame/input ABI. Layout, selection and widget focus remain in
+the client process; the kernel continues to manage windows and composition.

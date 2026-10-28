@@ -75,6 +75,10 @@ Alt-F4 requests close and Alt-F9/F10 control window modes. GUI Ctrl-C is an app
 shortcut; Ctrl-Alt-Esc terminates the focused owner. The focused owner can access
 a 4 KiB session clipboard, zeroed on logout. `window --interaction` demonstrates
 Tab navigation, clipboard editing, saving and unsaved-change confirmation.
+`libs/gui` provides the reusable freestanding `libgui.a`: clipped tile drawing,
+PSF text, row/column layout, themed widgets, selection/scrolling, keyboard focus
+and modal dialogs. `window --widgets` exercises it. No kernel ABI changes are
+needed; see `docs/system/gui.md` for bounded storage and initialization rules.
 Userspace windows use process-owned handles and bounded pixel uploads; idle
 reclaims them on exit and composites them over the console. `USR/BIN/WINDOW`
 is the standalone demo. Idle dispatches ordered keyboard/mouse ingress, focus
@@ -96,6 +100,7 @@ and pointer capture; window events use fixed queues and copied state records. Se
 | ACPI and PCI enumeration | `kernel/src/acpi/`, especially `pci/pci.cpp` |
 | Block devices | `kernel/src/drivers/{device,ata,ahci}/` |
 | PS/2 and experimental USB | `kernel/src/drivers/{keyboard,mouse,usb}/`; PCI OHCI/EHCI/XHCI branches are placeholders |
+| Userspace GUI library | `include/hackos/gui.h`, `libs/gui/`, `libs/window/src/widgets.cpp`; see `docs/system/gui.md` |
 | Graphics, console, windows | `kernel/src/drivers/screen/`; packed RGB colour macro is `COLOUR` in `screen.h`, PSF1 font rendering is in `screen.cpp` |
 | Filesystems | `kernel/src/fs/filesystem.*`, `vfs.*`, `fat32/`; low-level FAT operations are in `fat32driver.*` |
 | Program loading and scheduling | `kernel/src/proc/{elf,tasking}/` |

@@ -25,7 +25,9 @@ the print/preemption/exit demo. `shutdown` requests kernel ACPI power-off. The
 raw-pointer libc ABI is retired. Launch `window` for the ported
 window demo; drag its title, resize the bottom-right grip, click to focus,
 and type/click in the client. Close X, press Q, or use Ctrl-Alt-Esc to force termination. Use
-`window --interaction` for Tab navigation, clipboard fields and save/close dialogs. Program commands wait for
+`window --interaction` for Tab navigation, clipboard fields and save/close dialogs,
+or `window --widgets` for the reusable GUI library demo (buttons, checkbox,
+text selection, scrolling list and modal dialogs). Program commands wait for
 completion before showing the prompt; a separate trailing `&` launches in the
 background. Try `input` for interactive text input; Ctrl-C returns to
 the shell. Up/Down browses the fixed 256-command history, and `history` lists it.
@@ -251,3 +253,8 @@ COM1 logging can be captured independently of the graphical console:
 Use `--firmware uefi` with its own image for UEFI. The parent log directory must
 exist. See [streams and logging](../system/streams.md) for the bounded UART and
 password-echo contracts.
+
+`libs/gui` builds `libgui.a`; the window demo links it before `libc.a`. Consumers
+include `hackos/gui.h`. The window Makefile checks the GUI archive dependencies
+on every invocation; the root clean target also removes GUI library outputs.
+See [the GUI programming guide](../system/gui.md).
