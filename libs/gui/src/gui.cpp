@@ -345,6 +345,17 @@ unsigned View::Add(Kind kind, unsigned parent, const char* text)
     return id;
 }
 
+bool View::SetSecret(unsigned id, bool secret)
+{
+    if (id >= count || widgets[id].kind != Kind::TextField)
+    {
+        return false;
+    }
+    widgets[id].secret = secret;
+    dirty = true;
+    return true;
+}
+
 bool View::SetText(unsigned id, const char* text)
 {
     if (id >= count || !Copy(widgets[id].text, TextCapacity, text, widgets[id].kind != Kind::TextField))
@@ -353,6 +364,14 @@ bool View::SetText(unsigned id, const char* text)
     }
     auto& w = widgets[id];
     w.length = Length(w.text);
+    if (w.secret)
+    {
+        volatile char* bytes = w.text;
+        for (unsigned i = w.length; i < TextCapacity; ++i)
+        {
+            bytes[i] = 0;
+        }
+    }
     w.cursor = w.anchor = w.length;
     w.offset = 0;
     Reveal(w);
@@ -574,6 +593,14 @@ bool View::Insert(Widget& w, const char* text, unsigned length)
         w.text[first + i] = text[i];
     }
     w.length = first + length + suffix;
+    if (w.secret)
+    {
+        volatile char* bytes = w.text;
+        for (unsigned i = w.length; i < TextCapacity; ++i)
+        {
+            bytes[i] = 0;
+        }
+    }
     w.cursor = w.anchor = first + length;
     Reveal(w);
     dirty = true;
@@ -585,6 +612,10 @@ Action View::Edit(unsigned id, const HackosWindowEvent2& input, Clipboard clipbo
     auto& w = widgets[id];
     const auto& event = input.event;
     bool change = false;
+    if (w.secret)
+    {
+        clipboard = {};
+    }
     bool control = input.modifiers & HACKOS_MOD_CTRL, shift = input.modifiers & HACKOS_MOD_SHIFT;
     if (event.type == HACKOS_WINDOW_TEXT)
     {
@@ -1012,7 +1043,17 @@ void View::Draw(Canvas& canvas, const Font& font) const
                 unsigned first = Min(w.cursor, w.anchor), last = Max(w.cursor, w.anchor);
                 canvas.Fill({left + ((int)first - (int)w.offset) * 8, top, (int)(last - first) * 8, 16},
                             theme.selection);
-                canvas.Text(font, left, top, w.text + w.offset, ink);
+                if (w.secret)
+                {
+                    for (unsigned j = w.offset; j < w.length; ++j)
+                    {
+                        canvas.Text(font, left + (j - w.offset) * 8, top, "*", ink);
+                    }
+                }
+                else
+                {
+                    canvas.Text(font, left, top, w.text + w.offset, ink);
+                }
                 if (focus)
                 {
                     canvas.Fill({left + ((int)w.cursor - (int)w.offset) * 8, top, 1, 16}, theme.accent);

@@ -311,6 +311,15 @@ jobs:
             --mount "type=bind,source=$PWD,target=/work,readonly" \
             --mount "type=bind,source=$PWD/tests/out,target=/work/tests/out" \
             hackos-tests:toolchain python3 tests/qemu_desktop.py --firmware "$FIRMWARE"
+      - name: Exercise graphical login and power controls
+        if: ${{ !cancelled() && steps.build.outcome != 'skipped' }}
+        env:
+          FIRMWARE: ${{ matrix.firmware }}
+        run: |
+          docker run --rm --network none --user "$(id -u):$(id -g)" \
+            --mount "type=bind,source=$PWD,target=/work,readonly" \
+            --mount "type=bind,source=$PWD/tests/out,target=/work/tests/out" \
+            hackos-tests:toolchain python3 tests/qemu_login_gui.py --firmware "$FIRMWARE"
       - name: Summarize results
         if: always()
         run: python3 tests/summarize.py >> "$GITHUB_STEP_SUMMARY"
@@ -343,3 +352,4 @@ jobs:
             tests/out/qemu-user-${{ matrix.firmware }}/
             tests/out/qemu-windows-${{ matrix.firmware }}/
             tests/out/qemu-desktop-${{ matrix.firmware }}/
+            tests/out/qemu-login-gui-${{ matrix.firmware }}/

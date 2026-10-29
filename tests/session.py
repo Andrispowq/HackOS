@@ -5,6 +5,8 @@ TEST_PASSWORD = "HarnessPass123"
 def setup_and_login(qmp, output, wait_for):
     def wait_text(text, offset=0):
         wait_for(lambda: text in output()[offset:], repr(text))
+    wait_text("LOGIN_GUI_READY")
+    qmp.key("esc")
     wait_text("Action: ")
     qmp.type("1\n")
     wait_text("First-boot setup.")

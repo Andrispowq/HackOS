@@ -76,7 +76,7 @@ class Guest:
 
 @contextmanager
 def boot(directory, image, firmware, name, timeout, *, write_error=False, entropy=True, reboot=False, serial=True, paused=False,
-         qmp_stdio=False):
+         qmp_stdio=False, graphical=False):
     with tempfile.TemporaryDirectory(prefix='hackos-accounts-') as temporary:
         temporary = Path(temporary)
         g = Guest()
@@ -120,6 +120,13 @@ def boot(directory, image, firmware, name, timeout, *, write_error=False, entrop
                     assert g.process.poll() is None, 'QEMU could not start'
                     time.sleep(0.05)
                 g.qmp = QMP(process=g.process) if qmp_stdio else QMP(qmp_path)
+                if not graphical and not paused:
+                    g.wait('LOGIN_GUI_READY')
+                    g.qmp.key('esc')
+                    # A damaged-store modal consumes the first Escape.
+                    time.sleep(0.1)
+                    g.qmp.key('esc')
+                    g.wait('Action: ')
                 yield g
             finally:
                 if g.qmp:
@@ -379,7 +386,8 @@ print('LOGOUT_RECLAIMED_OK')
                 offset = len(g.output())
                 g.qmp.type(action + '\n')
                 if reason == 'guest-reset':
-                    g.wait('HackOS login', offset)
+                    g.wait('LOGIN_GUI_READY', offset)
+                    g.qmp.key('esc')
                     g.wait('Action: ', offset)
                     g.qmp.type('shutdown\n')
                 g.process.wait(timeout=timeout)

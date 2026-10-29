@@ -10,13 +10,26 @@ There is no automatic root shell or default password.
 
 ## Setup and daily use
 
-At boot and after logout, the console clears before offering `1) login`,
-`2) restart` and `3) shutdown`, plus `console` for a recovery shell. Normal login
-starts the desktop; recovery login starts a direct shell. Selecting login clears it again before the setup
-or username prompt. Enter a number or action name (case-insensitive). Invalid input
-returns to the menu. Restart boots the same image again in the normal runner.
-Login starts setup on a new installation; restart and
-shutdown also work before setup or when account storage is damaged.
+At boot and after a graphical session ends, LOGIN opens a maximized graphical
+sign-in screen with centered username/password fields, **Log in**, and **Shut
+down** / **Restart** buttons below. Tab and Shift-Tab move between controls;
+Enter submits a field or activates the focused button. Failed authentication
+opens a generic error dialog; dismiss it with OK or Enter and try again.
+
+A new installation shows the administrator setup form with password confirmation.
+Successful setup returns to sign-in. Damaged account storage disables sign-in
+and shows an error, while power controls remain available. Passwords appear as
+asterisks, never plaintext; password fields disable clipboard operations and
+clear their entire buffers on submission, validation errors, input loss, power
+requests and recovery entry. The login window closes before waiting for the
+session and is recreated with empty fields when it ends.
+
+**Recovery console** or Escape (outside a dialog) switches to the existing text
+menu for the rest of that boot. It accepts `1`/`login`, `2`/`restart`,
+`3`/`shutdown`, and `console` for an authenticated direct shell. The same menu is
+the fallback if the graphical window/font cannot be opened. Restart returns to
+the graphical screen. Both interfaces use the same kernel authentication,
+credential, storage and power-authority checks.
 
 Two completely zeroed account files identify a new installation. Setup asks for
 a username matching `[a-z][a-z0-9_-]*` (1–31 characters) and a confirmed password
@@ -30,9 +43,9 @@ without a name changes the calling administrator's password. Password changes
 are root-only in this version. `runas` remains a root administrative launcher
 and can use locked identities; it does not authenticate a password.
 
-Passwords and confirmations are never echoed or added to shell history, including
-the debug console. Backspace edits hidden input; overflow and Ctrl-C discard the
-value. Kernel and userspace password buffers are explicitly erased after use.
+Passwords and confirmations are never echoed as plaintext or added to shell
+history or the debug console. In text recovery, Backspace edits hidden input;
+overflow and Ctrl-C discard the value. Kernel and userspace password buffers are explicitly erased after use.
 Failed logins use a generic error and a one-second retry delay. Unknown or locked
 accounts run the same password KDF as enabled accounts. There is no permanent
 lockout or account enumeration through authentication errors.

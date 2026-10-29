@@ -3,8 +3,8 @@
 [System index](index.md) · [GUI library](gui.md) · [Streams](streams.md) · [Accounts](accounts.md)
 
 Normal login starts the authenticated `DESKTOP` program. It displays a persistent
-launcher/taskbar and opens a `TERM` window running its own `SHELL`. The login menu
-also accepts `console` for a direct recovery shell using the same authentication
+launcher/taskbar and opens a `TERM` window running its own `SHELL`. The graphical login screen offers **Recovery console** (Escape); its text menu
+accepts `console` for a direct recovery shell using the same authentication
 and credential checks. A second copy of DESKTOP does not acquire desktop authority.
 
 ## Using the desktop
@@ -27,7 +27,7 @@ and credential checks. A second copy of DESKTOP does not acquire desktop authori
 
 If the desktop fails or is forcibly terminated, all its session descendants are
 terminated and the login agent resumes. The kernel removes the panel and restores
-the console during normal resource reclamation. Log in again or choose `console`
+the console during normal resource reclamation. Log in again or open **Recovery console** and choose `console`
 for recovery. Closing every terminal leaves the launcher running.
 
 ## Terminal contract

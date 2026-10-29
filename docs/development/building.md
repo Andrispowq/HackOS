@@ -15,11 +15,11 @@ docker compose up --build bios
 ```
 
 Open [the console](http://localhost:6080/vnc.html?autoconnect=true&resize=scale).
-It shows initialization output followed by the login/restart/shutdown menu. Select `1` or `login` for
-first-boot setup. Choose an administrator
-name and confirm an 8–128 character password, then log in to the desktop, which opens an independent terminal shell.
-Use the launcher to open more terminals or GUI widgets. Choose `console` at the
-login menu for the direct recovery shell. Click inside a terminal
+It shows initialization output followed by a graphical sign-in screen. On first
+boot, choose an administrator name and confirm an 8–128 character password, then
+log in to the desktop, which opens an independent terminal shell. Use the launcher
+to open more terminals or GUI widgets. **Recovery console** (or Escape) opens the
+text menu; choose `console` there for a direct recovery shell. Click inside a terminal
 and try `help`, `ls`, `ps` or `time --ticks`. Input uses the US keyboard layout.
 Use `test alpha "two words"` to see argument passing and read a file
 from ring 3, or `user USR/BIN/RING3` for

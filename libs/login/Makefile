@@ -8,9 +8,13 @@ all: bin/login
 bin-int/main.o: src/main.cpp Makefile
 	@mkdir -p $(@D)
 	$(CXX) $(CFLAGS) -c $< -o $@
-bin/login: bin-int/main.o ../ring3/userspace.ld ../libc/bin/libc.a Makefile
+bin/login: bin-int/main.o ../ring3/userspace.ld ../gui/bin/libgui.a ../libc/bin/libc.a Makefile
 	@mkdir -p $(@D)
-	$(LD) -T ../ring3/userspace.ld -static -nostdlib -o $@ bin-int/main.o ../libc/bin/libc.a
+	$(LD) -T ../ring3/userspace.ld -static -nostdlib -o $@ bin-int/main.o ../gui/bin/libgui.a ../libc/bin/libc.a
+../gui/bin/libgui.a: force-gui
+	$(MAKE) -C ../gui
+.PHONY: force-gui
+force-gui:
 ../libc/bin/libc.a:
 	$(MAKE) -C ../libc
 clean:

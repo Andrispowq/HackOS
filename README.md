@@ -26,9 +26,10 @@ and mouse drivers, framebuffer graphics and a console, ACPI/PCI discovery,
 ATA/AHCI storage, FAT32, and a small VFS. There are also window primitives,
 an ELF loader, a scheduler, and an experimental userspace library.
 
-Both boot paths start a ring-3 login agent. First-boot setup creates the chosen
+Both boot paths start a graphical ring-3 login agent with masked password fields,
+error dialogs and shutdown/restart controls. First-boot setup creates the chosen
 administrator; successful login starts the desktop launcher/taskbar and a terminal
-window. Open independent terminals with **New terminal**; `console` login selects
+window. Open independent terminals with **New terminal**; **Recovery console** → `console` selects
 the recovery shell. See [desktop sessions](docs/system/desktop.md). Accounts persist
 across boots, and `logout` ends the session. See [accounts and recovery](docs/system/accounts.md).
 Try `help`, `ls`, `ps` or `time --ticks`. `echo` prints literal text; root can run

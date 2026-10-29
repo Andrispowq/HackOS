@@ -306,6 +306,46 @@ static int Controls()
     return 0;
 }
 
+static int Secrets()
+{
+    view.Init();
+    auto field = view.Add(Kind::TextField, 0, "secret");
+    CHECK(view.SetSecret(field, true));
+    view.Layout(200, 60);
+    view.SetFocus(field);
+    clipboardLength = 0;
+    view.Handle(Key(HACKOS_PHYSICAL_A, HACKOS_MOD_CTRL), Clip);
+    view.Handle(Key(HACKOS_PHYSICAL_C, HACKOS_MOD_CTRL), Clip);
+    view.Handle(Key(HACKOS_PHYSICAL_X, HACKOS_MOD_CTRL), Clip);
+    CHECK(!clipboardLength && !strcmp(view.Get(field)->text, "secret"));
+    view.Handle(Text('x'), Clip);
+    CHECK(!strcmp(view.Get(field)->text, "x"));
+    for (unsigned i = 1; i < TextCapacity; ++i)
+    {
+        CHECK(view.Get(field)->text[i] == 0);
+    }
+    CHECK(view.SetText(field, ""));
+    for (char ch : view.Get(field)->text)
+    {
+        CHECK(ch == 0);
+    }
+    // Only the mask glyph has lit pixels: secret rendering must match it.
+    memset(&font, 0, sizeof(font));
+    memset(font.glyphs + '*' * 16, 255, 16);
+    view.SetText(field, "x");
+    Canvas canvas;
+    canvas.Init(buffer, 32, {0, 0, 32, 32});
+    view.Draw(canvas, font);
+    uint32_t masked[1024];
+    memcpy(masked, buffer, sizeof(masked));
+    view.SetSecret(field, false);
+    view.SetText(field, "*");
+    view.Draw(canvas, font);
+    CHECK(!memcmp(masked, buffer, sizeof(masked)));
+    ++tests;
+    return 0;
+}
+
 static int Stress()
 {
     view.Init();
@@ -338,7 +378,7 @@ int PlatformTests();
 
 int main()
 {
-    if (Drawing() || Layout() || Editing() || Controls() || Stress() || PlatformTests())
+    if (Drawing() || Layout() || Editing() || Controls() || Secrets() || Stress() || PlatformTests())
     {
         return 1;
     }

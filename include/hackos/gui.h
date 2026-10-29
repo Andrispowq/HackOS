@@ -82,7 +82,7 @@ struct Widget
     unsigned parent;
     Rect bounds, clip;
     unsigned width, height, flex, padding, gap;
-    bool visible, enabled, checked;
+    bool visible, enabled, checked, secret;
     char text[TextCapacity];
     unsigned length, cursor, anchor, offset;
     const char* const* items;
@@ -123,6 +123,7 @@ class View
     unsigned Focus() const;
     bool SetFocus(unsigned id);
     bool SetText(unsigned id, const char* text);
+    bool SetSecret(unsigned id, bool secret);
     bool SetItems(unsigned id, const char* const* items, unsigned length);
     bool SetChecked(unsigned id, bool checked);
     bool SetVisible(unsigned id, bool visible);

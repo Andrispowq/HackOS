@@ -989,3 +989,28 @@ Python syntax, workflow lint and diff whitespace checks passed. Final images and
 source snapshots are in `tests/out/build-bios` and `tests/out/build-uefi`;
 `tests/out/desktop-step4/final-validation.json` records reports and image hashes,
 and `source-manifest.json` verifies both builds used the final production sources.
+
+## Graphical login
+
+`python3 tests/qemu_login_gui.py --firmware bios` / `uefi` (or
+`make -C tests test-login-gui FIRMWARE=...`) exercises graphical first-boot setup,
+confirmation mismatch, masked fields, generic failed-login dialogs, successful
+desktop authentication, session cleanup and return to empty fields, plus actual
+shutdown and restart. GDB checks the real login widget state and zeroed secret
+buffers; screenshots record masked setup/login, the error popup and session
+return. No test logs contain the entered passwords. Native GUI sanitizer checks
+also compare masked rendering and enforce disabled clipboard access and full
+buffer clearing. Existing console suites explicitly enter text recovery before
+using their original authentication/command contracts.
+
+Graphical-login validation passed fresh BIOS/UEFI image builds and all six selected
+guest suites on each path: graphical login/power, boot, accounts, shell, desktop
+and GUI library. Masked-form and error-dialog screenshots were inspected. Native
+GUI ASan+UBSan checks passed, including secret-field rendering, clipboard and
+clearing checks. The BIOS power test was corrected to accept the expected QEMU
+shutdown; recovery tests now explicitly select text mode after reboot and dismiss
+the damaged-store dialog. Production code did not change during those test fixes.
+Formatting, Python syntax, workflow lint and diff whitespace checks passed.
+Reports/image hashes are in `tests/out/login-gui/final-validation.json`; the
+adjacent `source-manifest.json` verifies both builds used the final login/library
+sources.

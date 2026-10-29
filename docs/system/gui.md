@@ -117,3 +117,7 @@ repaints after restore/resize. Applications should use this bounded loop pattern
 handle every action, and explicitly close the adapter on termination. Rendering
 is currently a full client repaint; damage tracking, a desktop session and full
 applications remain later milestones.
+
+Text fields can opt into `SetSecret(id, true)`: rendering uses asterisks,
+clipboard operations are disabled, and shortened/cleared values erase the
+remaining buffer. Call `SetText(id, "")` before discarding a secret field.

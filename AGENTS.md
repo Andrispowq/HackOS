@@ -15,7 +15,7 @@ The [documentation index](docs/index.md) links to the system and development
 guides. Keep those pages consistent with changes to component contracts.
 
 Tasking supports idle plus isolated ring-3 programs. The standalone login agent at
-`~/USR/BIN/LOGIN` starts automatically and authenticates before launching `DESKTOP` (or `SHELL` for `console` recovery login); idle refreshes the console and reaps
+`~/USR/BIN/LOGIN` starts with a graphical sign-in/setup form (Escape selects text recovery) and authenticates before launching `DESKTOP` (or `SHELL` for `console` recovery login); idle refreshes the console and reaps
 exited tasks. User programs own private frames and page tables, with shared
 supervisor-only kernel mappings. Both `./` and `user` launch ring-3 programs with bounded `argc`/`argv` and
 foreground waits by default; a separate trailing `&` requests background mode.
