@@ -159,3 +159,7 @@ remains authoritative.
 1 KiB writes. This reduces repeated path checks and scheduler/renderer work while
 preserving listing order, hidden-file options, long-format metadata, pipes and
 redirection. Console scrolling uses pitch-aware pixel copies toward lower rows.
+
+The graphical [file manager](files.md) uses the same checked operations.
+`mkdir`, `unlink` and `rename` return `HACKOS_DENIED` when parent-directory
+permission checks fail; other mutation failures remain `HACKOS_ERROR`.

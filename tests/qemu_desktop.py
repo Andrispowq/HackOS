@@ -169,6 +169,14 @@ quit
             click(50, 1040)
             click(420, 1000)
             inspect("assert number('terminals[0].controller') == 0\nassert number('KernelWindowManager->panel') != 0")
+            # Launch Files from the authenticated launcher and close it cleanly.
+            mark = len(g.output())
+            click(600, 1000)
+            g.wait('FILES_READY', mark)
+            inspect("assert number('user_windows_live') == 2")
+            g.screen('launcher-files')
+            key('f4', alt=True)
+            inspect("assert number('user_windows_live') == 1")
             # Launch a GUI application from the same authenticated launcher.
             mark = len(g.output())
             click(160, 1000)
@@ -187,6 +195,9 @@ quit
             g.login('root', ADMIN_PASSWORD)
             shell('echo RECOVERY_CONSOLE', 'RECOVERY_CONSOLE')
             shell('deskprobe --orphan', 'ORPHAN_SIGNALS_OK')
+            # The child shell also printed a prompt; wait for parent input ownership
+            # and orphan reclamation before typing into the recovery shell.
+            inspect("assert len(processes()) == 3\nassert any(int(p['state']) == 4 and not int(p['authenticationAgent']) for p in processes())")
             g.logout()
             g.enter('login', 'Login: ')
             g.enter('root', 'Password: ')

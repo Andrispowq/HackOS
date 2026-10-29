@@ -90,6 +90,11 @@ eight independent kernel terminal endpoints and per-terminal foreground job cont
 failure returns to login; `console` selects a recovery shell. See
 `docs/system/desktop.md` for authority, cleanup and fixed-grid limits.
 
+Step 5a adds `/USR/BIN/FILES` (`libs/files`) to the desktop launcher: paged folder
+browsing, bounded read-only text/hex previews, folder creation, file rename/move
+and confirmed deletion with kernel permission errors. Folder rename/delete remain
+unsupported. See `docs/system/files.md`; `tests/qemu_files_gui.py` covers both firmware paths.
+
 ## Where to look
 
 | Area | Starting points |

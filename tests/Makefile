@@ -106,3 +106,7 @@ test-desktop:
 .PHONY: test-login-gui
 test-login-gui:
 	$(PYTHON) qemu_login_gui.py --firmware $(FIRMWARE)
+
+.PHONY: test-files-gui
+test-files-gui:
+	$(PYTHON) qemu_files_gui.py --firmware $(FIRMWARE)

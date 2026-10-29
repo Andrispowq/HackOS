@@ -115,8 +115,8 @@ using only the public API. The demo drains at most 16 events before attempting a
 16 ms after a render failure and blocks in `Wait` when idle or minimized. It
 repaints after restore/resize. Applications should use this bounded loop pattern,
 handle every action, and explicitly close the adapter on termination. Rendering
-is currently a full client repaint; damage tracking, a desktop session and full
-applications remain later milestones.
+is currently a full client repaint; damage tracking remains a later milestone. The desktop, graphical login and
+[file manager](files.md) also use this library.
 
 Text fields can opt into `SetSecret(id, true)`: rendering uses asterisks,
 clipboard operations are disabled, and shortened/cleared values erase the

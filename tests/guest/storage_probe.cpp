@@ -44,10 +44,10 @@ int main(int argc, char** argv)
 
     if (argc == 2 && Equal(argv[1], "guest"))
     {
-        REQUIRE(Error(syscall_mkdir("/FORBIDDEN")));
+        REQUIRE(syscall_mkdir("/FORBIDDEN") == HACKOS_DENIED);
         REQUIRE(Error(syscall_file_save("/USR/HELLO.TXT", "bad", 3, 0)));
-        REQUIRE(Error(syscall_unlink("/USR/HELLO.TXT")));
-        REQUIRE(Error(syscall_rename("/USR/HELLO.TXT", "/TMP/STOLEN")));
+        REQUIRE(syscall_unlink("/USR/HELLO.TXT") == HACKOS_DENIED);
+        REQUIRE(syscall_rename("/USR/HELLO.TXT", "/TMP/STOLEN") == HACKOS_DENIED);
         REQUIRE(Error(syscall_open("/PRIVATE/SECRET")));
         REQUIRE(Error(syscall_readdir("/PRIVATE", 0, &info)));
         REQUIRE(Error(syscall_chdir("/PRIVATE")));

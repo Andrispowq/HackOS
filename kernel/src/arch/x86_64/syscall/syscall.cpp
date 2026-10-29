@@ -1106,30 +1106,44 @@ static uint64_t UserFileSave(const char* name, const void* data, uint64_t size, 
 static uint64_t UserMkdir(const char* name)
 {
     char path[256];
+    if (!MutationPath(name, path))
+    {
+        return HACKOS_ERROR;
+    }
+    if (!PathAccess(path, Caller()->credentials, 3, true))
+    {
+        return HACKOS_DENIED;
+    }
     FilePermissions permissions = {Caller()->credentials.uid, Caller()->credentials.gid, 0755};
-    return MutationPath(name, path) && PathAccess(path, Caller()->credentials, 3, true) &&
-                   !filesystems[0]->MakeDirectory(path, &permissions)
-               ? 0
-               : HACKOS_ERROR;
+    return filesystems[0]->MakeDirectory(path, &permissions) ? HACKOS_ERROR : 0;
 }
 
 static uint64_t UserUnlink(const char* name)
 {
     char path[256];
-    return MutationPath(name, path) && PathAccess(path, Caller()->credentials, 3, true) &&
-                   !filesystems[0]->RemoveFile(path)
-               ? 0
-               : HACKOS_ERROR;
+    if (!MutationPath(name, path))
+    {
+        return HACKOS_ERROR;
+    }
+    if (!PathAccess(path, Caller()->credentials, 3, true))
+    {
+        return HACKOS_DENIED;
+    }
+    return filesystems[0]->RemoveFile(path) ? HACKOS_ERROR : 0;
 }
 
 static uint64_t UserRename(const char* source, const char* destination)
 {
     char from[256], to[256];
-    return MutationPath(source, from) && MutationPath(destination, to) &&
-                   PathAccess(from, Caller()->credentials, 3, true) && PathAccess(to, Caller()->credentials, 3, true) &&
-                   !filesystems[0]->MoveFile(from, to)
-               ? 0
-               : HACKOS_ERROR;
+    if (!MutationPath(source, from) || !MutationPath(destination, to))
+    {
+        return HACKOS_ERROR;
+    }
+    if (!PathAccess(from, Caller()->credentials, 3, true) || !PathAccess(to, Caller()->credentials, 3, true))
+    {
+        return HACKOS_DENIED;
+    }
+    return filesystems[0]->MoveFile(from, to) ? HACKOS_ERROR : 0;
 }
 
 static uint64_t UserFileWrite(uint64_t handle, const void* source, uint64_t length)

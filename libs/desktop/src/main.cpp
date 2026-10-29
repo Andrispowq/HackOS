@@ -58,6 +58,7 @@ int main()
     auto minimize = view.Add(Gui::Kind::Button, launcher, "Minimize selected");
     auto close = view.Add(Gui::Kind::Button, launcher, "Close selected");
     auto logout = view.Add(Gui::Kind::Button, launcher, "Log out");
+    auto files = view.Add(Gui::Kind::Button, launcher, "Files");
     statusLabel = view.Add(Gui::Kind::Label, launcher, "Ready");
     view.SetLayout(statusLabel, 0, 32, 1, 0, 0);
     auto tasks = view.Add(Gui::Kind::Row, 0);
@@ -123,6 +124,10 @@ int main()
             if (action.widget == terminal)
             {
                 Launch("~/USR/BIN/TERM");
+            }
+            else if (action.widget == files)
+            {
+                Launch("~/USR/BIN/FILES");
             }
             else if (action.widget == widgets)
             {

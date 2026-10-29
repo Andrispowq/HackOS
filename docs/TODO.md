@@ -182,7 +182,8 @@ Milestones 1–4 are implemented; later milestones need a separate request.
    See [desktop and terminals](system/desktop.md) for ABI and current limits.
    **Graphical sign-in — implemented:** centered username/masked-password form,
    first-boot confirmation, error dialogs, shutdown/restart and text recovery.
-5. **Applications:** graphical editor, file manager and settings
+5. **Applications:** file manager complete (bounded read-only previews; file-only
+   rename/delete). Next: graphical editor and settings
    using existing permission, filesystem and authentication contracts.
 6. **Integrated hardening:** framebuffer formats, clipping/input/allocator
    stress, damaged-region composition and latency measurements on BIOS/UEFI.

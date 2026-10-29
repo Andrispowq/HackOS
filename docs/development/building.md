@@ -265,3 +265,6 @@ The root userspace target also builds `libs/desktop` and `libs/term`, both linke
 with `libgui.a`. Images package them as `/usr/bin/desktop` and `/usr/bin/term`.
 Desktop authority is granted by authenticated login, so starting another copy
 from the shell does not grant session window-management rights.
+
+`libs/files` builds the graphical file manager, packaged as `/usr/bin/files` and
+listed as **Files** in the desktop launcher. See [file manager](../system/files.md).

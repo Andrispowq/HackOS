@@ -1014,3 +1014,8 @@ Formatting, Python syntax, workflow lint and diff whitespace checks passed.
 Reports/image hashes are in `tests/out/login-gui/final-validation.json`; the
 adjacent `source-manifest.json` verifies both builds used the final login/library
 sources.
+
+The graphical file manager has a QEMU interaction test: `make -C tests test-files-gui
+FIRMWARE=bios` (also `uefi`), after fresh image builds. It checks navigation,
+text/hex previews and truncation, folder creation, file movement, deletion
+confirmation/cancel, missing paths, normal-user permission errors and closing.

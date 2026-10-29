@@ -12,6 +12,7 @@ and credential checks. A second copy of DESKTOP does not acquire desktop authori
 - **New terminal** opens another terminal, up to eight concurrently. Windows have
   distinct numbered titles and staggered positions. Each shell has independent
   working directory, history, input, output grid, foreground owner and jobs.
+- **Files** opens the [file manager](files.md).
 - **Widgets** launches the GUI library demonstration.
 - Taskbar buttons list the session's windows, including minimized windows. `>`
   marks the focused window and `_` marks a minimized window. Click one to focus
