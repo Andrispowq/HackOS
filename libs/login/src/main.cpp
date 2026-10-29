@@ -315,7 +315,17 @@ int main()
             {
                 if (loginView.Dirty())
                 {
-                    loginWindow.Paint(loginView);
+                    HackosWindowState geometry = {};
+                    if (!syscall_window_state(loginWindow.Handle(), &geometry))
+                    {
+                        // The form is 440x480; centered dialogs extend to 520x184.
+                        // Initial paint and geometry changes still redraw the full client.
+                        unsigned width = geometry.width < 520 ? geometry.width : 520;
+                        unsigned height = geometry.height < 480 ? geometry.height : 480;
+                        Gui::Rect damage = {(int)(geometry.width - width) / 2, (int)(geometry.height - height) / 2,
+                                            (int)width, (int)height};
+                        loginWindow.Paint(loginView, &damage);
+                    }
                 }
                 loginWindow.Wait(100);
             }

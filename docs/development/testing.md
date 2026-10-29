@@ -689,6 +689,52 @@ validate pointed-to font/map/ACPI data and framebuffer geometry, then require
 IRQ initialization and repeated timer interrupts. Run these after fresh
 `tests/build_images.py` builds; results live in `tests/out/qemu-{bios,uefi}`.
 
+## Typing latency and retained-frame reliability
+
+`make -C tests test-input-latency FIRMWARE=bios` (or `uefi`) measures three
+individual character updates in graphical first-boot login and a desktop terminal
+on a disposable image. It records QMP injection to GUI dispatch, dispatch to
+matching window commit, and commit to presentation under
+`tests/out/qemu-input-latency-{bios,uefi}/timings.json`. Guest PIT ticks and debugger
+wall times are separate. Run sequentially without competing VMs; debugger stops,
+host scheduling and TCG affect the samples. This does not measure noVNC transport
+or browser paint, and sparse samples are not latency percentiles.
+
+The 2026-10-29 local three-sample run found QMP-to-GUI dispatch around 2–4 ms,
+while application repaint/commit dominated. BIOS median dispatch-to-presentation
+wall times changed from 264 to 146 ms for login and 277 to 121 ms for terminal;
+final UEFI medians were 182 and 98 ms respectively (no UEFI before sample).
+These wall measurements include debugger overhead. Corresponding guest-clock
+medians were BIOS 194→49 ticks for login and 132→75 for terminal, and final UEFI
+72/68 ticks. The PIT increments at 1000 Hz, but guest ticks under TCG are not a
+substitute for elapsed host time. Samples are exploratory, not latency guarantees;
+the final harness also lets initial painting settle before its first key.
+Baseline JSON is retained under `tests/out/input-latency-baseline/bios.json`.
+
+The fix removes redundant terminal key-transition repaints and clipped glyph
+work, and gives login bounded retained-frame updates instead of full maximized
+client uploads. Its centered form/dialog region is repainted on edits; general
+per-widget damage tracking remains a follow-up. Browser transport was not tuned
+or measured by this test.
+
+The shared GUI sanitizer suite compares full rendering with 1-, 7- and 16-row
+tiles, including nonzero origins, padded rows, selection and modal overlays.
+The adapter tests partial uploads, resize fallback and invalid damage. The window
+suite checks retained pixels and independently injects two physical surface
+allocation failures (BEGIN and restore) at the allocator entry, before mutation.
+It verifies old pixels, geometry and allocation counts survive, then retries
+successfully. The original quota-exhaustion checks remain. Window capacity and
+stale-handle cleanup run for 32 create/fill/close cycles, followed by existing
+exit/fault/kill reclamation checks. The GUI input suite separately exercises
+window/ingress queue overflow and reset recovery.
+
+Local validation passed fresh BIOS/UEFI builds and all five guest suites (windows,
+GUI input, desktop, graphical login and editor) on both paths. The GUI ASan/UBSan
+runner passed 24 groups including 5000 stress iterations. Of 217 x86-64 UBSan
+host checks, 216 passed initially; the filesystem interruption/recovery stress
+case exceeded its 15-second limit during concurrent builds/VMs, then passed alone
+under the same limit. The style checker passed all 348 project-owned C/C++ files.
+
 ## Graphics presentation performance
 
 `python3 tests/qemu_windows.py --firmware bios --profile` adds seven samples

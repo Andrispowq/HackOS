@@ -119,6 +119,61 @@ static int Drawing()
     return 0;
 }
 
+static int TiledDrawing()
+{
+    static uint32_t reference[320 * 240];
+    static uint32_t tile[1026];
+    view.Init();
+    view.Add(Kind::Label, 0, "Label\nsecond line");
+    unsigned field = view.Add(Kind::TextField, 0, "Selected text");
+    unsigned list = view.Add(Kind::List, 0);
+    const char* items[] = {"one", "two", "three"};
+    view.SetItems(list, items, 3);
+    view.SetFocus(field);
+    view.Handle(Key(HACKOS_PHYSICAL_A, HACKOS_MOD_CTRL), Clip);
+    view.Layout(320, 240);
+    for (unsigned modal = 0; modal < 2; ++modal)
+    {
+        if (modal)
+        {
+            const char* labels[] = {"OK"};
+            CHECK(view.OpenDialog("Test dialog", "Clipped text and borders", labels, 1, 0));
+        }
+        Canvas canvas;
+        canvas.Init(reference, 320, {0, 0, 320, 240});
+        view.Draw(canvas, font);
+        unsigned heights[] = {1, 7, 16};
+        for (unsigned height : heights)
+        {
+            for (unsigned y = 0; y < 240; y += height)
+            {
+                unsigned h = height < 240 - y ? height : 240 - y;
+                for (unsigned x = 0; x < 320; x += 31)
+                {
+                    unsigned w = 31 < 320 - x ? 31 : 320 - x;
+                    for (auto& pixel : tile)
+                    {
+                        pixel = 0xdeadbeef;
+                    }
+                    canvas.Init(tile + 1, 32, {(int)x, (int)y, (int)w, (int)h});
+                    view.Draw(canvas, font);
+                    for (unsigned row = 0; row < h; ++row)
+                    {
+                        for (unsigned col = 0; col < w; ++col)
+                        {
+                            CHECK(tile[1 + row * 32 + col] == reference[(y + row) * 320 + x + col]);
+                        }
+                        CHECK(tile[1 + row * 32 + w] == 0xdeadbeef);
+                    }
+                    CHECK(tile[0] == 0xdeadbeef && tile[1 + h * 32] == 0xdeadbeef);
+                }
+            }
+        }
+    }
+    ++tests;
+    return 0;
+}
+
 static int Layout()
 {
     view.Init();
@@ -461,7 +516,8 @@ int PlatformTests();
 
 int main()
 {
-    if (Drawing() || Layout() || Editing() || Controls() || Secrets() || Documents() || Stress() || PlatformTests())
+    if (Drawing() || TiledDrawing() || Layout() || Editing() || Controls() || Secrets() || Documents() || Stress() ||
+        PlatformTests())
     {
         return 1;
     }

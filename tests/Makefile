@@ -65,6 +65,10 @@ test-text-tools:
 test-terminal:
 	$(PYTHON) qemu_terminal.py --firmware $(FIRMWARE)
 
+.PHONY: test-input-latency
+test-input-latency:
+	$(PYTHON) qemu_input_latency.py --firmware $(FIRMWARE)
+
 .PHONY: test-login-performance
 test-login-performance:
 	$(PYTHON) qemu_login_performance.py --firmware $(FIRMWARE)

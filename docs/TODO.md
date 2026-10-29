@@ -189,9 +189,11 @@ Milestones 1–4 are implemented; later milestones need a separate request.
    appearance. Session-wide GUI themes and configurable desktop terminals remain follow-ups.
 6. **Integrated hardening — in progress:** 6a adds bounded damaged-region
    composition, clipped drawing and debugger-visible render/input latency counters,
-   with full-scene equivalence and timing checks on BIOS/UEFI. Applications still
-   upload complete replacement frames. Broader framebuffer-format support and
-   input/allocator/window-limit stress remain, followed by terminal polish.
+   with full-scene equivalence and timing checks on BIOS/UEFI. 6b adds physical
+   surface-allocation failure injection and repeated window-limit
+   cleanup cycles. Login uses retained partial frames to reduce typing latency;
+   the terminal avoids redundant key-transition repaints. Broader framebuffer-format
+   support, sustained mixed-workload stress and terminal polish remain.
 
 ## Boot and memory
 

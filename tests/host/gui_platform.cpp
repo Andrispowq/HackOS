@@ -18,9 +18,10 @@ uint64_t syscall_clock(HackosClock* clock)
     return 0;
 }
 
-static unsigned reads, fdCloses, windowCloses, uploads, cancels, presents;
+static unsigned reads, fdCloses, windowCloses, uploads, cancels, presents, retainedBegins;
 static bool shortFont, badHeader, inputFailure, uploadFailure, presentFailure;
 static uint32_t image[64 * 40];
+static unsigned frameWidth = 64;
 static HackosWindowEvent2 nextEvent;
 
 uint64_t syscall_fd_open(const char*, uint64_t)
@@ -84,10 +85,11 @@ uint64_t syscall_window_mode(uint64_t, uint64_t)
 
 uint64_t syscall_window_frame(uint64_t, uint64_t op, HackosWindowFrame* frame)
 {
-    if (op == HACKOS_WINDOW_BEGIN)
+    if (op == HACKOS_WINDOW_BEGIN || op == HACKOS_WINDOW_BEGIN_RETAIN)
     {
+        retainedBegins += op == HACKOS_WINDOW_BEGIN_RETAIN;
         frame->generation = 1;
-        frame->width = 64;
+        frame->width = frameWidth;
         frame->height = 40;
     }
     if (op == HACKOS_WINDOW_CANCEL)
@@ -175,6 +177,19 @@ int PlatformTests()
     CHECK(!window.Paint(view) && cancels == 2 && view.Dirty());
     presentFailure = false;
     CHECK(window.Paint(view) && !view.Dirty());
+    unsigned beforeUploads = uploads;
+    Gui::Rect damage = {8, 8, 4, 4};
+    image[0] = 0x12345678;
+    view.Invalidate();
+    CHECK(window.Paint(view, &damage) && retainedBegins == 1 && uploads == beforeUploads + 1);
+    CHECK(image[0] == 0x12345678 && !view.Dirty());
+    frameWidth = 32;
+    view.Invalidate();
+    CHECK(window.Paint(view, &damage) && image[0] == Gui::DefaultTheme().background);
+    Gui::Rect outside = {80, 80, 1, 1};
+    view.Invalidate();
+    CHECK(!window.Paint(view, &outside) && view.Dirty());
+    frameWidth = 64;
     nextEvent.event.type = HACKOS_WINDOW_OVERFLOW;
     Gui::Action action;
     CHECK(window.Next(view, action) == 1 && view.Dirty() && action.kind == Gui::ActionKind::None);

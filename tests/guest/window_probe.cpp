@@ -54,11 +54,15 @@ static int Frames()
     ok = syscall_window_upload(handle, &bad, &pixel) == HACKOS_ERROR && ok;
     bad = {frame.generation, 0, 0, 640, 2};
     ok = syscall_window_upload(handle, &bad, &pixel) == HACKOS_ERROR && ok;
+    upload.x = 2;
+    uint32_t retained = 0xffabcdef;
+    ok = syscall_window_upload(handle, &upload, &retained) == 0 && ok;
+    upload.x = 0;
     ok = syscall_window_frame(handle, HACKOS_WINDOW_PRESENT, &frame) == 0 && ok;
     ok = syscall_window_upload(handle, &upload, &pixel) == HACKOS_WINDOW_STALE && ok;
     HackosWindowRect legacy = {0, 0, 1, 1};
     ok = syscall_window_blit(handle, &legacy, &pixel) == HACKOS_ERROR && ok;
-    ok = syscall_window_frame(handle, HACKOS_WINDOW_BEGIN, &frame) == 0 && ok;
+    ok = syscall_window_frame(handle, HACKOS_WINDOW_BEGIN_RETAIN, &frame) == 0 && ok;
     upload.generation = frame.generation;
     pixel = 0xff445566;
     ok = syscall_window_upload(handle, &upload, &pixel) == 0 && ok;
@@ -97,6 +101,15 @@ static int Frames()
         return 1;
     }
     Gate(4, "FRAME_PRESSURE_OK\n");
+    // The harness fails two physical surface allocations, independently of quota.
+    ok = syscall_window_frame(handle, HACKOS_WINDOW_BEGIN, &frame) == HACKOS_ERROR;
+    ok = syscall_window_mode(handle, HACKOS_WINDOW_RESTORE) == HACKOS_ERROR && ok;
+    ok = syscall_window_state(handle, &state) == 0 && state.x == 1 && state.width > 640 && ok;
+    if (!Check(ok))
+    {
+        return 1;
+    }
+    Gate(5, "FRAME_ALLOCATION_OK\n");
     ok = syscall_window_frame(handle, HACKOS_WINDOW_BEGIN, &frame) == 0;
     ok = syscall_window_frame(handle, HACKOS_WINDOW_PRESENT, &frame) == 0 && ok;
     while (syscall_window_event(handle, &event) == 1)
@@ -253,17 +266,20 @@ int main(int argc, char** argv)
     spec.title[0] = 0;
 
     uint64_t extra[3];
-    for (auto& window : extra)
+    for (unsigned cycle = 0; cycle < 32; ++cycle)
     {
-        window = syscall_window_create(&spec);
-        ok = window != HACKOS_ERROR && ok;
-    }
+        for (auto& window : extra)
+        {
+            window = syscall_window_create(&spec);
+            ok = window != HACKOS_ERROR && ok;
+        }
 
-    ok = syscall_window_create(&spec) == HACKOS_ERROR && ok;
-    for (auto window : extra)
-    {
-        ok = syscall_window_close(window) == 0 && ok;
-        ok = syscall_window_close(window) == HACKOS_ERROR && ok;
+        ok = syscall_window_create(&spec) == HACKOS_ERROR && ok;
+        for (auto window : extra)
+        {
+            ok = syscall_window_close(window) == 0 && ok;
+            ok = syscall_window_close(window) == HACKOS_ERROR && ok;
+        }
     }
 
     ok = syscall_window_poll(handle) == 0 && ok;

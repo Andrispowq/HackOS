@@ -178,11 +178,12 @@ class Window
 {
     uint64_t handle;
     Font font;
+    unsigned paintedWidth, paintedHeight;
 
   public:
     bool Open(const HackosWindowSpec& spec);
     uint64_t Handle() const;
-    bool Paint(View& view);
+    bool Paint(View& view, const Rect* damage = nullptr);
     uint64_t Next(View& view, Action& action);
     uint64_t Wait(uint64_t timeout = HACKOS_WAIT_FOREVER);
     bool ReplyClose(bool accept);

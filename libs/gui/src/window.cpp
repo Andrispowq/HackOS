@@ -49,6 +49,7 @@ bool Window::Open(const HackosWindowSpec& spec)
         return false;
     }
     handle = created;
+    paintedWidth = paintedHeight = 0;
     return true;
 }
 
@@ -57,7 +58,7 @@ uint64_t Window::Handle() const
     return handle;
 }
 
-bool Window::Paint(View& view)
+bool Window::Paint(View& view, const Rect* damage)
 {
     if (!handle)
     {
@@ -68,22 +69,35 @@ bool Window::Paint(View& view)
         return true;
     }
     HackosWindowFrame frame = {};
-    if (syscall_window_frame(handle, HACKOS_WINDOW_BEGIN, &frame) != 0)
+    auto operation = damage && paintedWidth ? HACKOS_WINDOW_BEGIN_RETAIN : HACKOS_WINDOW_BEGIN;
+    if (syscall_window_frame(handle, operation, &frame) != 0)
     {
         return false;
     }
     view.Layout(frame.width, frame.height);
+    Rect region = {0, 0, (int)frame.width, (int)frame.height};
+    if (damage && paintedWidth == frame.width && paintedHeight == frame.height)
+    {
+        region = Intersect(region, *damage);
+    }
+    if (region.width <= 0 || region.height <= 0)
+    {
+        syscall_window_frame(handle, HACKOS_WINDOW_CANCEL, &frame);
+        return false;
+    }
     uint32_t pixels[1024];
     Canvas canvas;
     // Wide strips reduce syscall count without allocating a full client buffer.
-    unsigned stripWidth = frame.width < 1024 ? frame.width : 1024;
+    unsigned stripWidth = region.width < 1024 ? region.width : 1024;
     unsigned stripHeight = 1024 / stripWidth;
-    for (unsigned y = 0; y < frame.height; y += stripHeight)
+    for (unsigned y = region.y; y < (unsigned)(region.y + region.height); y += stripHeight)
     {
-        unsigned h = frame.height - y < stripHeight ? frame.height - y : stripHeight;
-        for (unsigned x = 0; x < frame.width; x += stripWidth)
+        unsigned remaining = region.y + region.height - y;
+        unsigned h = remaining < stripHeight ? remaining : stripHeight;
+        for (unsigned x = region.x; x < (unsigned)(region.x + region.width); x += stripWidth)
         {
-            unsigned w = frame.width - x < stripWidth ? frame.width - x : stripWidth;
+            remaining = region.x + region.width - x;
+            unsigned w = remaining < stripWidth ? remaining : stripWidth;
             canvas.Init(pixels, w, {(int)x, (int)y, (int)w, (int)h});
             view.Draw(canvas, font);
             HackosWindowUpload upload = {frame.generation, x, y, w, h};
@@ -100,6 +114,8 @@ bool Window::Paint(View& view)
         return false;
     }
     view.Painted();
+    paintedWidth = frame.width;
+    paintedHeight = frame.height;
     return true;
 }
 

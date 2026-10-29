@@ -166,7 +166,11 @@ int main()
             {
                 syscall_terminal_session(HACKOS_TTY_INPUT, key, nullptr);
             }
-            dirty = true;
+            if (event.event.type == HACKOS_WINDOW_RESIZE || event.event.type == HACKOS_WINDOW_MODE ||
+                event.event.type == HACKOS_WINDOW_INPUT_RESET || event.event.type == HACKOS_WINDOW_OVERFLOW)
+            {
+                dirty = true;
+            }
         }
         HackosWindowState geometry = {};
         if (syscall_window_state(window.Handle(), &geometry))

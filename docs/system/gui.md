@@ -6,7 +6,8 @@
 [`hackos/gui.h`](../../include/hackos/gui.h). Link the archive before `libc.a`,
 using the existing userspace linker script and freestanding/no-red-zone flags.
 `window --widgets` is the packaged consumer; the previous gradient and
-`--interaction` diagnostics remain available. The kernel ABI is unchanged.
+`--interaction` diagnostics remain available. Partial painting uses the optional
+BEGIN_RETAIN operation of the existing window-frame syscall.
 
 ## Storage and lifecycle
 
@@ -114,8 +115,12 @@ The [demo event loop](../../libs/window/src/widgets.cpp) is a complete consumer
 using only the public API. The demo drains at most 16 events before attempting a dirty repaint. It sleeps
 16 ms after a render failure and blocks in `Wait` when idle or minimized. It
 repaints after restore/resize. Applications should use this bounded loop pattern,
-handle every action, and explicitly close the adapter on termination. Rendering
-is currently a full client repaint; damage tracking remains a later milestone. The desktop, graphical login and
+handle every action, and explicitly close the adapter on termination. Ordinary `Paint(view)` redraws the full client. `Paint(view, &damage)` uses
+BEGIN_RETAIN and uploads only the clipped client-relative rectangle. The caller
+must cover every changed pixel, including removed overlays; the adapter forces a
+full repaint on its first frame and after geometry changes. Empty damage fails
+without marking the view clean. Automatic widget damage tracking remains a
+follow-up. The desktop, graphical login and
 [file manager](files.md) also use this library.
 
 Text fields can opt into `SetSecret(id, true)`: rendering uses asterisks,
@@ -145,3 +150,9 @@ Lists emit Activate on Enter/Space or a second click on the same item within
 is monotonic milliseconds (zero disables double-click detection); the Window
 adapter supplies clock ticks under the current 1000 Hz PIT contract. Replacing
 items, input reset, keyboard input and wheel scrolling cancel the click pair.
+
+Graphical login uses the centered 520×480 region containing its form and dialogs
+for subsequent edits, preserving the rest of its maximized background. The shared
+renderer skips widgets outside each tile and writes clipped glyph pixels directly.
+The terminal repaints on grid revisions or geometry/reset events, rather than
+on every physical key transition before the shell has echoed the input.

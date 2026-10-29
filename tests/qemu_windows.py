@@ -306,7 +306,7 @@ back = display["backbuffer"]
                         return offset
 
                     # Observe front/staging buffers independently before publication.
-                    def frame_gate(value, assertions=""):
+                    def frame_gate(value, assertions="", after=""):
                         inspect("frame-gate-" + str(value), assertions + """
 import struct
 w = gdb.parse_and_eval("KernelWindowManager->focused")
@@ -317,7 +317,7 @@ va = """ + str(gate) + """
 entry = p["userSpace"]["leaf"]["entries"][(va - 0x400000000000) // 4096]
 physical = (int(entry["address"]) << 12) + (va & 4095)
 gdb.selected_inferior().write_memory(physical, struct.pack("<Q", """ + str(value) + """))
-""")
+""" + after)
 
                     offset = len(output())
                     qmp.type("./USR/BIN/WINPROBE frames\n")
@@ -326,6 +326,7 @@ gdb.selected_inferior().write_memory(physical, struct.pack("<Q", """ + str(value
 w = gdb.parse_and_eval("KernelWindowManager->focused")
 assert int(w["front"]["address"][0]) == 0xff112233
 assert int(w["staging"]["address"][0]) == 0xff445566
+assert int(w["staging"]["address"][2]) == 0xffabcdef
 assert int(fb["address"][130 * int(fb["pitch"]) + 100]) == 0xff112233
 """)
                     wait_text("FRAME_RESIZED", offset)
@@ -349,6 +350,20 @@ assert int(w["front"]["address"][0]) == 0xff445566
 assert int(w["maximised"]) == 1
 assert int(gdb.parse_and_eval("window_surface_pages")) == 16384
 gdb.execute("set window_surface_pages = 300")
+""", after="""
+allocation = gdb.Breakpoint("PageFrameAllocator::TryRequestSurfacePages", type=gdb.BP_HARDWARE_BREAKPOINT)
+for failure in range(2):
+    gdb.execute("continue")
+    assert gdb.newest_frame().name() == "PageFrameAllocator::TryRequestSurfacePages"
+    gdb.execute("return (void*)0")
+allocation.delete()
+""")
+                    wait_text("FRAME_ALLOCATION_OK", offset)
+                    frame_gate(5, """
+w = gdb.parse_and_eval("KernelWindowManager->focused")
+assert int(w["front"]["address"][0]) == 0xff445566
+assert int(w["maximised"]) == 1
+assert int(gdb.parse_and_eval("window_surface_pages")) == 300
 """)
                     wait_text("FRAME_WAITING", offset)
                     inspect("frame-blocking", """
@@ -690,7 +705,7 @@ assert int(fb["address"][245 * int(fb["pitch"]) + 215]) == int(back["address"][2
                     qmp.type("shutdown\n")
                     process.wait(timeout=timeout)
                     assert process.returncode == 0
-                    return "CPL3 window demo, pixel composition/restoration, Q and PS/2 close, bounded drag/resize, maximize/minimize/restore geometry and focus, signed wheel routing, minimized-owner cleanup, client mouse capture/release, focus/z-order and key isolation, event overflow recovery, background Ctrl-C, checked pointers/rectangles/events, per-process quota, foreign/stale handles, exit/fault/kill cleanup and shutdown."
+                    return "CPL3 window demo, pixel composition/restoration, Q and PS/2 close, bounded drag/resize, maximize/minimize/restore geometry and focus, signed wheel routing, minimized-owner cleanup, client mouse capture/release, focus/z-order and key isolation, event overflow recovery, background Ctrl-C, checked pointers/rectangles/events, retained frames, injected physical-allocation failures, 32 per-process quota/cleanup cycles, foreign/stale handles, exit/fault/kill cleanup and shutdown."
                 finally:
                     if qmp: qmp.close()
                     process.terminate()

@@ -112,6 +112,7 @@ struct HackosWindowSpec
 
 constexpr uint64_t HACKOS_WINDOW_STALE = ~10ULL;
 constexpr uint64_t HACKOS_WINDOW_BEGIN = 0, HACKOS_WINDOW_PRESENT = 1, HACKOS_WINDOW_CANCEL = 2;
+constexpr uint64_t HACKOS_WINDOW_BEGIN_RETAIN = 3;
 
 struct HackosWindowFrame
 {

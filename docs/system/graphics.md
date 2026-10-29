@@ -42,9 +42,10 @@ the full screen.
 
 Atomic frame presentation compares the replacement client with its previous
 image in 32-pixel blocks and invalidates the changed bounding rectangle. Identical
-frames need no scene repaint; size changes invalidate the new client. Apps still
-render and upload complete replacement frames, and finding changes scans those
-surfaces. This optimizes composition, not application rendering or upload cost.
+frames need no scene repaint; size changes invalidate the new client. Ordinary apps still render and upload complete replacement frames. Login uses
+BEGIN_RETAIN for bounded form updates; that operation copies committed pixels to
+staging before partial uploads. Finding changes still scans the committed surfaces.
+This optimizes composition; application painting and uploads have separate costs.
 
 Within each region the compositor compares against the previously presented RAM
 scene in 32-pixel horizontal blocks and copies only changed spans to video memory

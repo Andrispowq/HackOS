@@ -576,19 +576,23 @@ The original `window_blit` remains available for legacy clients. New clients use
 
 | Slot | Call | Contract |
 | --- | --- | --- |
-| 85 | `window_frame(handle, operation, frame)` | BEGIN=0, PRESENT=1, CANCEL=2; copied readable/writable `HackosWindowFrame` |
+| 85 | `window_frame(handle, operation, frame)` | BEGIN=0, PRESENT=1, CANCEL=2, BEGIN_RETAIN=3; copied readable/writable `HackosWindowFrame` |
 | 86 | `window_upload(handle, upload, pixels)` | Copy at most 1024 packed pixels into the pending frame |
 
 `HackosWindowFrame` is 16 bytes: `uint64_t generation`, then `uint32_t width,
 height`. BEGIN allocates (or reuses) a black staging surface for current geometry,
 invalidates any prior transaction and returns a new generation and dimensions.
-The old committed image stays visible. The first successful BEGIN permanently
+BEGIN_RETAIN has the same allocation/generation contract, but initializes staging
+from the last committed pixels. Newly exposed areas after resize are black;
+uncommitted staging edits are never retained. Both begin operations keep the old
+committed image visible. The first successful begin permanently
 opts this handle into framed rendering; legacy blits then return `HACKOS_ERROR`.
 
 `HackosWindowUpload` is 24 bytes: `uint64_t generation`, then `uint32_t x, y,
 width, height`. Uploads validate the whole rectangle and copy its entire user
 buffer before modifying staging. PRESENT swaps in staging as the committed
-image and invalidates the client bounds. Pixels not uploaded remain black.
+image and invalidates its changed bounds. Pixels not uploaded remain black after
+BEGIN or retain their committed value after BEGIN_RETAIN.
 CANCEL discards staging without modifying the visible image. PRESENT is atomic
 with respect to composition, but is not a physical vertical-sync fence or a
 promise that the monitor has already displayed the frame. The compositor keeps

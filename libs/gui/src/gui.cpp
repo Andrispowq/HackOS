@@ -189,7 +189,8 @@ void Canvas::Text(const Font& font, int32_t left, int32_t top, const char* text,
                     int px = visible.x + col;
                     if (bits & (0x80 >> (px - x)))
                     {
-                        Fill({px, py, 1, 1}, colour);
+                        // visible is already intersected with the tile and clip.
+                        pixels[(uint64_t)(py - tile.y) * stride + (px - tile.x)] = colour;
                     }
                 }
             }
@@ -1098,6 +1099,11 @@ void View::Draw(Canvas& canvas, const Font& font) const
             continue;
         }
         canvas.SetClip(Intersect(original, w.clip));
+        Rect visibleBounds = Intersect(canvas.Clip(), w.bounds);
+        if (!visibleBounds.width || !visibleBounds.height)
+        {
+            continue;
+        }
         bool active = Available(i);
         uint32_t ink = active ? theme.text : theme.muted;
         bool focus = i == focused && windowFocused && !modal;

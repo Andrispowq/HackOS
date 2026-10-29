@@ -91,7 +91,7 @@ void Window::Release()
 
 uint64_t Window::Frame(uint64_t operation, HackosWindowFrame& frame)
 {
-    if (operation == HACKOS_WINDOW_BEGIN)
+    if (operation == HACKOS_WINDOW_BEGIN || operation == HACKOS_WINDOW_BEGIN_RETAIN)
     {
         if (!staging.address && !AllocateSurface(staging, sizeX, sizeY - navbar_height))
         {
@@ -99,7 +99,11 @@ uint64_t Window::Frame(uint64_t operation, HackosWindowFrame& frame)
         }
 
         memset(staging.address, 0, (uint64_t)staging.width * staging.height * 4);
-        // Begin starts a complete replacement frame, initially black.
+        if (operation == HACKOS_WINDOW_BEGIN_RETAIN)
+        {
+            staging.CopyFrom(front, 0, 0);
+        }
+        // Ordinary BEGIN starts black; retained frames copy only committed pixels.
         transaction = framed = true;
         ++generation;
         frame = {generation, sizeX, sizeY - navbar_height};
