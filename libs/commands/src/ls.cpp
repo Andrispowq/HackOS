@@ -1,4 +1,5 @@
 #include "command.h"
+#include "hackos/stdio.h"
 
 static void Usage()
 {
@@ -55,7 +56,7 @@ int main(int argc, char** argv)
     BufferedOutput output;
     if (longFormat)
     {
-        output.Print("MODE       UID GID ATTR       BYTES NAME\n");
+        output.Print("MODE         UID   GID ATTR      BYTES NAME\n");
     }
 
     HackosFileInfo entries[HACKOS_READDIR_BATCH_MAX];
@@ -87,7 +88,7 @@ int main(int argc, char** argv)
         bool directory = info.attributes & HACKOS_DIRECTORY;
         if (longFormat)
         {
-            char mode[] = "---------- ";
+            char mode[] = "----------";
             mode[0] = directory ? 'd' : '-';
             const char* bits = "rwxrwxrwx";
             for (unsigned bit = 0; bit < 9; ++bit)
@@ -98,12 +99,7 @@ int main(int argc, char** argv)
                 }
             }
 
-            output.Print(mode);
-            output.Number(info.uid);
-            output.Print(" ");
-            output.Number(info.gid);
-            output.Print(" ");
-            char attributes[] = "---- ";
+            char attributes[] = "----";
             if (info.attributes & 1)
             {
                 attributes[0] = 'r';
@@ -124,23 +120,9 @@ int main(int argc, char** argv)
                 attributes[3] = 'a';
             }
 
-            output.Print(attributes);
-
-            uint64_t value = info.size;
-            unsigned digits = 1;
-            while (value >= 10)
-            {
-                value /= 10;
-                digits++;
-            }
-
-            for (unsigned padding = digits; padding < 10; padding++)
-            {
-                output.Print(" ");
-            }
-
-            output.Number(info.size);
-            output.Print(" ");
+            char fields[96];
+            snprintf(fields, sizeof(fields), "%s %5u %5u %s %10lu ", mode, info.uid, info.gid, attributes, info.size);
+            output.Print(fields);
         }
 
         output.Print(info.name);

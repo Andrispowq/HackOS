@@ -52,14 +52,14 @@ static void Accounts()
     userCount = groupCount = 0;
     while (userCount < 32 && syscall_user_info(userCount, &users[userCount]) == 1)
     {
-        snprintf(userRows[userCount], sizeof(userRows[0]), "%s   UID %u%s", users[userCount].name,
+        snprintf(userRows[userCount], sizeof(userRows[0]), "%-31s  UID %5u%s", users[userCount].name,
                  users[userCount].credentials.uid, users[userCount].credentials.uid == 0 ? " (administrator)" : "");
         userItems[userCount] = userRows[userCount];
         ++userCount;
     }
     while (groupCount < 32 && syscall_group_info(groupCount, &groups[groupCount]) == 1)
     {
-        snprintf(groupRows[groupCount], sizeof(groupRows[0]), "%s   GID %u", groups[groupCount].name,
+        snprintf(groupRows[groupCount], sizeof(groupRows[0]), "%-31s  GID %5u", groups[groupCount].name,
                  groups[groupCount].gid);
         groupItems[groupCount] = groupRows[groupCount];
         ++groupCount;
@@ -127,39 +127,41 @@ static void Hardware()
         Line("Vendor: %s", h.cpu.vendor);
         Line("Family: %u | Model: %u | Stepping: %u", h.cpu.family, h.cpu.model, h.cpu.stepping);
         Line("Processors discovered: %u | Active: %u", h.cpu.discoveredCpus, h.cpu.activeCpus);
-        Line("Features EDX: %x | ECX: %x | Extended EDX: %x", h.cpu.featuresEdx, h.cpu.featuresEcx, h.cpu.extendedEdx);
+        Line("Features EDX: %08x | ECX: %08x | Extended EDX: %08x", h.cpu.featuresEdx, h.cpu.featuresEcx,
+             h.cpu.extendedEdx);
         Line("Only one processor executes kernel tasks; SMP is not enabled.");
     }
     else if (currentTab == 2)
     {
         if (syscall_hardware(HACKOS_HW_MEMORY, 0, &h) == 1)
         {
-            Line("Free: %llu KiB | Used: %llu KiB | Reserved: %llu KiB", h.memory.freeBytes / 1024,
+            Line("Free: %lu KiB | Used: %lu KiB | Reserved: %lu KiB", h.memory.freeBytes / 1024,
                  h.memory.usedBytes / 1024, h.memory.reservedBytes / 1024);
-            Line("Firmware usable: %llu KiB | Page size: %u bytes", h.memory.firmwareUsableBytes / 1024,
+            Line("Firmware usable: %lu KiB | Page size: %u bytes", h.memory.firmwareUsableBytes / 1024,
                  h.memory.pageSize);
-            Line("MEMORY MAP | Address | Bytes | Firmware type | Usable");
+            Line("%-16s  %20s  %4s  %s", "PHYSICAL ADDRESS", "BYTES", "TYPE", "USABLE");
         }
         for (unsigned i = 0; i < 255 && syscall_hardware(HACKOS_HW_MEMORY_MAP, i, &h) == 1; ++i)
         {
-            Line("%llx | %llu | %u | %s", h.region.address, h.region.size, h.region.type,
+            Line("%016lx  %20lu  %4u  %s", h.region.address, h.region.size, h.region.type,
                  h.region.usable ? "yes" : "no");
         }
     }
     else if (currentTab == 3)
     {
-        Line("STORAGE | Controller | Capacity | Sector size");
+        Line("%-6s  %-10s  %12s  %12s  %s", "DISK", "CONTROLLER", "MiB", "SECTOR BYTES", "BOOT");
         for (unsigned i = 0; i < 32 && syscall_hardware(HACKOS_HW_DISK, i, &h) == 1; ++i)
         {
-            Line("Disk %u | %s | %llu MiB | %u bytes%s", h.disk.slot, h.disk.type == 1 ? "ATA" : "AHCI",
-                 h.disk.sectors * h.disk.sectorSize / 1048576, h.disk.sectorSize, h.disk.bootDevice ? " | boot" : "");
+            Line("%6u  %-10s  %12lu  %12u  %s", h.disk.slot, h.disk.type == 1 ? "ATA" : "AHCI",
+                 h.disk.sectors * h.disk.sectorSize / 1048576, h.disk.sectorSize, h.disk.bootDevice ? "yes" : "no");
         }
-        Line("PCI | Segment:Bus:Slot.Function | Vendor:Device | Class/Subclass/Interface");
+        Line("");
+        Line("%-12s  %-11s  %-11s  %s", "PCI ADDRESS", "VENDOR:DEV", "CLASS/SUB/IF", "DESCRIPTION");
         for (unsigned i = 0; i < 512 && syscall_hardware(HACKOS_HW_PCI, i, &h) == 1; ++i)
         {
-            Line("%x:%x:%x.%u | %x:%x | %x/%x/%x%s", h.pci.segment, h.pci.bus, h.pci.slot, h.pci.function, h.pci.vendor,
-                 h.pci.device, h.pci.classCode, h.pci.subclass, h.pci.interface,
-                 h.pci.classCode == 12 && h.pci.subclass == 3 ? " | USB controller (discovery only)" : "");
+            Line("%04x:%02x:%02x.%u  %04x:%04x    %02x/%02x/%02x     %s", h.pci.segment, h.pci.bus, h.pci.slot,
+                 h.pci.function, h.pci.vendor, h.pci.device, h.pci.classCode, h.pci.subclass, h.pci.interface,
+                 h.pci.classCode == 12 && h.pci.subclass == 3 ? "USB controller (discovery only)" : "");
         }
     }
     else if (currentTab == 4)
@@ -178,10 +180,10 @@ static void Hardware()
     }
     else if (currentTab == 5)
     {
-        Line("ACPI TABLES | Signature | Revision | Bytes | OEM | Table ID");
+        Line("%-8s  %8s  %10s  %-8s  %s", "TABLE", "REVISION", "BYTES", "OEM", "TABLE ID");
         for (unsigned i = 0; i < 255 && syscall_hardware(HACKOS_HW_ACPI, i, &h) == 1; ++i)
         {
-            Line("%s | %u | %u | %s | %s", h.acpi.signature, h.acpi.revision, h.acpi.length, h.acpi.oem,
+            Line("%-8s  %8u  %10u  %-8s  %s", h.acpi.signature, h.acpi.revision, h.acpi.length, h.acpi.oem,
                  h.acpi.tableId);
         }
     }

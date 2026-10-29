@@ -39,6 +39,31 @@ struct Output
     }
 };
 
+static void Pad(Output& output, unsigned count, char ch = ' ')
+{
+    while (count)
+    {
+        output.Put(ch);
+        --count;
+    }
+}
+
+// Bound each field so an accidental huge width cannot monopolize a process.
+static bool Decimal(const char*& format, unsigned& value)
+{
+    value = 0;
+    while (*format >= '0' && *format <= '9')
+    {
+        value = value * 10 + (*format++ - '0');
+        if (value > 1024)
+        {
+            return false;
+        }
+    }
+
+    return true;
+}
+
 static int Format(Output& output, const char* format, va_list args)
 {
     while (*format)
@@ -48,6 +73,39 @@ static int Format(Output& output, const char* format, va_list args)
         {
             output.Put(ch);
             continue;
+        }
+
+        bool left = false, zero = false;
+        while (*format == '-' || *format == '0')
+        {
+            left = left || *format == '-';
+            zero = zero || *format == '0';
+            ++format;
+        }
+
+        unsigned width = 0, precision = 0;
+        bool precise = false;
+        if (!Decimal(format, width))
+        {
+            output.failed = true;
+            break;
+        }
+
+        if (*format == '.')
+        {
+            ++format;
+            precise = true;
+            if (!Decimal(format, precision))
+            {
+                output.failed = true;
+                break;
+            }
+        }
+
+        if (!*format)
+        {
+            output.failed = true;
+            break;
         }
 
         unsigned length = 0;
@@ -63,18 +121,45 @@ static int Format(Output& output, const char* format, va_list args)
             ++format;
         }
 
-        ch = *format++;
+        ch = *format;
+        if (ch)
+        {
+            ++format;
+        }
         if (ch == '%' || ch == 'c')
         {
+            if (!left)
+            {
+                Pad(output, width > 1 ? width - 1 : 0);
+            }
             output.Put(ch == '%' ? '%' : (char)va_arg(args, int));
+            if (left)
+            {
+                Pad(output, width > 1 ? width - 1 : 0);
+            }
         }
         else if (ch == 's')
         {
             const char* text = va_arg(args, const char*);
             text = text ? text : "(null)";
-            while (*text)
+            unsigned count = 0;
+            while ((!precise || count < precision) && text[count])
             {
-                output.Put(*text++);
+                ++count;
+            }
+
+            unsigned padding = width > count ? width - count : 0;
+            if (!left)
+            {
+                Pad(output, padding);
+            }
+            for (unsigned i = 0; i < count; ++i)
+            {
+                output.Put(text[i]);
+            }
+            if (left)
+            {
+                Pad(output, padding);
             }
         }
         else if (ch == 'd' || ch == 'i' || ch == 'u' || ch == 'x' || ch == 'X' || ch == 'p')
@@ -92,19 +177,12 @@ static int Format(Output& output, const char* format, va_list args)
             else if (ch == 'p')
             {
                 value = (uint64_t)va_arg(args, void*);
-                output.Put('0');
-                output.Put('x');
             }
             else
             {
                 value = length == 2 ? va_arg(args, unsigned long long)
                         : length    ? va_arg(args, unsigned long)
                                     : va_arg(args, unsigned int);
-            }
-
-            if (negative)
-            {
-                output.Put('-');
             }
 
             unsigned base = ch == 'x' || ch == 'X' || ch == 'p' ? 16 : 10;
@@ -117,9 +195,40 @@ static int Format(Output& output, const char* format, va_list args)
                 value /= base;
             } while (value);
 
+            if (precise && !precision && count == 1 && number[0] == '0')
+            {
+                count = 0;
+            }
+
+            unsigned zeros = precise && precision > count ? precision - count : 0;
+            unsigned prefix = ch == 'p' ? 2 : negative ? 1 : 0;
+            unsigned total = prefix + zeros + count;
+            unsigned padding = width > total ? width - total : 0;
+            if (!left && !(zero && !precise))
+            {
+                Pad(output, padding);
+            }
+            if (negative)
+            {
+                output.Put('-');
+            }
+            if (ch == 'p')
+            {
+                output.Put('0');
+                output.Put('x');
+            }
+            if (!left && zero && !precise)
+            {
+                Pad(output, padding, '0');
+            }
+            Pad(output, zeros, '0');
             while (count)
             {
                 output.Put(number[--count]);
+            }
+            if (left)
+            {
+                Pad(output, padding);
             }
         }
         else

@@ -134,7 +134,7 @@ def readDesktop(expr, size):
 count = struct.unpack('<I', readDesktop('view.count', 4))[0]
 labels = [readDesktop('view.widgets[' + str(i) + '].text', 256).split(bytes(1), 1)[0].decode('ascii') for i in range(count)]
 clocks = [label for label in labels if label.endswith(' UTC')]
-assert len(clocks) == 1 and len(clocks[0]) == 12 and clocks[0][:2].isdigit(), clocks
+assert len(clocks) == 1 and len(clocks[0]) == 23 and clocks[0][:4].isdigit() and clocks[0][4] == '-' and clocks[0][7] == '-' and clocks[0][10] == ' ', clocks
 assert 'Settings' in labels""")
             shell('echo FIRST_TERMINAL', 'FIRST_TERMINAL')
             shell('cd /tmp', '$ ')
@@ -196,6 +196,19 @@ assert 'Settings' in labels""")
             inspect("assert number('user_windows_live') == 3")
             key('f4', alt=True)
             inspect("assert number('user_windows_live') == 2")
+            # Launch every added graphical desktop icon and close it cleanly.
+            for y, marker in [(285, 'EDITOR_READY'), (390, 'SETTINGS_READY'), (495, 'GUI_WIDGETS_READY')]:
+                mark = len(g.output())
+                click(60, y)
+                g.wait(marker, mark)
+                inspect("assert number('user_windows_live') == 3")
+                g.screen('desktop-icon-' + marker.lower())
+                key('f4', alt=True)
+                if marker == 'GUI_WIDGETS_READY':
+                    g.wait('GUI_WIDGET_DIALOG', mark)
+                    key('tab')
+                    key('ret')
+                inspect("assert number('user_windows_live') == 2")
             # Launch Files from the authenticated launcher and close it cleanly.
             mark = len(g.output())
             click(600, 1000)

@@ -1,5 +1,6 @@
 #pragma once
 #include "command.h"
+#include "hackos/stdio.h"
 
 // Plain text survives redirection without terminal escape sequences. Stop on
 // the first failed write so utilities also report broken pipes/disk errors.
@@ -14,6 +15,19 @@ class ReportOutput
         {
             ok = Write(1, value, Length(value));
         }
+    }
+
+    template <typename... Args> void Format(const char* format, Args... args)
+    {
+        char text[512];
+        int length = snprintf(text, sizeof(text), format, args...);
+        if (length < 0 || (unsigned)length >= sizeof(text))
+        {
+            ok = false;
+            return;
+        }
+
+        Text(text);
     }
 
     void Number(uint64_t value, unsigned base = 10, unsigned width = 0)

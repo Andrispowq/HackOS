@@ -51,7 +51,7 @@ while time.monotonic() < deadline:
     while int(p) and (not int(w) or int(p['pid']) != int(w['owner'])): p = p['next']
     if int(p) and int(p['state']) == 6 and int(w['events']['count']) == 0 and int(gdb.parse_and_eval('mouseEvents.count')) == 0:
         break
-else: raise AssertionError('Editor did not drain input and block')
+else: raise AssertionError('Settings did not drain input and block')
 def read(expression, length):
     address = int(gdb.parse_and_eval('(unsigned long)&' + expression))
     result = b''
@@ -133,6 +133,12 @@ quit
             for title in ['CPU', 'Memory', 'Devices', 'Display', 'Firmware']:
                 click(title)
                 inspect("assert u('rowCount') > 0")
+                if title == 'Memory':
+                    inspect("assert len(text('rows[3]').split()[0]) == 16 and text('rows[3]')[16:18] == '  '")
+                if title == 'Firmware':
+                    inspect("assert text('rows[1]')[8:10] == '  ' and text('rows[1]')[18:20] == '  '")
+                if title in ('Memory', 'Devices', 'Firmware'):
+                    g.screen('aligned-' + title.lower())
             g.screen('system-information')
             click('Accounts')
             fill('groupName', 'staff')

@@ -12,8 +12,8 @@ and credential checks. A second copy of DESKTOP does not acquire desktop authori
 - **New terminal** opens another terminal, up to eight concurrently. Windows have
   distinct numbered titles and staggered positions. Each shell has independent
   working directory, history, input, output grid, foreground owner and jobs.
-- The hardcoded **Terminal** and **Files** desktop icons launch on a single click
-  (or Enter/Space while focused). They remain below application windows and are
+- The hardcoded **Terminal**, **Files**, **Editor**, **Settings**, and **Widgets** desktop
+  icons launch on a single click (or Enter/Space while focused). They remain below application windows and are
   not taskbar entries. The desktop owns this background surface; it cannot be
   dragged, resized, minimized or raised above applications.
 - **Editor** opens the [graphical text editor](editor.md).
@@ -108,5 +108,5 @@ owned window queue. Desktop exit reclaims both panel and background; the pair
 uses two of the sixteen window slots and the normal aggregate surface budget.
 
 The launcher also opens [Settings](settings.md). The right side displays the RTC
-time as HH:MM:SS UTC, updated once per second. The guest assumes the RTC uses UTC;
-there is no time-zone configuration yet.
+date and time as YYYY-MM-DD HH:MM:SS UTC, updated once per second. The guest
+assumes the RTC uses UTC; there is no time-zone configuration yet.

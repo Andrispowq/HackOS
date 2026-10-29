@@ -416,7 +416,7 @@ bool View::SetDocument(unsigned id, TextDocument* document)
 
 bool View::SetIcon(unsigned id, unsigned icon)
 {
-    if (id >= count || widgets[id].kind != Kind::IconButton || icon < 1 || icon > 2)
+    if (id >= count || widgets[id].kind != Kind::IconButton || icon < 1 || icon > 5)
     {
         return false;
     }
@@ -1153,11 +1153,36 @@ void View::Draw(Canvas& canvas, const Font& font) const
                     canvas.Fill({x + 18, y + 36, 12, 4}, theme.border);
                     canvas.Fill({x + 10, y + 40, 28, 3}, theme.border);
                 }
-                else
+                else if (w.icon == 2)
                 {
                     canvas.Fill({x + 2, y + 4, 20, 10}, 0xffd6a84b);
                     canvas.Fill({x, y + 12, 48, 30}, 0xffe9bd62);
                     canvas.Fill({x + 3, y + 16, 42, 3}, 0xffffd982);
+                }
+                else if (w.icon == 3)
+                {
+                    canvas.Fill({x + 8, y, 32, 44}, theme.text);
+                    for (int row = 0; row < 4; ++row)
+                    {
+                        canvas.Fill({x + 13, y + 9 + row * 7, 22, 2}, theme.border);
+                    }
+                    canvas.Fill({x + 30, y + 24, 5, 22}, 0xffe9bd62);
+                }
+                else if (w.icon == 4)
+                {
+                    for (int row = 0; row < 3; ++row)
+                    {
+                        canvas.Fill({x, y + 8 + row * 14, 48, 3}, theme.border);
+                        canvas.Fill({x + 8 + (row % 2) * 22, y + 4 + row * 14, 8, 11}, theme.accent);
+                    }
+                }
+                else if (w.icon == 5)
+                {
+                    canvas.Fill({x, y, 48, 42}, theme.border);
+                    canvas.Fill({x + 2, y + 2, 44, 7}, theme.accent);
+                    canvas.Fill({x + 4, y + 13, 18, 10}, theme.text);
+                    canvas.Fill({x + 26, y + 13, 18, 10}, theme.selection);
+                    canvas.Fill({x + 4, y + 28, 40, 9}, theme.field);
                 }
                 canvas.Text(font, w.bounds.x + (w.bounds.width - (int)Canvas::Measure(w.text).width) / 2, y + 50,
                             w.text, ink);

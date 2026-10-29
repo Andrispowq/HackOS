@@ -35,7 +35,7 @@ def test(firmware, timeout):
             g.shell('runas guest storprobe guest', 'STORAGE_GUEST_OK')
             g.shell('chmod 755 /usr/bin/echo', '$ ')
             g.shell('chown guest users /tmp/new', '$ ')
-            g.shell('ls -l /tmp', '-rw-r----- 1000 1000')
+            g.shell('ls -l /tmp', '-rw-r-----  1000  1000')
             g.screen('permissions')
         with boot(directory, image, firmware, 'reboot', timeout) as g:
             g.wait('Action: ')
@@ -76,7 +76,7 @@ def test(firmware, timeout):
             g.login('root', ADMIN_PASSWORD)
             g.shell('cat /tmp/recovered', 'created')
             g.shell('cat /tmp/new', 'File not found.')
-            g.shell('ls -l /tmp', '-rw-r--r-- 1000 1000')
+            g.shell('ls -l /tmp', '-rw-r--r--  1000  1000')
             g.screen('recovered')
         assert require_success(command(['mtype', '-i', filesystem(image), '::/TMP/RECOVERED']), 'persisted rename') == 'created'
         assert command(['mdir', '-i', filesystem(image), '::/TMP/NEW']).returncode != 0

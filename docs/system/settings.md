@@ -9,7 +9,9 @@ or Alt-F4. Tab/Shift-Tab navigate controls; Enter activates buttons and lists.
 ## Information pages
 
 System, CPU, Memory, Devices, Display and Firmware present copied `sysinfo`
-records in scrollable lists. Memory includes the firmware map; Devices includes
+records in scrollable lists with padded, aligned columns. Memory addresses and
+PCI identifiers use fixed-width zero-padded hexadecimal; sizes and IDs are
+right aligned, while names are left aligned. Memory includes the firmware map; Devices includes
 storage and PCI/USB controller discovery; Display includes PS/2 state; Firmware
 lists ACPI tables. Switch pages to refresh the snapshot. Hardware queries retain
 the existing UID-0 requirement. Ordinary users see a permission explanation.

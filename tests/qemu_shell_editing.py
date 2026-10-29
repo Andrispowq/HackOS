@@ -83,7 +83,7 @@ quit
             guest.screen('editing')
             require_success(command(['mcopy','-i',volume,'::/TMP/LIST',directory/'listing.txt']), 'read listing')
             listing=(directory/'listing.txt').read_text()
-            assert 'MODE       UID GID ATTR       BYTES NAME' in listing and 'CONPROBE' in listing
+            assert 'MODE         UID   GID ATTR      BYTES NAME' in listing and 'CONPROBE' in listing
         return 'Caret blink pixels, middle insertion/backspace/delete, wrapped lines, history, completion, directory pages and cursor ownership.'
     report.check('shell_editing_and_listing',run)
     return report.finish()

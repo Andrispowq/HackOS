@@ -264,3 +264,8 @@ query path performs no hardware writes, allocation, blocking or kernel console
 printing. PCI stores at most 512 functions and reports dropped entries explicitly;
 missing discovery is distinguished from an empty inventory. The memory map and
 ACPI information remain owned by the existing boot/discovery components.
+
+Process (`ps`), account (`users`, `groups`), directory (`ls -l`), and `sysinfo`
+tables use space-padded columns that remain plain text when redirected. Names
+are left aligned, numeric IDs/sizes right aligned, and hardware identifiers use
+zero-padded hexadecimal. `ps` prints PID, PPID, PGID, UID, GID, state and name.

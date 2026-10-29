@@ -98,6 +98,13 @@ int main(int argc, char** argv)
         REQUIRE(snprintf(formatted, 5, "%s", "abcdef") == 6 && Equal(formatted, "abcd"));
         REQUIRE(snprintf(nullptr, 0, "%lld", (-9223372036854775807LL - 1)) == 20);
         REQUIRE(snprintf(formatted, sizeof(formatted), "%q") == -1);
+        REQUIRE(snprintf(formatted, sizeof(formatted), "%06d %-5s %04x", -7, "hi", 0xab) == 17);
+        REQUIRE(Equal(formatted, "-00007 hi    00ab"));
+        REQUIRE(snprintf(formatted, sizeof(formatted), "%.3s %8.4u", "abcdef", 12u) == 12);
+        REQUIRE(Equal(formatted, "abc     0012"));
+        REQUIRE(snprintf(formatted, 5, "%08u", 12u) == 8 && Equal(formatted, "0000"));
+        REQUIRE(snprintf(formatted, sizeof(formatted), "%1025u", 1u) == -1);
+        REQUIRE(snprintf(formatted, sizeof(formatted), "%") == -1);
         REQUIRE(printf("USABILITY_RUNTIME_OK %u\n", 17u) == 24);
         return 0;
     }

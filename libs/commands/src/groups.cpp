@@ -1,4 +1,5 @@
 #include "accounts.h"
+#include "hackos/stdio.h"
 
 int main(int argc, char**)
 {
@@ -7,13 +8,18 @@ int main(int argc, char**)
         return 2;
     }
 
+    if (printf("%-31s %5s\n", "GROUP", "GID") < 0)
+    {
+        return 1;
+    }
+
     HackosGroupInfo group;
     for (uint64_t i = 0; syscall_group_info(i, &group) == 1; ++i)
     {
-        Print(group.name);
-        Print(" gid=");
-        Number(group.gid);
-        Print("\n");
+        if (printf("%-31s %5u\n", group.name, group.gid) < 0)
+        {
+            return 1;
+        }
     }
 
     return 0;

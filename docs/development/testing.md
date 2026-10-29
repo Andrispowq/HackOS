@@ -1033,3 +1033,8 @@ preservation on save/move and directory modification on child changes.
 `python3 tests/qemu_settings.py --firmware bios` (repeat with `uefi`) validates
 graphical system pages, durable account/group edits, direct syscall authorization
 probes, read-only guest controls and current-password-verified password changes.
+
+`make -C tests test-formatting` checks the real userspace formatter with ASan/UBSan,
+including alignment, sign/zero padding, precision, invalid formats, truncation and
+field limits. `make -C tests test-formatting-qemu FIRMWARE=bios` (repeat with `uefi`)
+checks the runtime and redirected console table columns in a real guest.

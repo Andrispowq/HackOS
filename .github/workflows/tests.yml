@@ -87,6 +87,13 @@ jobs:
             --mount "type=bind,source=$PWD,target=/work,readonly" \
             --mount "type=bind,source=$PWD/tests/out,target=/work/tests/out" \
             hackos-tests:host python3 tests/gui_library.py
+      - name: Exercise userspace printf formatting with native sanitizers
+        if: ${{ !cancelled() && matrix.suite == 'host' }}
+        run: |
+          docker run --rm --network none --user "$(id -u):$(id -g)" \
+            --mount "type=bind,source=$PWD,target=/work,readonly" \
+            --mount "type=bind,source=$PWD/tests/out,target=/work/tests/out" \
+            hackos-tests:host python3 tests/formatting.py
       - name: Summarize results
         if: always()
         run: python3 tests/summarize.py >> "$GITHUB_STEP_SUMMARY"
@@ -104,6 +111,7 @@ jobs:
             tests/out/surface-allocator/
             tests/out/gui-keyboard/
             tests/out/gui-library/
+            tests/out/formatting/
             !tests/out/**/*.o
 
   firmware:
@@ -347,6 +355,15 @@ jobs:
             --mount "type=bind,source=$PWD,target=/work,readonly" \
             --mount "type=bind,source=$PWD/tests/out,target=/work/tests/out" \
             hackos-tests:toolchain python3 tests/qemu_settings.py --firmware "$FIRMWARE"
+      - name: Exercise padded console tables and printf
+        if: ${{ !cancelled() && steps.build.outcome != 'skipped' }}
+        env:
+          FIRMWARE: ${{ matrix.firmware }}
+        run: |
+          docker run --rm --network none --user "$(id -u):$(id -g)" \
+            --mount "type=bind,source=$PWD,target=/work,readonly" \
+            --mount "type=bind,source=$PWD/tests/out,target=/work/tests/out" \
+            hackos-tests:toolchain python3 tests/qemu_formatting.py --firmware "$FIRMWARE"
       - name: Summarize results
         if: always()
         run: python3 tests/summarize.py >> "$GITHUB_STEP_SUMMARY"
@@ -383,3 +400,4 @@ jobs:
             tests/out/qemu-files-gui-${{ matrix.firmware }}/
             tests/out/qemu-editor-${{ matrix.firmware }}/
             tests/out/qemu-settings-${{ matrix.firmware }}/
+            tests/out/qemu-formatting-${{ matrix.firmware }}/

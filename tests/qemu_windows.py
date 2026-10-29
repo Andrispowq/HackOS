@@ -611,7 +611,7 @@ gdb.selected_inferior().write_memory(physical, struct.pack("<Q", 1))
                     enter("./USR/BIN/WINPROBE minimized &", "WINDOW_HELD")
                     click(20, 900)
                     enter("ps", "WINPROBE")
-                    pid = re.findall(r"Process: ~/USR/BIN/WINPROBE \((\d+)\) ALIVE", output())[-1]
+                    pid = re.findall(r"(?:^|\n) *(\d+) +\d+ +\d+ +\d+ +\d+ +ALIVE +~/USR/BIN/WINPROBE", output())[-1]
                     enter("kill " + pid, "Task stopped.")
                     inspect("cleanup", """
 assert int(gdb.parse_and_eval("user_windows_live")) == 0

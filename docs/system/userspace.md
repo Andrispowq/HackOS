@@ -251,8 +251,12 @@ pages until process exit. Do not mix direct heap resizing with libc allocation.
 
 `printf`, `snprintf` and `vsnprintf` format in userspace with literal checked
 writes, supporting `%s`, `%c`, signed/unsigned decimal, hex, pointers, `%%` and
-`l`/`ll`/`z` lengths. Width, precision and floating point are unsupported and return
--1. Bounded formatting NUL-terminates when capacity is nonzero and returns the
+`l`/`ll`/`z` lengths. Numeric widths, `-` left alignment, `0` numeric padding,
+string precision and integer precision are supported (each width/precision is
+bounded to 0–1024). For example, `%-16s %8u %08x` produces aligned columns.
+Precision overrides zero padding, and signs/pointer prefixes precede zero padding.
+Floating point, dynamic `*` widths/precision, and unsupported formats return -1.
+Bounded formatting NUL-terminates when capacity is nonzero and returns the
 untruncated character count. Physical-address allocation and legacy raw kernel
 objects remain unavailable; window programs use the existing owned-handle ABI.
 

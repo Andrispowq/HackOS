@@ -136,17 +136,12 @@ static void Memory()
 static void MemoryMap()
 {
     out.Heading("Firmware memory map");
-    out.Text("  Physical start     Bytes              Type  Allocator usable\n");
+    out.Format("  %-16s   %-16s   %-4s  %s\n", "Physical start", "Bytes", "Type", "Allocator usable");
     HackosHardwareInfo info;
     for (uint64_t i = 0; Read(HACKOS_HW_MEMORY_MAP, i, info); ++i)
     {
-        out.Text("  ");
-        out.Number(info.region.address, 16, 16);
-        out.Text("   ");
-        out.Number(info.region.size, 16, 16);
-        out.Text("   ");
-        out.Number(info.region.type, 16, 4);
-        out.Text(info.region.usable ? "  yes\n" : "  no\n");
+        out.Format("  %016lx   %016lx   %04x  %s\n", info.region.address, info.region.size, info.region.type,
+                   info.region.usable ? "yes" : "no");
     }
 
     out.Text("  Values are hexadecimal; type numbers follow the boot firmware (E820 or EFI).\n");
@@ -227,7 +222,7 @@ static void Pci(bool usb)
     }
 
     uint32_t dropped = info.system.pciDropped;
-    out.Text("  Address       Vendor:Device  Class:Sub:IF Rev  Description\n");
+    out.Format("  %-12s  %-11s  %-12s %-3s  %s\n", "Address", "Vendor:Dev", "Class:Sub:IF", "Rev", "Description");
     uint64_t count = 0;
     for (uint64_t i = 0; Read(HACKOS_HW_PCI, i, info); ++i)
     {
@@ -237,27 +232,8 @@ static void Pci(bool usb)
             continue;
         }
         ++count;
-        out.Text("  ");
-        out.Number(pci.segment, 16, 4);
-        out.Text(":");
-        out.Number(pci.bus, 16, 2);
-        out.Text(":");
-        out.Number(pci.slot, 16, 2);
-        out.Text(".");
-        out.Number(pci.function);
-        out.Text("  ");
-        out.Number(pci.vendor, 16, 4);
-        out.Text(":");
-        out.Number(pci.device, 16, 4);
-        out.Text("    ");
-        out.Number(pci.classCode, 16, 2);
-        out.Text(":");
-        out.Number(pci.subclass, 16, 2);
-        out.Text(":");
-        out.Number(pci.interface, 16, 2);
-        out.Text("    ");
-        out.Number(pci.revision, 16, 2);
-        out.Text("   ");
+        out.Format("  %04x:%02x:%02x.%u  %04x:%04x    %02x:%02x:%02x     %02x   ", pci.segment, pci.bus, pci.slot,
+                   pci.function, pci.vendor, pci.device, pci.classCode, pci.subclass, pci.interface, pci.revision);
         out.Text(usb ? UsbInterface(pci.interface) : PciClass(pci.classCode));
         if (!usb && pci.classCode == 1 && pci.subclass == 6 && pci.interface == 1)
         {
@@ -319,24 +295,13 @@ static void Display()
 static void Acpi()
 {
     out.Heading("ACPI tables");
-    out.Text("  Table  Revision  Bytes  OEM / Table ID / OEM revision\n");
+    out.Format("  %-8s %8s %10s  %-8s %-12s %s\n", "Table", "Revision", "Bytes", "OEM", "Table ID", "OEM revision");
     HackosHardwareInfo info;
     uint64_t count = 0;
     for (; Read(HACKOS_HW_ACPI, count, info); ++count)
     {
-        out.Text("  ");
-        out.Text(info.acpi.signature);
-        out.Text("   ");
-        out.Number(info.acpi.revision, 10, 3);
-        out.Text("       ");
-        out.Number(info.acpi.length, 10, 5);
-        out.Text("  ");
-        out.Text(info.acpi.oem);
-        out.Text(" / ");
-        out.Text(info.acpi.tableId);
-        out.Text(" / ");
-        out.Number(info.acpi.oemRevision);
-        out.Text("\n");
+        out.Format("  %-8s %8u %10u  %-8s %-12s %u\n", info.acpi.signature, info.acpi.revision, info.acpi.length,
+                   info.acpi.oem, info.acpi.tableId, info.acpi.oemRevision);
     }
 
     if (!count)

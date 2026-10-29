@@ -118,3 +118,11 @@ test-editor:
 .PHONY: test-settings
 test-settings:
 	$(PYTHON) qemu_settings.py --firmware $(FIRMWARE)
+
+.PHONY: test-formatting
+test-formatting:
+	$(PYTHON) formatting.py
+
+.PHONY: test-formatting-qemu
+test-formatting-qemu:
+	$(PYTHON) qemu_formatting.py --firmware $(FIRMWARE)

@@ -63,8 +63,8 @@ int main()
     auto settings = view.Add(Gui::Kind::Button, launcher, "Settings");
     statusLabel = view.Add(Gui::Kind::Label, launcher, "Ready");
     view.SetLayout(statusLabel, 0, 32, 1, 0, 0);
-    auto clockLabel = view.Add(Gui::Kind::Label, launcher, "--:--:-- UTC");
-    view.SetLayout(clockLabel, 104, 32);
+    auto clockLabel = view.Add(Gui::Kind::Label, launcher, "---- -- -- --:--:-- UTC");
+    view.SetLayout(clockLabel, 192, 32);
     unsigned lastSecond = 60;
     auto tasks = view.Add(Gui::Kind::Row, 0);
     view.SetLayout(tasks, 0, 36, 0, 0, 3);
@@ -80,8 +80,17 @@ int main()
     icons.SetTheme(palette);
     auto terminalIcon = icons.Add(Gui::Kind::IconButton, 0, "Terminal");
     auto filesIcon = icons.Add(Gui::Kind::IconButton, 0, "Files");
+    auto editorIcon = icons.Add(Gui::Kind::IconButton, 0, "Editor");
+    auto settingsIcon = icons.Add(Gui::Kind::IconButton, 0, "Settings");
+    auto widgetsIcon = icons.Add(Gui::Kind::IconButton, 0, "Widgets");
     icons.SetLayout(terminalIcon, 112, 96);
     icons.SetLayout(filesIcon, 112, 96);
+    icons.SetLayout(editorIcon, 112, 96);
+    icons.SetLayout(settingsIcon, 112, 96);
+    icons.SetLayout(widgetsIcon, 112, 96);
+    icons.SetIcon(editorIcon, 3);
+    icons.SetIcon(settingsIcon, 4);
+    icons.SetIcon(widgetsIcon, 5);
     icons.SetIcon(terminalIcon, 1);
     icons.SetIcon(filesIcon, 2);
     HackosWindowSpec backgroundSpec = {1, 1, screen.width - 2, screen.height - 164, "Desktop icons"};
@@ -99,13 +108,9 @@ int main()
         HackosClock now = {};
         if (syscall_clock(&now) == 0 && now.second != lastSecond)
         {
-            char text[] = "00:00:00 UTC";
-            text[0] += now.hour / 10;
-            text[1] += now.hour % 10;
-            text[3] += now.minute / 10;
-            text[4] += now.minute % 10;
-            text[6] += now.second / 10;
-            text[7] += now.second % 10;
+            char text[32];
+            snprintf(text, sizeof(text), "%04u-%02u-%02u %02u:%02u:%02u UTC", now.year, now.month, now.day, now.hour,
+                     now.minute, now.second);
             view.SetText(clockLabel, text);
             lastSecond = now.second;
         }
@@ -216,6 +221,18 @@ int main()
                 else if (action.widget == filesIcon)
                 {
                     Launch("~/USR/BIN/FILES");
+                }
+                else if (action.widget == editorIcon)
+                {
+                    Launch("~/USR/BIN/EDITOR");
+                }
+                else if (action.widget == settingsIcon)
+                {
+                    Launch("~/USR/BIN/SETTINGS");
+                }
+                else if (action.widget == widgetsIcon)
+                {
+                    Launch("~/USR/BIN/WINDOW", true);
                 }
             }
         }

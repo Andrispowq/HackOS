@@ -135,9 +135,10 @@ tab displays as one cell. See [editor](editor.md) for keys and behavior.
 choose how to handle these commands. Modals continue to trap input.
 
 `IconButton` is a normal focusable button with a built-in code-drawn terminal
-(icon 1) or folder (icon 2), selected through `SetIcon`. It follows the usual
-clipping, focus and press/release activation rules. Desktop uses these two fixed
-icons; no image assets or icon discovery mechanism are required.
+(1), folder (2), editor (3), settings sliders (4), or widgets window (5), selected
+through `SetIcon`. It follows the usual clipping, focus and press/release
+activation rules. Desktop uses these five fixed icons; no image assets or icon
+discovery mechanism are required.
 
 Lists emit Activate on Enter/Space or a second click on the same item within
 500 ms. A single click emits Change. The optional final `View::Handle` argument
