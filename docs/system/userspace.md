@@ -6,7 +6,8 @@ HackOS boots into the ring-3 login agent at `~/USR/BIN/LOGIN`, with no root
 credentials. `InitialiseKernel` initializes filesystems, validates the account
 store, creates idle, loads LOGIN, then enables IRQs. Setup creates the initial
 administrator on an empty store; successful password verification starts
-`~/USR/BIN/SHELL` with the selected credentials. A missing or invalid login
+`~/USR/BIN/DESKTOP` with the selected credentials, or `~/USR/BIN/SHELL` for
+`console` recovery login. The desktop starts independent terminal shells. A missing or invalid login
 program produces an explicit boot error; there is no unauthenticated shell fallback.
 See [persistent accounts and recovery](accounts.md). `kernel_main` remains idle, refreshes the console and reaps dead tasks.
 
@@ -25,7 +26,7 @@ The loader validates file and virtual ranges, requires readable segments,
 rejects writable executable pages, page-sharing segments, dynamic linking,
 interpreters and TLS, and caps ELF files at 1 MiB. Empty load segments are allowed.
 BSS and page padding are zeroed. CR0.WP and EFER.NXE enforce permissions; CPUs
-without NX cannot launch user programs. Spawn permits at most 16 queued tasks,
+without NX cannot launch user programs. The shared loader permits at most 64 queued tasks,
 including idle and zombies awaiting reclamation. Each parent can also retain up
 to 16 uncollected child results; it must wait for them before spawning more.
 
@@ -98,7 +99,8 @@ Console rendering and hardware operations remain kernel services.
 | `useradd <name> [group]`, `groupadd <name>` | Root creates a locked account (default group `users`) or group and persists it |
 | `usermod <user> <group>` | Root adds a supplementary group for future `runas` launches |
 | `passwd [user]` | Root sets a confirmed password; defaults to its own account |
-| `logout` | End this shell session and its background descendants, then return to login |
+| `logout` | End the entire authenticated session and its descendants, then return to login |
+| `exit` | Exit this shell and its jobs; a window terminal closes without ending sibling terminals |
 | `runas <user> <command> [args]` | Root launches a program with the selected account's credentials and waits |
 | `shutdown`, `restart` | Root requests kernel ACPI power-off or platform restart |
 
@@ -327,7 +329,8 @@ normal foreground editing and Ctrl-C; appending `&` starts without terminal
 input. The shell prompt resolves its actual UID to a username. `logout` returns
 to the protected login agent and ends all descendants, including background
 programs launched under another UID. A manually launched nested shell can exit
-to its parent; only the authenticated session shell owns session teardown.
+to its parent with `exit`. Authenticated terminal shells and the desktop can
+request whole-session teardown; ordinary children cannot.
 
 Filesystem ownership and mode bits are stored in the versioned FAT extension.
 Ancestor search, file read/write, executable loading and directory mutations
@@ -414,6 +417,10 @@ return an error rather than being reinterpreted as new operations.
 | 88 | `window_event2(handle, out)` | One GUI event; 1 delivered, 0 empty, error for invalid access |
 | 89 | `clipboard(operation, buffer, length)` | QUERY=0, READ=1, WRITE=2; focused session owner only, up to 4096 bytes |
 | 90 | `window_close_reply(handle, accept)` | 0 rejects, 1 closes/releases an owned pending close request |
+| 91 | `auth_desktop(name, password)` | Boot login agent authenticates and starts the desktop session leader |
+| 92 | `desktop(operation, value, entry)` | Session desktop display/panel queries and authorized window controls |
+| 93 | `terminal_session(operation, value, buffer)` | Owned terminal endpoint creation, copied grid/state, input and resize |
+| 94 | `session_logout()` | Authenticated shell/desktop ends the whole session |
 
 `HackosTerminalSettings` contains six uint32 fields: pixel `fontSize`, RGBA
 `bgColour`, RGBA `fontColour`, `columns`, `rows`, and zero `reserved`. The colours
@@ -804,3 +811,10 @@ shows Save and close / Discard / Cancel; Tab/Shift-Tab and Enter operate its
 buttons, Escape cancels, and pointer clicks also work. The normal gradient demo
 uses the same GUI input/close API. The reusable toolkit is documented in [Userspace GUI library](gui.md);
 `window --widgets` exercises its drawing, layout, widgets and dialogs.
+
+## Desktop sessions
+
+See [desktop and independent terminals](desktop.md) for authenticated desktop
+authority, taskbar controls, per-terminal input/output routing and foreground
+jobs. Syscalls 91–94 add the desktop and terminal endpoint interfaces; existing
+window, stream and recovery-console interfaces retain their contracts.

@@ -92,3 +92,6 @@ is no longer called at boot.
   Treat the [program interface](userspace.md) as experimental.
 
 Continue with [memory](memory.md), [devices](devices.md), or [graphics](graphics.md).
+
+The [desktop and terminal guide](desktop.md) covers the authenticated launcher,
+taskbar, independent terminal endpoints and recovery login.

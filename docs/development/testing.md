@@ -946,3 +946,46 @@ whitespace checks passed. Final images and source snapshots are available in
 `tests/out/build-bios` and `tests/out/build-uefi`; consolidated results and
 production-source hashes are in `tests/out/gui-step3/final-validation.json`
 and `tests/out/gui-step3/source-manifest.json`.
+
+## Desktop and independent terminals
+
+`python3 tests/qemu_desktop.py --firmware bios` / `uefi` (or `make -C tests
+test-desktop FIRMWARE=...`) uses normal authenticated desktop login on a fresh
+disposable image. It checks independent screen grids, working directories and
+input owners; pipelines/redirection and foreground Ctrl-Z/fg/Ctrl-C; taskbar
+focus/minimize/restore/close and GUI launching;
+maximize/restore geometry; terminal close and relaunch; whole-session logout;
+recovery-console login and forced-desktop-exit recovery. GDB independently
+inspects copied cell grids, endpoint/controller ownership, window state and
+resource cleanup. Screenshots capture terminal windows and desktop recovery.
+A guest probe verifies denied desktop control, foreign terminal access and
+logout from an ordinary process, and validates terminal geometry, malformed
+requests, duplicate endpoint rejection, and signal isolation after a child shell
+exits. Command entry waits for each guest echo, uses explicit QMP key releases, and
+checks fresh prompts/foreground ownership around job control. This prevents
+host timing from outrunning bounded input queues during framebuffer-heavy TCG
+scheduling. The suite fills all eight terminal
+slots and verifies ninth-launch failure and cleanup. CI runs this
+suite on both firmware paths.
+
+Existing command/ABI suites explicitly select `console` login so their original
+console contracts and pixel assertions remain meaningful. The desktop suite
+covers the new default login path. The image validator now checks DESKTOP and
+TERM ELF segment permissions, overlap and page limits alongside the GUI demo.
+
+Step-4 validation passed fresh BIOS (15 build checks) and UEFI (13 build checks)
+images and all eighteen guest suites on each path: desktop, boot, loader,
+accounts, shell, userspace ABI, windows, files, storage, usability, streams,
+utilities, filters, text tools, terminal settings, shell editing, GUI input and
+GUI library. Final desktop screenshots were inspected on both paths. Desktop
+retries exposed test timing problems; echo-paced command entry, explicit key
+releases and fresh prompt/foreground checks resolved them without weakening
+assertions. UEFI storage missed its journal interruption breakpoint once; the
+unchanged suite passed both cases on rerun. The full host suite passed 210 checks
+using the explicit local x86-64 UBSan fallback. Native ASan+UBSan GUI library,
+keyboard (13), surface allocator, loader (15), and filter (11) checks passed,
+as did six boot-asset checks and the BIOS chain probe. Formatting (342 files),
+Python syntax, workflow lint and diff whitespace checks passed. Final images and
+source snapshots are in `tests/out/build-bios` and `tests/out/build-uefi`;
+`tests/out/desktop-step4/final-validation.json` records reports and image hashes,
+and `source-manifest.json` verifies both builds used the final production sources.

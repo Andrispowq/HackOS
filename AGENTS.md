@@ -15,7 +15,7 @@ The [documentation index](docs/index.md) links to the system and development
 guides. Keep those pages consistent with changes to component contracts.
 
 Tasking supports idle plus isolated ring-3 programs. The standalone login agent at
-`~/USR/BIN/LOGIN` starts automatically and authenticates before launching `SHELL`; idle refreshes the console and reaps
+`~/USR/BIN/LOGIN` starts automatically and authenticates before launching `DESKTOP` (or `SHELL` for `console` recovery login); idle refreshes the console and reaps
 exited tasks. User programs own private frames and page tables, with shared
 supervisor-only kernel mappings. Both `./` and `user` launch ring-3 programs with bounded `argc`/`argv` and
 foreground waits by default; a separate trailing `&` requests background mode.
@@ -84,6 +84,12 @@ reclaims them on exit and composites them over the console. `USR/BIN/WINDOW`
 is the standalone demo. Idle dispatches ordered keyboard/mouse ingress, focus
 and pointer capture; window events use fixed queues and copied state records. See `docs/system/userspace.md` for ABI, ownership and lifecycle contracts.
 
+Step 4 adds `libs/desktop` and `libs/term`, a session-scoped launcher/taskbar,
+eight independent kernel terminal endpoints and per-terminal foreground job control.
+`exit` closes one terminal; `logout` ends the whole authenticated session. Desktop
+failure returns to login; `console` selects a recovery shell. See
+`docs/system/desktop.md` for authority, cleanup and fixed-grid limits.
+
 ## Where to look
 
 | Area | Starting points |
@@ -100,6 +106,7 @@ and pointer capture; window events use fixed queues and copied state records. Se
 | ACPI and PCI enumeration | `kernel/src/acpi/`, especially `pci/pci.cpp` |
 | Block devices | `kernel/src/drivers/{device,ata,ahci}/` |
 | PS/2 and experimental USB | `kernel/src/drivers/{keyboard,mouse,usb}/`; PCI OHCI/EHCI/XHCI branches are placeholders |
+| Desktop and terminal endpoints | `libs/desktop/`, `libs/term/`, `kernel/src/proc/user/terminals.*`; see `docs/system/desktop.md` |
 | Userspace GUI library | `include/hackos/gui.h`, `libs/gui/`, `libs/window/src/widgets.cpp`; see `docs/system/gui.md` |
 | Graphics, console, windows | `kernel/src/drivers/screen/`; packed RGB colour macro is `COLOUR` in `screen.h`, PSF1 font rendering is in `screen.cpp` |
 | Filesystems | `kernel/src/fs/filesystem.*`, `vfs.*`, `fat32/`; low-level FAT operations are in `fat32driver.*` |

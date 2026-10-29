@@ -163,3 +163,10 @@ bounded frame renderer. See [the GUI input ABI](userspace.md#gui-input-and-deskt
 The userspace [GUI library](gui.md) renders themed widgets and dialogs through
 the same atomic frame/input ABI. Layout, selection and widget focus remain in
 the client process; the kernel continues to manage windows and composition.
+
+## Desktop sessions
+
+See [desktop and independent terminals](desktop.md) for authenticated desktop
+authority, taskbar controls, per-terminal input/output routing and foreground
+jobs. Syscalls 91–94 add the desktop and terminal endpoint interfaces; existing
+window, stream and recovery-console interfaces retain their contracts.

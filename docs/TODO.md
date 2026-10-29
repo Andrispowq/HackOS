@@ -153,7 +153,7 @@ future changes; prior results are not a substitute.
 ## Graphical environment
 
 The following milestones turn the existing window demo into a usable desktop.
-Milestones 1–3 are implemented; later milestones need a separate request.
+Milestones 1–4 are implemented; later milestones need a separate request.
 
 1. **Window rendering foundation — implemented:** screen-relative normal sizes
    up to 4096×2160, a shared 64 MiB surface budget, recoverable allocation with
@@ -175,9 +175,11 @@ Milestones 1–3 are implemented; later milestones need a separate request.
    Its window adapter handles atomic tiled painting, input reset recovery and
    blocking waits. `window --widgets` demonstrates the reusable library.
    See [GUI library](system/gui.md) for API, ownership and bounds.
-4. **Desktop and terminal:** authenticated desktop session, launcher/taskbar,
-   authorized session window management, independent terminal sessions and
-   shell job control, logout cleanup and desktop recovery.
+4. **Desktop and terminal — implemented:** authenticated `DESKTOP` launcher/taskbar,
+   session-authorized window controls, eight independent `TERM` endpoints with
+   shell job control, per-terminal cleanup, whole-session logout and return-to-login
+   recovery. The `console` login option retains a recovery shell.
+   See [desktop and terminals](system/desktop.md) for ABI and current limits.
 5. **Applications:** graphical editor, file manager, settings and login/setup
    using existing permission, filesystem and authentication contracts.
 6. **Integrated hardening:** framebuffer formats, clipping/input/allocator

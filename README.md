@@ -27,13 +27,15 @@ ATA/AHCI storage, FAT32, and a small VFS. There are also window primitives,
 an ELF loader, a scheduler, and an experimental userspace library.
 
 Both boot paths start a ring-3 login agent. First-boot setup creates the chosen
-administrator; successful login starts the standalone PS/2 shell. Accounts persist
+administrator; successful login starts the desktop launcher/taskbar and a terminal
+window. Open independent terminals with **New terminal**; `console` login selects
+the recovery shell. See [desktop sessions](docs/system/desktop.md). Accounts persist
 across boots, and `logout` ends the session. See [accounts and recovery](docs/system/accounts.md).
 Try `help`, `ls`, `ps` or `time --ticks`. `echo` prints literal text; root can run
 `sysinfo` for a hardware report or select a section such as `sysinfo memory`.
 Normal users can filter streams with `grep`, `wc`, `head`, `tail` and `tee`,
 or page them with `more`: `cat /usr/hello.txt | grep -i hello | wc -l`.
-`terminal get` lists console settings; `terminal set font_size 32` enlarges text,
+`terminal get` lists terminal settings; in the recovery console, `terminal set font_size 32` enlarges text,
 and `terminal reset` restores the default font and colours.
 See [system utilities](docs/system/utilities.md). Run `user USR/BIN/RING3` for the minimal
 isolated ring-3 print/preemption/exit demo. Both `./` and `user` accept arguments and wait for isolated programs to exit
@@ -75,4 +77,5 @@ redistributing that code.
 Launch `./USR/BIN/WINDOW` for the standalone ring-3 window demo. It uses owned
 handles and checked pixel uploads. Drag the title, resize the bottom-right grip,
 click to focus, and type/click to change its client. Close X, press Q, or use
-Ctrl-C to return. Click the desktop to route keys back to the shell.
+Ctrl-Alt-Esc to force termination. Click a terminal to route keys to its shell;
+Alt-Esc focuses the launcher (or the console in recovery mode).

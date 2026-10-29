@@ -11,7 +11,8 @@ There is no automatic root shell or default password.
 ## Setup and daily use
 
 At boot and after logout, the console clears before offering `1) login`,
-`2) restart` and `3) shutdown`. Selecting login clears it again before the setup
+`2) restart` and `3) shutdown`, plus `console` for a recovery shell. Normal login
+starts the desktop; recovery login starts a direct shell. Selecting login clears it again before the setup
 or username prompt. Enter a number or action name (case-insensitive). Invalid input
 returns to the menu. Restart boots the same image again in the normal runner.
 Login starts setup on a new installation; restart and
@@ -36,12 +37,15 @@ Failed logins use a generic error and a one-second retry delay. Unknown or locke
 accounts run the same password KDF as enabled accounts. There is no permanent
 lockout or account enumeration through authentication errors.
 
-Successful authentication loads a fresh shell with a copied credential snapshot.
-The shell's PID identifies its session, inherited by all descendants, including
-`runas` children. `logout`, shell exit or shell fault terminates the entire session;
-idle reclaims private pages, stacks, file handles and windows. The login agent
-waits for the shell, clears the console and returns to the action menu. Neither
-the agent nor the authenticated shell can be killed through the user kill API.
+Successful authentication loads a fresh desktop or recovery shell with a copied
+credential snapshot.
+The authenticated desktop (or recovery shell) PID identifies the session,
+inherited by all descendants, including `runas` children. `logout` or session-leader
+exit/fault terminates the entire session. Individual window-terminal shell exits
+only terminate that terminal and its jobs; see [desktop sessions](desktop.md).
+Idle reclaims private pages, stacks, file handles and windows. The login agent
+waits for the session leader, clears the console and returns to the action menu. Neither
+the agent nor an authenticated shell/desktop can be killed through the user kill API.
 Account administration requires UID 0; membership in group 0 does not grant it.
 Power operations require UID 0, except for the kernel-designated boot login
 agent while it owns the logged-out terminal. Ordinary non-root processes,

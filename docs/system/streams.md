@@ -83,7 +83,7 @@ are defined in [abi.h](../../include/hackos/abi.h); wrappers come from
 field. Flag 1 identifies a terminal; flag 2 reports that the caller may read
 foreground input at the time of the query. Reading always rechecks permission.
 The query consumes no input, exposes no pointers and requires no root privilege.
-Geometry reflects the current `terminal` font size; appearance queries/setters
+Geometry reflects the current recovery-console font size or window-terminal grid; appearance queries/setters
 use slots 81–82, documented in [userspace](userspace.md) and
 [terminal appearance](utilities.md#terminal-appearance).
 It lets pagers read keys separately from pipe/file stdin and avoid prompts in
@@ -118,13 +118,14 @@ The terminal owner and its foreground pipeline peers may read; background
 reads return `HACKOS_DENIED`. Only stages created by `spawn_io` share this access;
 ordinary children do not inherit it, even within the same process group. Explicit
 foreground delegation to an ordinary child gives that child exclusive input.
-Console clear/backspace and delegation still require the single terminal owner.
+Console clear/backspace and delegation still require that terminal's individual foreground owner.
 Keyboard typeahead is preserved when ownership passes between pipeline peers,
 and cleared at other handoffs.
 Ctrl-D returns EOF for that read. Queue overflow returns `HACKOS_RETRY` after
 resetting the queue. The existing `terminal_read` API still reports decoded
 key events and overflow separately; the interactive shell/editor use that API.
-Terminal output streams write the graphical console, debug port and serial log.
+Terminal output streams write the process's console/grid, debug port and serial
+log. Separate terminal endpoints isolate grids and input queues.
 Redirected output goes only to its destination; kernel diagnostics stay outside
 process redirection.
 
@@ -183,3 +184,10 @@ stream descriptors within the same 16-entry array and deadline. READ means an
 event/overflow is pending, HANGUP means mouse closure and INVALID means the
 handle is not owned or has been released. Poll never consumes window events.
 See [frame submission and waits](userspace.md#atomic-frame-submission-and-waits).
+
+## Desktop sessions
+
+See [desktop and independent terminals](desktop.md) for authenticated desktop
+authority, taskbar controls, per-terminal input/output routing and foreground
+jobs. Syscalls 91–94 add the desktop and terminal endpoint interfaces; existing
+window, stream and recovery-console interfaces retain their contracts.

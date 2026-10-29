@@ -22,7 +22,7 @@ int main()
             Print("Account storage unavailable or corrupt. Login is disabled; restore the account store offline.\n");
         }
 
-        Print("\n1) login\n2) restart\n3) shutdown\nAction: ");
+        Print("\n1) login\n2) restart\n3) shutdown\nconsole) recovery shell\nAction: ");
         char action[16] = {};
         if (!ReadLine(action, sizeof(action), false))
         {
@@ -45,7 +45,7 @@ int main()
             continue;
         }
 
-        if (!Equal(action, "1") && !Equal(action, "login"))
+        if (!Equal(action, "1") && !Equal(action, "login") && !Equal(action, "console"))
         {
             Print("Choose 1-3 or login, restart, shutdown.\n");
             continue;
@@ -96,7 +96,7 @@ int main()
         uint64_t pid;
         do
         {
-            pid = syscall_auth_login(name, password);
+            pid = Equal(action, "console") ? syscall_auth_login(name, password) : syscall_auth_desktop(name, password);
             if (pid == HACKOS_RETRY)
             {
                 syscall_yield();

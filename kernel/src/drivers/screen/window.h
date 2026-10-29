@@ -14,6 +14,11 @@ class Window
     Window();
     ~Window();
 
+    void SetDesktopPanel()
+    {
+        desktopPanel = true;
+    }
+
     void SetOwner(uint64_t pid)
     {
         owner = pid;
@@ -220,6 +225,7 @@ class Window
     uint32_t modifiers = 0;
     HackosWindowEvent2 MakeEvent(uint32_t type, uint32_t key = 0, uint32_t flags = 0) const;
 
+    bool desktopPanel = false;
     bool toBeClosed = false;
 
     uint64_t ID = 0;

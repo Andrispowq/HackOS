@@ -17,7 +17,9 @@ docker compose up --build bios
 Open [the console](http://localhost:6080/vnc.html?autoconnect=true&resize=scale).
 It shows initialization output followed by the login/restart/shutdown menu. Select `1` or `login` for
 first-boot setup. Choose an administrator
-name and confirm an 8–128 character password, then log in to the ring-3 shell. Click inside it
+name and confirm an 8–128 character password, then log in to the desktop, which opens an independent terminal shell.
+Use the launcher to open more terminals or GUI widgets. Choose `console` at the
+login menu for the direct recovery shell. Click inside a terminal
 and try `help`, `ls`, `ps` or `time --ticks`. Input uses the US keyboard layout.
 Use `test alpha "two words"` to see argument passing and read a file
 from ring 3, or `user USR/BIN/RING3` for
@@ -55,7 +57,7 @@ Ordinary users create files under `/tmp` or directories root grants them; `/` an
 `/usr` are owned by root. `ls -l` reports UID/GID and permission bits.
 Guest file changes persist across normal runs, but rebuilds preserve only accounts. The initial administrator has UID 0 regardless of its chosen name. Try `id`,
 `users`, `groups`, `groupadd staff`, `useradd alice staff`, `passwd alice`, and
-`runas alice id`. `logout` ends the whole session and returns to login. New users
+`runas alice id`. `logout` ends the whole session and returns to login; `exit` closes only the current terminal. New users
 and the built-in `guest` stay locked until root sets their password. Account
 changes persist across stops/restarts and Docker rebuilds. `runas alice shutdown`
 is denied by the kernel. See [accounts and recovery](../system/accounts.md). Use `cat /usr/hello.txt` (or `read /usr/hello.txt`) instead of the old
@@ -258,3 +260,8 @@ password-echo contracts.
 include `hackos/gui.h`. The window Makefile checks the GUI archive dependencies
 on every invocation; the root clean target also removes GUI library outputs.
 See [the GUI programming guide](../system/gui.md).
+
+The root userspace target also builds `libs/desktop` and `libs/term`, both linked
+with `libgui.a`. Images package them as `/usr/bin/desktop` and `/usr/bin/term`.
+Desktop authority is granted by authenticated login, so starting another copy
+from the shell does not grant session window-management rights.

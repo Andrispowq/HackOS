@@ -16,7 +16,7 @@ def setup_and_login(qmp, output, wait_for):
     wait_text("Setup complete. Please log in.")
     wait_text("Action: ", output().index("Setup complete."))
     offset = len(output())
-    qmp.type("login\n")
+    qmp.type("console\n")
     wait_text("Login: ", offset)
     qmp.type("root\n")
     wait_text("Password: ", offset)

@@ -85,6 +85,8 @@ void Window::Release()
     mouseX = mouseY = 0;
     owner = 0;
     visible = true;
+    desktopPanel = false;
+    resizable = true;
 }
 
 uint64_t Window::Frame(uint64_t operation, HackosWindowFrame& frame)
@@ -328,12 +330,15 @@ void Window::Draw(Framebuffer* framebuffer)
     framebuffer->DrawRect(startX, startY + sizeY, sizeX, 1, borderColour);
     framebuffer->DrawRect(startX - 1, startY - 1, sizeX + 2, navbar_height + 1, borderColour);
     framebuffer->DrawRect(startX, startY, sizeX, navbar_height - 1, colour);
-    framebuffer->DrawRect((startX + sizeX) - 25, startY + 5, 20, 20, 0xFFFF0000);
-    putchar_at_xy(*framebuffer, 'X', (startX + sizeX) - 19, startY + 7);
-    framebuffer->DrawRect(startX + sizeX - 49, startY + 5, 20, 20, borderColour);
-    putchar_at_xy(*framebuffer, maximised ? 'R' : '+', startX + sizeX - 43, startY + 7);
-    framebuffer->DrawRect(startX + sizeX - 73, startY + 5, 20, 20, borderColour);
-    putchar_at_xy(*framebuffer, '-', startX + sizeX - 67, startY + 7);
+    if (!desktopPanel)
+    {
+        framebuffer->DrawRect((startX + sizeX) - 25, startY + 5, 20, 20, 0xFFFF0000);
+        putchar_at_xy(*framebuffer, 'X', (startX + sizeX) - 19, startY + 7);
+        framebuffer->DrawRect(startX + sizeX - 49, startY + 5, 20, 20, borderColour);
+        putchar_at_xy(*framebuffer, maximised ? 'R' : '+', startX + sizeX - 43, startY + 7);
+        framebuffer->DrawRect(startX + sizeX - 73, startY + 5, 20, 20, borderColour);
+        putchar_at_xy(*framebuffer, '-', startX + sizeX - 67, startY + 7);
+    }
 
     int index = 0;
     char c = 0;
@@ -364,7 +369,7 @@ void Window::Draw(Framebuffer* framebuffer)
     }
     framebuffer->CopyFrom(clipped, startX, startY + navbar_height);
 
-    if (!maximised)
+    if (!maximised && !desktopPanel)
     {
         framebuffer->DrawRect(startX + sizeX - 8, startY + sizeY - 8, 8, 8, borderColour);
     }

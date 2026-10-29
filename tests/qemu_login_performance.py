@@ -24,7 +24,7 @@ def measure(firmware, samples):
         guest.enter('admin', 'New password: ')
         guest.password(ADMIN_PASSWORD, 'Action: ')
         for sample in range(samples):
-            guest.enter('login', 'Login: ')
+            guest.enter('console', 'Login: ')
             guest.enter('admin', 'Password: ')
             guest.qmp.type(ADMIN_PASSWORD)
             script = directory / 'timing.gdb'

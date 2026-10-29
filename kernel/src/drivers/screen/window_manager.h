@@ -28,12 +28,22 @@ class WindowManager
         return focused ? focused->GetOwner() : 0;
     }
 
+    void SetPanel(Window* window);
+    void RequestClose(Window* window);
+
+    bool HasPanel() const
+    {
+        return panel != nullptr;
+    }
+
+    uint64_t Activate(Window* window);
+
     uint64_t ChangeMode(Window* window, uint64_t operation);
 
   private:
     void Focus(Window* window);
     void CycleFocus(bool reverse);
-    void RequestClose(Window* window);
+
     void Mouse(int32_t x, int32_t y, uint32_t buttons);
     Window* Hit(int32_t x, int32_t y);
     void FocusTop();
@@ -41,6 +51,7 @@ class WindowManager
     void DrawRestoreBar();
     void Wheel(int32_t x, int32_t y, int32_t delta);
 
+    Window* panel = nullptr;
     Window* focused = nullptr;
     Window* capture = nullptr;
     unsigned captureMode = 0; // 1 client, 2 title drag, 3 resize grip

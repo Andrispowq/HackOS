@@ -19,6 +19,7 @@ initialization order, then follow the component you are working on.
 | [Devices and discovery](system/devices.md) | ACPI, PCI, block devices, PS/2 input, and USB |
 | [Filesystems](system/filesystems.md) | Device-to-FAT32 layering, paths, file handles, and persistence |
 | [Graphics and input presentation](system/graphics.md) | Framebuffers, colours, fonts, the console, and windows |
+| [Desktop and terminals](system/desktop.md) | Launcher/taskbar, independent terminal endpoints and recovery |
 | [Persistent accounts and login](system/accounts.md) | First-boot setup, password storage, sessions and recovery |
 | [Programs and userspace](system/userspace.md) | ELF loading, scheduling, syscalls, libc, minimal ring-3 isolation and remaining user APIs |
 

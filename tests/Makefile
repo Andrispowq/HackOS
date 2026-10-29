@@ -98,3 +98,7 @@ test-gui-library:
 	$(PYTHON) gui_library.py
 test-gui-widgets:
 	$(PYTHON) qemu_gui_library.py --firmware $(FIRMWARE)
+
+.PHONY: test-desktop
+test-desktop:
+	$(PYTHON) qemu_desktop.py --firmware $(FIRMWARE)

@@ -257,3 +257,27 @@ static_assert(sizeof(HackosSpawnIo) == 32, "spawn I/O ABI");
 constexpr uint64_t HACKOS_READDIR_BATCH_MAX = 16;
 // terminal_cursor(back, visible): caret up to 255 cells behind the output position.
 constexpr uint64_t HACKOS_TERMINAL_CURSOR_MAX = 255;
+
+// Desktop and terminal endpoints are kernel-issued, process/session scoped.
+constexpr unsigned HACKOS_PROCESS_LIMIT = 64;
+constexpr unsigned HACKOS_TTY_LIMIT = 8, HACKOS_TTY_CELLS = 160 * 60;
+constexpr uint64_t HACKOS_TTY_CREATE = 0, HACKOS_TTY_STATE = 1, HACKOS_TTY_CELLS_READ = 2, HACKOS_TTY_INPUT = 3,
+                   HACKOS_TTY_RESIZE = 4;
+
+struct HackosTerminalState
+{
+    uint64_t revision, shell;
+    uint32_t columns, rows, x, y, caretBack, caret;
+};
+
+struct HackosDesktopEntry
+{
+    uint64_t handle, owner;
+    uint32_t width, height, mode, focused;
+    char title[32];
+};
+
+constexpr uint64_t HACKOS_DESKTOP_SCREEN = 0, HACKOS_DESKTOP_PANEL = 1, HACKOS_DESKTOP_ENTRY = 2,
+                   HACKOS_DESKTOP_FOCUS = 3, HACKOS_DESKTOP_MINIMIZE = 4, HACKOS_DESKTOP_CLOSE = 5;
+static_assert(sizeof(HackosTerminalState) == 40, "terminal snapshot ABI");
+static_assert(sizeof(HackosDesktopEntry) == 64, "desktop entry ABI");

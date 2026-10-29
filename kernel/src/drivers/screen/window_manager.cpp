@@ -169,7 +169,7 @@ void WindowManager::Keyboard(const GuiKey& key)
         }
         else if (key.key == 0x01)
         {
-            Focus(nullptr);
+            Focus(panel);
         }
         else if (focused && key.key == 0x3e)
         {
@@ -221,6 +221,10 @@ void WindowManager::Keyboard(const GuiKey& key)
 
 Window* WindowManager::Hit(int32_t x, int32_t y)
 {
+    if (panel && y >= (int32_t)panel->GetStartY())
+    {
+        return panel;
+    }
     for (size_t i = windows.size(); i > 0; i--)
     {
         auto window = windows[i - 1];
@@ -247,7 +251,7 @@ void WindowManager::Mouse(int32_t x, int32_t y, uint32_t buttons)
     bool pressed = (buttons & 1) && !(previousButtons & 1);
     previousButtons = buttons;
     unsigned minimized = MinimizedCount();
-    if (!capture && minimized && y >= (int32_t)(drawBuffer.height - restoreBarHeight))
+    if (!panel && !capture && minimized && y >= (int32_t)(drawBuffer.height - restoreBarHeight))
     {
         if (pressed)
         {
@@ -289,6 +293,14 @@ void WindowManager::Mouse(int32_t x, int32_t y, uint32_t buttons)
             return;
         }
 
+        if (target == panel)
+        {
+            capture = panel;
+            captureMode = 1;
+            panel->SetMouse(x - panel->GetStartX(), y - panel->GetStartY() - 30, buttons);
+            panel->SendEvent(HACKOS_WINDOW_MOUSE);
+            return;
+        }
         int32_t localX = x - target->GetStartX();
         int32_t localY = y - target->GetStartY();
         if (localY >= 5 && localY < 25 && localX >= (int32_t)target->GetSizeX() - 25 &&
@@ -463,13 +475,20 @@ void WindowManager::Draw()
 {
     for (size_t i = 0; i < windows.size(); i++)
     {
-        if (!windows[i]->GetMinimised())
+        if (windows[i] != panel && !windows[i]->GetMinimised())
         {
             windows[i]->Draw(&drawBuffer);
         }
     }
 
-    DrawRestoreBar();
+    if (panel)
+    {
+        panel->Draw(&drawBuffer);
+    }
+    else
+    {
+        DrawRestoreBar();
+    }
 }
 
 Window* WindowManager::CreateWindow(uint32_t startX, uint32_t startY, uint32_t sizeX, uint32_t sizeY, uint64_t owner)
@@ -512,6 +531,10 @@ Window* WindowManager::GetWindow(uint64_t ID)
 
 void WindowManager::DestroyWindow(Window* window)
 {
+    if (panel == window)
+    {
+        panel = nullptr;
+    }
     InterruptGuard guard;
     for (size_t i = 0; i < windows.size(); i++)
     {
@@ -621,6 +644,10 @@ void WindowManager::DrawRestoreBar()
 
 uint64_t WindowManager::ChangeMode(Window* window, uint64_t operation)
 {
+    if (window == panel && operation != HACKOS_WINDOW_QUERY)
+    {
+        return HACKOS_DENIED;
+    }
     if (operation == HACKOS_WINDOW_QUERY)
     {
         return window->Mode();
@@ -642,7 +669,7 @@ uint64_t WindowManager::ChangeMode(Window* window, uint64_t operation)
         }
 
         uint32_t width = drawBuffer.width - 2;
-        uint32_t height = drawBuffer.height - restoreBarHeight - 2;
+        uint32_t height = drawBuffer.height - (panel ? panel->GetSizeY() + 2 : restoreBarHeight) - 2;
         // Capture normal geometry before resize; failed allocation leaves it visible.
         window->SaveNormalGeometry();
         if (!window->ResizeWindow(width, height))
@@ -725,4 +752,22 @@ void WindowManager::Wheel(int32_t x, int32_t y, int32_t delta)
 
     target->SetMouse(x - target->GetStartX(), y - target->GetStartY() - 30, previousButtons);
     target->SendEvent(HACKOS_WINDOW_WHEEL, (uint32_t)delta);
+}
+
+void WindowManager::SetPanel(Window* window)
+{
+    panel = window;
+    window->SetDesktopPanel();
+    window->SetResizable(false);
+    Display::SharedDisplay()->Invalidate();
+}
+
+uint64_t WindowManager::Activate(Window* window)
+{
+    if (window->GetMinimised())
+    {
+        return ChangeMode(window, HACKOS_WINDOW_RESTORE);
+    }
+    Focus(window);
+    return 0;
 }

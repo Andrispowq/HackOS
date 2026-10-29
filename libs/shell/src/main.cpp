@@ -304,13 +304,17 @@ static void Builtin(int argc, char** args, bool background)
         return;
     }
 
-    if (Equal(command, "logout"))
+    if (Equal(command, "logout") || Equal(command, "exit"))
     {
         if (background || !Arguments(argc, 1, "logout"))
         {
             return;
         }
 
+        if (Equal(command, "logout"))
+        {
+            syscall_session_logout();
+        }
         syscall_exit(0);
     }
 
@@ -365,8 +369,8 @@ static void Builtin(int argc, char** args, bool background)
 static bool IsBuiltin(const ShellStage& stage)
 {
     const char* name = stage.argv[0];
-    return Equal(name, "cd") || Equal(name, "history") || Equal(name, "logout") || Equal(name, "jobs") ||
-           Equal(name, "fg") || Equal(name, "bg") || Equal(name, "wait") ||
+    return Equal(name, "cd") || Equal(name, "history") || Equal(name, "logout") || Equal(name, "exit") ||
+           Equal(name, "jobs") || Equal(name, "fg") || Equal(name, "bg") || Equal(name, "wait") ||
            (Equal(name, "kill") && stage.argc == 2 && stage.argv[1][0] == '%');
 }
 
@@ -665,7 +669,7 @@ static void Complete(LineBuffer& line)
         }
     }
 
-    static const char* builtins[] = {"cd", "history", "logout", "user", "jobs", "fg", "bg", "wait"};
+    static const char* builtins[] = {"cd", "history", "logout", "exit", "user", "jobs", "fg", "bg", "wait"};
     char common[256] = {};
     unsigned matches = 0;
     bool isDirectory = false;

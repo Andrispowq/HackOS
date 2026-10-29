@@ -1,4 +1,5 @@
 #include "process.h"
+#include "proc/user/terminals.h"
 #include "deadline.h"
 #include "proc/user/streams.h"
 #include "hackos/abi.h"
@@ -23,6 +24,11 @@ uint64_t user_files_live;
 extern PageTableManager KernelDirectory;
 
 static uint64_t terminalOwner, terminalShell, pendingInterrupt, pendingGroupInterrupt, pendingStop;
+
+uint64_t ConsoleTerminalOwner()
+{
+    return terminalOwner;
+}
 
 static Process* FindProcess(uint64_t pid)
 {
@@ -123,7 +129,7 @@ uint64_t ReadTerminal(uint64_t flags)
         }
 
         char ch;
-        auto result = ReadKeyboard(ch);
+        auto result = ReadProcessTerminal(ch);
         if (result == KeyboardRead::Overflow)
         {
             return HACKOS_INPUT_OVERFLOW;
@@ -149,17 +155,20 @@ uint64_t ReadTerminal(uint64_t flags)
 void SetTerminalOwner(uint64_t pid)
 {
     InterruptGuard guard;
+    auto target = FindProcess(pid);
+    auto tty = ProcessTerminal(target);
+    uint64_t& ownerSlot = tty ? tty->owner : terminalOwner;
     if (!terminalShell)
     {
         terminalShell = pid; // first owner is the login agent
     }
 
-    if (pendingInterrupt == terminalOwner)
+    if (pendingInterrupt == ownerSlot)
     {
         pendingInterrupt = 0;
     }
 
-    auto previous = FindProcess(terminalOwner);
+    auto previous = FindProcess(ownerSlot);
     auto owner = FindProcess(pid);
     bool samePipeline = previous && owner && previous->pipelineMember && owner->pipelineMember &&
                         previous->processGroup && previous->processGroup == owner->processGroup;
@@ -175,16 +184,17 @@ void SetTerminalOwner(uint64_t pid)
     }
 
     WakeTerminalReaders();
-    terminalOwner = pid;
+    ownerSlot = pid;
     if (!samePipeline)
     {
-        ClearKeyboard(); // preserve keys only across handoff between pipeline peers
+        ClearTerminalInput(target); // preserve keys only across handoff between pipeline peers
     }
 }
 
 bool OwnsTerminal(uint64_t pid)
 {
-    return pid && pid == terminalOwner;
+    auto process = FindProcess(pid);
+    return pid && pid == TerminalOwner(process);
 }
 
 bool CanReadTerminal(uint64_t pid)
@@ -194,7 +204,7 @@ bool CanReadTerminal(uint64_t pid)
         return true;
     }
     auto process = FindProcess(pid);
-    auto owner = FindProcess(terminalOwner);
+    auto owner = FindProcess(TerminalOwner(process));
     // Foreground pipeline peers share input, so a pager can read keys while an
     // upstream stage still produces data. This capability is not inherited by
     // ordinary children: explicit foreground delegation retains its contract.
@@ -208,39 +218,39 @@ static bool ProtectedTerminal(uint64_t pid)
     {
         if (p->pid == pid)
         {
-            return p->systemShell;
+            return p->systemShell && !p->desktopController;
         }
     }
 
     return false;
 }
 
-void RequestTerminalInterrupt()
+void RequestTerminalInterrupt(uint64_t target)
 {
     // Input dispatch latches a target only. Do not kill/yield while a
     // PreemptionGuard is active. Ctrl-C can also cancel the shell's wait
     // without terminating the background group it was observing.
-    auto owner = FindProcess(terminalOwner);
+    auto owner = FindProcess(target ? target : terminalOwner);
     if (owner && owner->systemShell && owner->waitingGroup)
     {
         owner->jobWaitInterrupted = true;
         owner->state = PROCESS_STATE_ALIVE;
-        ClearKeyboard();
+        ClearTerminalInput(owner);
     }
     else if (owner && !owner->systemShell)
     {
         pendingGroupInterrupt = owner->processGroup;
-        ClearKeyboard();
+        ClearTerminalInput(owner);
     }
 }
 
-void RequestTerminalStop()
+void RequestTerminalStop(uint64_t target)
 {
-    auto owner = FindProcess(terminalOwner);
+    auto owner = FindProcess(target ? target : terminalOwner);
     if (owner && !owner->systemShell && owner->jobOwnerPid)
     {
         pendingStop = owner->processGroup;
-        ClearKeyboard();
+        ClearTerminalInput(owner);
     }
 }
 
@@ -404,7 +414,7 @@ static void CompleteProcess(Process* child)
         }
     }
 
-    if (child->systemShell && !child->authenticationAgent && child->sessionId)
+    if (child->sessionId == child->pid && !child->authenticationAgent)
     {
         ClearSessionClipboard(child->sessionId);
         // Include detached/background descendants and runas identities. The
@@ -419,9 +429,13 @@ static void CompleteProcess(Process* child)
         }
     }
 
+    ReleaseTerminalController(child);
+
     // A foreground launcher can die before its delegated terminal owner.
     // Redirect the return link before idle reclaims that launcher's record.
-    uint64_t returnPid = child->terminalReturnPid ? child->terminalReturnPid : terminalShell;
+    uint64_t returnPid = child->terminalReturnPid
+                             ? child->terminalReturnPid
+                             : (ProcessTerminal(child) ? ProcessTerminal(child)->shell : terminalShell);
     for (auto p = ready_queue; p; p = p->next)
     {
         if (p->terminalReturnPid == child->pid)
@@ -430,7 +444,7 @@ static void CompleteProcess(Process* child)
         }
     }
 
-    if (child->pid == terminalOwner)
+    if (child->pid == TerminalOwner(child))
     {
         auto receiver = FindProcess(returnPid);
         if (!receiver || receiver->processGroup != child->processGroup)
@@ -451,7 +465,16 @@ static void CompleteProcess(Process* child)
             }
         }
 
-        SetTerminalOwner(returnPid);
+        auto tty = ProcessTerminal(child);
+        auto terminalReceiver = FindProcess(returnPid);
+        if (tty && (!terminalReceiver || terminalReceiver->terminalId != child->terminalId))
+        {
+            tty->owner = 0;
+        }
+        else
+        {
+            SetTerminalOwner(returnPid);
+        }
     }
 
     WakeJobWaiters();
@@ -705,7 +728,7 @@ static void StopJob(uint64_t group)
         if (p->processGroup == group && !p->systemShell && p->state != PROCESS_STATE_ZOMBIE)
         {
             owner = p->jobOwnerPid;
-            p->stoppedTerminalOwner = p->pid == terminalOwner;
+            p->stoppedTerminalOwner = p->pid == TerminalOwner(p);
             p->state = PROCESS_STATE_STOPPED;
         }
     }
@@ -730,6 +753,20 @@ static void StopJob(uint64_t group)
     for (;;)
     {
         asm volatile("hlt");
+    }
+}
+
+void TerminateProcess(uint64_t pid)
+{
+    InterruptGuard guard;
+    for (auto p = ready_queue; p; p = p->next)
+    {
+        if (p->pid == pid && p != ready_queue)
+        {
+            p->exitStatus = 137;
+            CompleteProcess(p);
+            return;
+        }
     }
 }
 

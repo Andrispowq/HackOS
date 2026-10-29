@@ -79,3 +79,7 @@ HACKOS_SYSCALL(87, window_input, UserWindowInput, 3, uint64_t, uint64_t, HackosW
 HACKOS_SYSCALL(88, window_event2, UserWindowEvent2, 2, uint64_t, HackosWindowEvent2*)
 HACKOS_SYSCALL(89, clipboard, UserClipboard, 3, uint64_t, void*, uint64_t)
 HACKOS_SYSCALL(90, window_close_reply, UserWindowCloseReply, 2, uint64_t, uint64_t)
+HACKOS_SYSCALL(91, auth_desktop, UserAuthDesktop, 2, const char*, const char*)
+HACKOS_SYSCALL(92, desktop, UserDesktop, 3, uint64_t, uint64_t, HackosDesktopEntry*)
+HACKOS_SYSCALL(93, terminal_session, UserTerminalSession, 3, uint64_t, uint64_t, void*)
+HACKOS_SYSCALL(94, session_logout, UserSessionLogout, 0)

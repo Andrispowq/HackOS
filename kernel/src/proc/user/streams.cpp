@@ -1,4 +1,5 @@
 #include "streams.h"
+#include "terminals.h"
 #include "address_space.h"
 #include "proc/tasking/process.h"
 #include "proc/tasking/deadline.h"
@@ -68,8 +69,9 @@ uint64_t UserTerminalInfo(uint64_t fd, HackosTerminalInfo* destination)
     if (stream->kind == StreamKind::TerminalRead || stream->kind == StreamKind::TerminalWrite)
     {
         const auto& console = Display::SharedDisplay()->console;
-        info.columns = console.con_width;
-        info.rows = console.con_height;
+        auto tty = ProcessTerminal(GetRunningProcess());
+        info.columns = tty ? tty->columns : console.con_width;
+        info.rows = tty ? tty->rows : console.con_height;
         info.flags = HACKOS_TERMINAL;
         if (CanReadTerminal(GetRunningProcess()->pid))
         {
@@ -345,7 +347,7 @@ uint64_t UserFdRead(uint64_t fd, void* destination, uint64_t length, uint64_t ti
             }
 
             char ch;
-            auto result = ReadKeyboard(ch);
+            auto result = ReadProcessTerminal(ch);
             if (result == KeyboardRead::Overflow)
             {
                 return HACKOS_RETRY;
@@ -442,7 +444,7 @@ uint64_t UserFdWrite(uint64_t fd, const void* source, uint64_t length, uint64_t 
         PreemptionGuard guard;
         for (uint64_t i = 0; i < length; ++i)
         {
-            Display::SharedDisplay()->putc(data[i]);
+            TerminalPut(data[i]);
         }
 
         return length;
@@ -502,7 +504,7 @@ static uint32_t Readiness(Stream* stream, uint32_t events)
             return HACKOS_POLL_ERROR;
         }
 
-        return KeyboardReady() ? events & HACKOS_POLL_READ : 0;
+        return ProcessTerminalReady() ? events & HACKOS_POLL_READ : 0;
     }
 
     if (stream->kind == StreamKind::TerminalWrite)

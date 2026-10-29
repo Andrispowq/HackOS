@@ -46,6 +46,16 @@ uint64_t LoadUserProgramTask(const char* path, bool systemShell, uint64_t argc, 
                              const HackosCredentials* credentials)
 {
     PreemptionGuard guard;
+    extern Process* ready_queue;
+    unsigned processCount = 0;
+    for (auto process = ready_queue; process; process = process->next)
+    {
+        ++processCount;
+    }
+    if (processCount >= HACKOS_PROCESS_LIMIT)
+    {
+        return 0;
+    }
     auto parent = GetRunningProcess();
     ChildResult* result = nullptr;
     if (parent && parent->userSpace)
@@ -229,6 +239,7 @@ uint64_t LoadUserProgramTask(const char* path, bool systemShell, uint64_t argc, 
     process->processGroup = !parent || parent->systemShell ? process->pid : parent->processGroup;
     process->jobOwnerPid = parent && parent->systemShell ? parent->pid : parent ? parent->jobOwnerPid : 0;
     process->sessionId = parent ? parent->sessionId : 0;
+    process->terminalId = parent ? parent->terminalId : 0;
     process->credentials = credentials ? *credentials : parent ? parent->credentials : HackosCredentials{};
     if (parent && parent->userSpace)
     {

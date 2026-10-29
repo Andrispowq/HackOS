@@ -26,6 +26,7 @@ int main(int argc, char**)
     Print("Streams: a | b; < input, > output, >> append, 2> errors, 2>&1. Up to four stages.\n");
     Print("cat copies stdin when no path is given; Ctrl+D ends a terminal stream read.\n");
     Print("Tab completes commands and paths; Up/Down recalls history.\n");
-    Print("Session: logout. Root: passwd [user] sets a login password.\n");
+    Print("Desktop: launcher/taskbar; term opens a terminal; Alt-Esc focuses the launcher.\n");
+    Print("Session: logout ends the session; exit closes this shell. Root: passwd [user] sets a login password.\n");
     return 0;
 }

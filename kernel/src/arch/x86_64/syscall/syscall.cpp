@@ -1,3 +1,4 @@
+#include "proc/user/terminals.h"
 #include "syscall.h"
 #include "hackos/syscall.h"
 #include "hackos/runtime/path.h"
@@ -95,11 +96,11 @@ static uint64_t UserConsole(uint64_t operation)
 
     if (operation == 0)
     {
-        kprintf_backspace();
+        TerminalPut('\b');
     }
     else if (operation == 1)
     {
-        clrscr();
+        TerminalClear();
     }
     else if (operation != 2) // Query foreground ownership without consuming input.
     {
@@ -119,19 +120,38 @@ static uint64_t UserTerminalCursor(uint64_t back, uint64_t visible)
     {
         return HACKOS_ERROR;
     }
-    Display::SharedDisplay()->SetCaret(Caller()->pid, back, visible);
+    auto tty = ProcessTerminal(Caller());
+    if (tty)
+    {
+        tty->caretBack = back;
+        tty->caret = visible;
+        ++tty->revision;
+    }
+    else
+    {
+        Display::SharedDisplay()->SetCaret(Caller()->pid, back, visible);
+    }
     return 0;
 }
 
 static uint64_t UserTerminalGet(HackosTerminalSettings* destination)
 {
     HackosTerminalSettings settings = Display::SharedDisplay()->console.Settings();
+    auto tty = ProcessTerminal(Caller());
+    if (tty)
+    {
+        settings = {16, 0x101b25ff, 0xe5eef5ff, tty->columns, tty->rows, 0};
+    }
     return Output(destination, &settings, sizeof(settings)) ? 0 : HACKOS_ERROR;
 }
 
 static uint64_t UserTerminalSet(uint64_t key, uint64_t value)
 {
     if (!OwnsTerminal(Caller()->pid))
+    {
+        return HACKOS_DENIED;
+    }
+    if (ProcessTerminal(Caller()))
     {
         return HACKOS_DENIED;
     }
@@ -225,7 +245,7 @@ static uint64_t UserSpawn(const char* name)
         ++count;
     }
 
-    if (count >= 16)
+    if (count >= HACKOS_PROCESS_LIMIT)
     {
         return HACKOS_ERROR;
     }
@@ -272,7 +292,7 @@ static uint64_t UserSpawnArgs(const char* name, uint64_t argc, const char* const
         ++count;
     }
 
-    if (count >= 16)
+    if (count >= HACKOS_PROCESS_LIMIT)
     {
         return HACKOS_ERROR;
     }
@@ -558,7 +578,7 @@ static uint64_t UserPasswordSet(uint64_t uid, const char* password)
     return SaveAccounts(0, previous);
 }
 
-static uint64_t UserAuthLogin(const char* username, const char* source)
+static uint64_t Authenticate(const char* username, const char* source, bool desktop)
 {
     static uint64_t retryAfter = 0;
     if (!Caller()->authenticationAgent || !OwnsTerminal(Caller()->pid) || accountStore.Status() != AccountStore::Ready)
@@ -599,17 +619,28 @@ static uint64_t UserAuthLogin(const char* username, const char* source)
     }
 
     const auto& identity = accounts.User(index)->credentials;
-    uint64_t pid = LoadUserProgramTask("~/USR/BIN/SHELL", true, 0, nullptr, &identity);
+    uint64_t pid = LoadUserProgramTask(desktop ? "~/USR/BIN/DESKTOP" : "~/USR/BIN/SHELL", true, 0, nullptr, &identity);
     for (auto p = ready_queue; p; p = p->next)
     {
         if (p->pid == pid)
         {
             p->sessionId = pid;
+            p->desktopController = desktop;
             p->terminalReturnPid = Caller()->pid;
         }
     }
 
     return pid ? pid : HACKOS_ERROR;
+}
+
+static uint64_t UserAuthLogin(const char* username, const char* password)
+{
+    return Authenticate(username, password, false);
+}
+
+static uint64_t UserAuthDesktop(const char* username, const char* password)
+{
+    return Authenticate(username, password, true);
 }
 
 static bool MutationPath(const char* name, char (&path)[256]);
@@ -1294,6 +1325,9 @@ static void syscall_handler(Registers* r)
     case HACKOS_SYS_job_wait_timeout:
         r->rax = WaitForJobTimeout(r->rdi, (int64_t*)r->rsi, r->rdx, r->rcx);
         return;
+    case HACKOS_SYS_session_logout:
+        r->rax = UserSessionLogout();
+        return;
     case HACKOS_SYS_sleep:
         r->rax = UserSleep(r->rdi);
         return;
@@ -1302,6 +1336,15 @@ static void syscall_handler(Registers* r)
     PreemptionGuard guard;
     switch (r->rax)
     {
+    case HACKOS_SYS_auth_desktop:
+        r->rax = UserAuthDesktop((const char*)r->rdi, (const char*)r->rsi);
+        break;
+    case HACKOS_SYS_desktop:
+        r->rax = UserDesktop(r->rdi, r->rsi, (HackosDesktopEntry*)r->rdx);
+        break;
+    case HACKOS_SYS_terminal_session:
+        r->rax = UserTerminalSession(r->rdi, r->rsi, (void*)r->rdx);
+        break;
     case HACKOS_SYS_fd_open:
         r->rax = UserFdOpen((const char*)r->rdi, r->rsi);
         break;

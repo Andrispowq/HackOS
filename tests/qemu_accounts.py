@@ -56,7 +56,7 @@ class Guest:
         self.enter('1', 'Username: ')
 
     def login(self, user, password, success=True):
-        self.enter('login', 'Login: ')
+        self.enter('console', 'Login: ')
         self.enter(user, 'Password: ')
         self.enter(password, user + '@root:~$ ' if success else 'Action: ')
         assert 'First-boot setup.' not in self.output()[self.output().rfind('HackOS login'):] or self.fresh
@@ -206,13 +206,39 @@ def test(firmware, timeout):
             g.shell('user USR/BIN/HOLDPROBE &', 'WAIT_PROBE_READY')
             g.shell('runas alice /USR/BIN/HOLDPROBE &', 'WAIT_PROBE_READY')
             g.shell('window &', '$ ')
-            time.sleep(0.5)
+            # Wait for window creation/focus before clicking the console; a
+            # fixed delay can race startup and discard the first logout keys.
+            g.wait('Window demo ready.')
             g.qmp.call('input-send-event', {'events': [
                 {'type': 'rel', 'data': {'axis': 'x', 'value': -100}},
                 {'type': 'rel', 'data': {'axis': 'y', 'value': -100}},
                 {'type': 'btn', 'data': {'button': 'left', 'down': True}}]})
             g.qmp.call('input-send-event', {'events': [
                 {'type': 'btn', 'data': {'button': 'left', 'down': False}}]})
+            # PS/2 mouse packets and QMP key injection are asynchronous. Verify
+            # the focus handoff before typing, rather than racing its queue reset.
+            g.qmp.call('stop')
+            focus_script = directory / 'console-focus.gdb'
+            focus_script.write_text('set pagination off\nset confirm off\ntarget remote ' + str(g.gdb) + '\npython\nimport gdb, time\n' + """
+bp = gdb.Breakpoint('ReapExitedProcesses', type=gdb.BP_HARDWARE_BREAKPOINT)
+bp.silent = True
+deadline = time.monotonic() + 60
+while time.monotonic() < deadline:
+    gdb.execute('continue', to_string=True)
+    if not int(gdb.parse_and_eval('KernelWindowManager->focused')) and not int(gdb.parse_and_eval('KernelWindowManager->previousButtons')):
+        break
+else: raise AssertionError('Console did not regain focus')
+bp.delete()
+print('CONSOLE_FOCUS_OK')
+end
+detach
+quit
+""")
+            focus_result = command([os.environ.get('GDB', 'gdb'), '--batch', '--nx', '-q', built / 'kernel.elf', '-x', focus_script], timeout=90)
+            (directory / 'console-focus.log').write_text(focus_result.stdout)
+            require_success(focus_result, 'console focus handoff')
+            assert 'CONSOLE_FOCUS_OK' in focus_result.stdout
+            g.qmp.call('cont')
             g.logout()
             g.screen('login')
             # Idle must reclaim all session stacks, private pages, windows and handles.

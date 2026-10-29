@@ -157,7 +157,14 @@ void Display::DrawBackbuffer()
 
     if (dirty || !presented)
     {
-        composition.CopyFrom(backbuffer, 0, 0);
+        if (KernelWindowManager && KernelWindowManager->HasPanel())
+        {
+            composition.Clear(0xff152738);
+        }
+        else
+        {
+            composition.CopyFrom(backbuffer, 0, 0);
+        }
         if (caretVisible)
         {
             composition.DrawRect(caretX * console.char_width, caretY * console.char_height, 2, console.char_height,
