@@ -192,8 +192,10 @@ Milestones 1–4 are implemented; later milestones need a separate request.
    with full-scene equivalence and timing checks on BIOS/UEFI. 6b adds physical
    surface-allocation failure injection and repeated window-limit
    cleanup cycles. Login uses retained partial frames to reduce typing latency;
-   the terminal avoids redundant key-transition repaints. Broader framebuffer-format
-   support, sustained mixed-workload stress and terminal polish remain.
+   the terminal avoids redundant key-transition repaints. 6c adds sustained multi-application desktop cycles with exact resource-baseline
+   checks, repeated endpoint saturation/overflow recovery, scalar-oracle clipping
+   and padded-presentation coverage. Broader framebuffer-format support and terminal
+   polish remain; current graphics coverage is 32-bit BGR.
 
 ## Boot and memory
 

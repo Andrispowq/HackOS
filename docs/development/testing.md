@@ -689,6 +689,53 @@ validate pointed-to font/map/ACPI data and framebuffer geometry, then require
 IRQ initialization and repeated timer interrupts. Run these after fresh
 `tests/build_images.py` builds; results live in `tests/out/qemu-{bios,uefi}`.
 
+## Sustained desktop and framebuffer coverage
+
+`make -C tests test-desktop-stress FIRMWARE=bios` (or `uefi`) runs eight measured
+cycles plus one warmup on a disposable image. `STRESS_CYCLES=1..100` selects a
+shorter or longer run. It uses real QMP keyboard/pointer input to launch a terminal,
+Files, Settings and Editor together; runs a redirected pipeline; types while
+dragging/resizing; checks resulting geometry; and injects ingress overflow while
+a button/modifier is held. Capture, buttons and modifiers must reset. Cycles
+alternate normal unsaved-document discard and forced editor termination. The
+harness waits for resize events to drain and the close request to be delivered
+before sending dialog navigation, rather than assuming fixed UI response times.
+
+Every cycle fills all eight terminal endpoints, rejects a ninth controller, then
+closes all applications. After reaping and painting settle, the following must
+exactly match the warmed baseline: processes, windows, surface pages, user pages,
+open files, streams, pipes, descriptors, file handles, allocated kernel heap bytes
+and blocks, and total used physical memory. Warming permits initial caches/heap
+capacity growth; subsequent growth fails. Results and elapsed time are saved in
+`tests/out/qemu-desktop-stress-{bios,uefi}/stress-resources.json`, with GDB logs and
+a final screenshot. This is a bounded soak workload, not a claim of exhaustive
+hardware or concurrency coverage. Existing `qemu_windows.py` separately repeats
+eight injected physical allocation failures before checking successful recovery.
+
+Host tests compare 4096 clipped rectangle/copy operations against an independent
+scalar oracle, including extreme unsigned coordinates, partial source copies,
+unaligned origins, padded rows and untouched canaries. A presentation matrix
+covers widths around scalar/SSE/block boundaries, differing pitches, primary
+colours and reserved-byte patterns. A 100000-operation queue model checks FIFO,
+wraparound, overflow acknowledgement and reset. These tests cover the supported
+32-bit BGR framebuffer contract; RGB-order and 16/24-bit conversion are not added.
+
+`make -C tests test-graphics-sanitizers` runs the 27 renderer/console/queue cases
+under native ASan/UBSan (plus its build check). Set `GUI_CXX` to choose the native
+compiler. On ARM this exercises the scalar renderer with explicit hosted adapters
+for the x86 assembly byte-copy primitives; the full x86 host suite independently
+exercises the real assembly and SSE paths. These adapters do not replace clipping,
+comparison, drawing, console or queue logic.
+
+Local validation on 2026-10-29 passed fresh BIOS/UEFI builds, both extended window
+suites, 220 x86-64 UBSan host checks, and all 27 native ARM ASan/UBSan renderer,
+console and queue cases. Each firmware completed eight measured desktop cycles
+plus warmup: 273.609 seconds on BIOS and 468.873 seconds on UEFI, including test
+and debugger overhead. These are workload durations, not performance comparisons.
+Every completed cycle restored the exact warmed resource baseline. Final desktop
+screenshots showed no leftover application pixels. The full style check passed
+348 project-owned C/C++ files.
+
 ## Typing latency and retained-frame reliability
 
 `make -C tests test-input-latency FIRMWARE=bios` (or `uefi`) measures three
@@ -720,8 +767,8 @@ or measured by this test.
 The shared GUI sanitizer suite compares full rendering with 1-, 7- and 16-row
 tiles, including nonzero origins, padded rows, selection and modal overlays.
 The adapter tests partial uploads, resize fallback and invalid damage. The window
-suite checks retained pixels and independently injects two physical surface
-allocation failures (BEGIN and restore) at the allocator entry, before mutation.
+suite checks retained pixels and independently injects eight physical surface
+allocation failures (four retained-BEGIN/restore pairs) at the allocator entry, before mutation.
 It verifies old pixels, geometry and allocation counts survive, then retries
 successfully. The original quota-exhaustion checks remain. Window capacity and
 stale-handle cleanup run for 32 create/fill/close cycles, followed by existing

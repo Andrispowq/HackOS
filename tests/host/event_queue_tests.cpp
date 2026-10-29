@@ -44,3 +44,61 @@ TEST(window_event_queue_fifo_wrap_and_overflow)
     CHECK(queue.TakeOverflow());
     return 0;
 }
+
+TEST(window_event_queue_sustained_model)
+{
+    EventQueue<unsigned, 64> queue;
+    unsigned model[64] = {}, count = 0;
+    bool overflow = false;
+    uint32_t random = 0x6c123456;
+    for (unsigned step = 0; step < 100000; ++step)
+    {
+        random = random * 1664525 + 1013904223;
+        unsigned action = (random >> 24) % 16;
+        if (action < 10)
+        {
+            bool accepted = count < 64;
+            CHECK(queue.Push(step) == accepted);
+            if (accepted)
+            {
+                model[count++] = step;
+            }
+            else
+            {
+                overflow = true;
+            }
+        }
+        else if (action < 14)
+        {
+            unsigned value = 0;
+            CHECK(queue.Pop(value) == (count != 0));
+            if (count)
+            {
+                CHECK(value == model[0]);
+                --count;
+                for (unsigned i = 0; i < count; ++i)
+                {
+                    model[i] = model[i + 1];
+                }
+            }
+        }
+        else if (action == 14)
+        {
+            CHECK(queue.TakeOverflow() == overflow);
+            if (overflow)
+            {
+                count = 0;
+                overflow = false;
+            }
+        }
+        else
+        {
+            queue.Overflow();
+            overflow = true;
+        }
+        CHECK(queue.Count() == count && queue.Ready() == (count || overflow));
+    }
+    queue.Clear();
+    CHECK(!queue.Ready() && !queue.TakeOverflow());
+    return 0;
+}

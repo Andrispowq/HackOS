@@ -65,6 +65,15 @@ test-text-tools:
 test-terminal:
 	$(PYTHON) qemu_terminal.py --firmware $(FIRMWARE)
 
+.PHONY: test-graphics-sanitizers
+test-graphics-sanitizers:
+	$(PYTHON) graphics_sanitizers.py
+
+STRESS_CYCLES ?= 8
+.PHONY: test-desktop-stress
+test-desktop-stress:
+	$(PYTHON) qemu_desktop.py --firmware $(FIRMWARE) --stress-cycles $(STRESS_CYCLES)
+
 .PHONY: test-input-latency
 test-input-latency:
 	$(PYTHON) qemu_input_latency.py --firmware $(FIRMWARE)

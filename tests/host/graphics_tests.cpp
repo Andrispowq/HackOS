@@ -419,3 +419,122 @@ TEST(framebuffer_clipped_scene_matches_full_redraw)
     }
     return 0;
 }
+
+TEST(framebuffer_random_clipping_matches_scalar_oracle)
+{
+    uint32_t actual[96 * 32 + 8], expected[96 * 32 + 8], source[80 * 24 + 8];
+    uint32_t random = 0x6c202610;
+    auto next = [&]()
+    {
+        random = random * 1664525 + 1013904223;
+        return random;
+    };
+    for (unsigned scene = 0; scene < 512; ++scene)
+    {
+        unsigned width = 1 + next() % 79, height = 1 + next() % 29;
+        unsigned pitch = width + next() % 8, offset = 1 + next() % 3;
+        unsigned sw = 1 + next() % 67, sh = 1 + next() % 23, sp = sw + next() % 8;
+        auto target = make_fb(actual + offset, width, height), input = make_fb(source + 1, sw, sh);
+        target.pitch = pitch;
+        input.pitch = sp;
+        for (unsigned i = 0; i < 96 * 32 + 8; ++i)
+        {
+            actual[i] = expected[i] = 0xa5c39e71;
+        }
+        for (unsigned i = 0; i < 80 * 24 + 8; ++i)
+        {
+            source[i] = next();
+        }
+        for (unsigned step = 0; step < 8; ++step)
+        {
+            unsigned cx = next() % 90, cy = next() % 35;
+            unsigned right = cx + next() % 90, bottom = cy + next() % 35;
+            if (step == 7)
+            {
+                right = bottom = 0xffffffff;
+            }
+            target.SetClip({cx, cy, right, bottom});
+            unsigned x = next() % 90, y = next() % 35;
+            unsigned w = step == 6 ? 0xffffffff : next() % 90;
+            unsigned h = step == 6 ? 0xffffffff : next() % 35;
+            if (step == 5)
+            {
+                x = 0xffffffff;
+            }
+            uint32_t colour = next();
+            bool copy = step & 1;
+            if (copy)
+            {
+                target.CopyFrom(input, x, y);
+                w = sw;
+                h = sh;
+            }
+            else
+            {
+                target.DrawRect(x, y, w, h, colour);
+            }
+            for (unsigned row = 0; row < height; ++row)
+            {
+                for (unsigned column = 0; column < width; ++column)
+                {
+                    if (column >= cx && column < right && row >= cy && row < bottom && column >= x && row >= y &&
+                        (uint64_t)column - x < w && (uint64_t)row - y < h)
+                    {
+                        expected[offset + row * pitch + column] =
+                            copy ? source[1 + (row - y) * sp + column - x] : colour;
+                    }
+                }
+            }
+            CHECK(test_equal(actual, expected, sizeof(actual)));
+        }
+    }
+    return 0;
+}
+
+TEST(framebuffer_presentation_width_stride_and_colour_matrix)
+{
+    uint32_t current[96 * 5], saved[97 * 5], device[98 * 5];
+    unsigned widths[] = {1, 2, 3, 4, 7, 15, 16, 17, 31, 32, 33, 63, 64, 65};
+    uint32_t colours[] = {0, 0xff0000ff, 0xff00ff00, 0xffff0000, 0xffffffff, 0x12345678};
+    for (unsigned width : widths)
+    {
+        for (unsigned padding = 0; padding < 8; ++padding)
+        {
+            auto source = make_fb(current + 1, width, 4), previous = make_fb(saved + 2, width, 4),
+                 output = make_fb(device + 3, width, 4);
+            source.pitch = width + padding;
+            previous.pitch = width + padding + 1;
+            output.pitch = width + padding + 2;
+            for (auto& pixel : saved)
+            {
+                pixel = 0x87654321;
+            }
+            for (auto& pixel : device)
+            {
+                pixel = 0x87654321;
+            }
+            for (uint32_t colour : colours)
+            {
+                source.Clear(colour);
+                CHECK(output.PresentChanged(source, previous, true) == width * 4);
+                CHECK(output.PresentChanged(source, previous, false) == 0);
+                source.PutPixel(width - 1, 3, colour ^ 0x00abcdef);
+                CHECK(output.PresentChanged(source, previous, false) > 0);
+                for (unsigned row = 0; row < 4; ++row)
+                {
+                    for (unsigned column = 0; column < width; ++column)
+                    {
+                        CHECK(output.GetPixel(column, row) == source.GetPixel(column, row));
+                        CHECK(previous.GetPixel(column, row) == source.GetPixel(column, row));
+                    }
+                    for (unsigned column = width; column < output.pitch; ++column)
+                    {
+                        CHECK(device[3 + row * output.pitch + column] == 0x87654321);
+                    }
+                }
+                CHECK(device[2] == 0x87654321 && device[3 + 4 * output.pitch] == 0x87654321);
+            }
+        }
+    }
+    return 0;
+}

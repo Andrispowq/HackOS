@@ -11,8 +11,8 @@ from qemu_shell import build_probe
 from account_image import filesystem
 
 
-def test(firmware, timeout):
-    directory = OUT / ('qemu-desktop-' + firmware)
+def test(firmware, timeout, stress_cycles=0):
+    directory = OUT / (('qemu-desktop-stress-' if stress_cycles else 'qemu-desktop-') + firmware)
     report = Report('qemu-desktop-' + firmware, directory)
     built = OUT / ('build-' + firmware)
 
@@ -40,7 +40,7 @@ def test(firmware, timeout):
                 sequence += 1
                 g.qmp.call('stop')
                 script = directory / ('inspect-' + str(sequence) + '.gdb')
-                script.write_text('set pagination off\nset confirm off\ntarget remote ' + str(g.gdb) + '\nadd-symbol-file ' + str(built / 'source/libs/desktop/bin/desktop') + '\npython\nimport gdb, time, struct\n' + '''
+                script.write_text('set pagination off\nset confirm off\ntarget remote ' + str(g.gdb) + '\nadd-symbol-file ' + str(built / 'source/libs/desktop/bin/desktop') + '\npython\nimport gdb, time, struct, json\n' + '''
 bp = gdb.Breakpoint('ReapExitedProcesses', type=gdb.BP_HARDWARE_BREAKPOINT)
 bp.silent = True
 deadline = time.monotonic() + 60
@@ -74,6 +74,7 @@ quit
                 (directory / ('inspect-' + str(sequence) + '.log')).write_text(result.stdout)
                 require_success(result, 'desktop inspection')
                 g.qmp.call('cont')
+                return result.stdout
 
             def key(code, shift=False, control=False, alt=False):
                 keys = (['alt'] if alt else []) + (['ctrl'] if control else []) + (['shift'] if shift else []) + [code]
@@ -120,6 +121,9 @@ quit
                     time.sleep(0.1)
 
             inspect("assert number('terminals[0].controller') != 0\nassert number('KernelWindowManager->panel') != 0")
+            if stress_cycles:
+                from desktop_stress import run as stress
+                return stress(g, inspect, key, click, shell, mouse, stress_cycles)
             inspect("""desktop = next(p for p in processes() if int(p['desktopController']))
 def readDesktop(expr, size):
     address = number('(unsigned long)&' + expr)
@@ -277,5 +281,8 @@ if __name__ == '__main__':
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--firmware', choices=('bios', 'uefi'), required=True)
     parser.add_argument('--timeout', type=int, default=120)
+    parser.add_argument('--stress-cycles', type=int, default=0)
     args = parser.parse_args()
-    sys.exit(test(args.firmware, args.timeout))
+    if not 0 <= args.stress_cycles <= 100:
+        parser.error('--stress-cycles must be between 0 and 100')
+    sys.exit(test(args.firmware, args.timeout, args.stress_cycles))

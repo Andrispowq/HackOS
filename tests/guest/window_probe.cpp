@@ -101,13 +101,16 @@ static int Frames()
         return 1;
     }
     Gate(4, "FRAME_PRESSURE_OK\n");
-    // The harness fails two physical surface allocations, independently of quota.
-    ok = syscall_window_frame(handle, HACKOS_WINDOW_BEGIN, &frame) == HACKOS_ERROR;
-    ok = syscall_window_mode(handle, HACKOS_WINDOW_RESTORE) == HACKOS_ERROR && ok;
-    ok = syscall_window_state(handle, &state) == 0 && state.x == 1 && state.width > 640 && ok;
-    if (!Check(ok))
+    // Repeated physical failures must not consume quota or mutate the retained frame.
+    for (unsigned failure = 0; failure < 4; ++failure)
     {
-        return 1;
+        ok = syscall_window_frame(handle, HACKOS_WINDOW_BEGIN_RETAIN, &frame) == HACKOS_ERROR;
+        ok = syscall_window_mode(handle, HACKOS_WINDOW_RESTORE) == HACKOS_ERROR && ok;
+        ok = syscall_window_state(handle, &state) == 0 && state.x == 1 && state.width > 640 && ok;
+        if (!Check(ok))
+        {
+            return 1;
+        }
     }
     Gate(5, "FRAME_ALLOCATION_OK\n");
     ok = syscall_window_frame(handle, HACKOS_WINDOW_BEGIN, &frame) == 0;

@@ -352,7 +352,7 @@ assert int(gdb.parse_and_eval("window_surface_pages")) == 16384
 gdb.execute("set window_surface_pages = 300")
 """, after="""
 allocation = gdb.Breakpoint("PageFrameAllocator::TryRequestSurfacePages", type=gdb.BP_HARDWARE_BREAKPOINT)
-for failure in range(2):
+for failure in range(8):
     gdb.execute("continue")
     assert gdb.newest_frame().name() == "PageFrameAllocator::TryRequestSurfacePages"
     gdb.execute("return (void*)0")
