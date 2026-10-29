@@ -1,9 +1,64 @@
 #include "framebuffer.h"
 #include "lib/memory.h"
 
+void Framebuffer::SetClip(const FramebufferDamage& region)
+{
+    clipped = true;
+    clip = {};
+    if (region.right > region.left && region.bottom > region.top)
+    {
+        clip.Include(region.left, region.top, region.right - region.left, region.bottom - region.top, width, height);
+    }
+}
+
+void Framebuffer::ClearClip()
+{
+    clipped = false;
+}
+
+bool Framebuffer::ClipRect(uint32_t& x, uint32_t& y, uint32_t& columns, uint32_t& rows) const
+{
+    if (!columns || !rows || x >= width || y >= height)
+    {
+        return false;
+    }
+
+    uint32_t right = x + (columns < width - x ? columns : width - x);
+    uint32_t bottom = y + (rows < height - y ? rows : height - y);
+    if (clipped)
+    {
+        if (x < clip.left)
+        {
+            x = clip.left;
+        }
+        if (y < clip.top)
+        {
+            y = clip.top;
+        }
+        if (right > clip.right)
+        {
+            right = clip.right;
+        }
+        if (bottom > clip.bottom)
+        {
+            bottom = clip.bottom;
+        }
+    }
+
+    if (x >= right || y >= bottom)
+    {
+        return false;
+    }
+
+    columns = right - x;
+    rows = bottom - y;
+    return true;
+}
+
 void Framebuffer::PutPixel(uint32_t x, uint32_t y, uint32_t colour)
 {
-    if ((x >= width) || (y >= height))
+    if ((x >= width) || (y >= height) ||
+        (clipped && (x < clip.left || x >= clip.right || y < clip.top || y >= clip.bottom)))
     {
         return;
     }
@@ -23,13 +78,13 @@ uint32_t Framebuffer::GetPixel(uint32_t x, uint32_t y)
 
 void Framebuffer::DrawRect(uint32_t x, uint32_t y, uint32_t width, uint32_t height, uint32_t colour)
 {
-    if (x >= this->width || y >= this->height)
+    if (!ClipRect(x, y, width, height))
     {
         return;
     }
 
-    uint32_t x_end = x + (width < this->width - x ? width : this->width - x);
-    uint32_t y_end = y + (height < this->height - y ? height : this->height - y);
+    uint32_t x_end = x + width;
+    uint32_t y_end = y + height;
     for (uint32_t row = y; row < y_end; ++row)
     {
         for (uint32_t column = x; column < x_end; ++column)
@@ -124,27 +179,17 @@ void Framebuffer::ClearMouseCursor(uint8_t* cursor, uint32_t x, uint32_t y)
 
 void Framebuffer::CopyFrom(const Framebuffer& source, uint32_t x, uint32_t y)
 {
-    if (x >= width || y >= height)
+    uint32_t originalX = x, originalY = y;
+    uint32_t columns = source.width, rows = source.height;
+    if (!ClipRect(x, y, columns, rows))
     {
         return;
-    }
-
-    uint32_t columns = source.width;
-    uint32_t rows = source.height;
-    if (columns > width - x)
-    {
-        columns = width - x;
-    }
-
-    if (rows > height - y)
-    {
-        rows = height - y;
     }
 
     for (uint32_t row = 0; row < rows; row++)
     {
         uint32_t* destination = address + (uint64_t)(y + row) * pitch + x;
-        const uint32_t* pixels = source.address + (uint64_t)row * source.pitch;
+        const uint32_t* pixels = source.address + (uint64_t)(row + y - originalY) * source.pitch + x - originalX;
 #if defined(__x86_64__)
         // SSE2 is part of the kernel's saved context. Unaligned loads/stores
         // support clipped windows and padded scanlines without over-reading.
@@ -251,6 +296,41 @@ static bool PixelsDiffer(const uint32_t* current, const uint32_t* saved, uint32_
     return false;
 }
 
+FramebufferDamage Framebuffer::ChangedBounds(const Framebuffer& previous) const
+{
+    FramebufferDamage result;
+    if (width != previous.width || height != previous.height || !previous.address)
+    {
+        result.Include(0, 0, width, height, width, height);
+        return result;
+    }
+
+    for (uint32_t y = 0; y < height; ++y)
+    {
+        uint32_t first = width, last = 0;
+        for (uint32_t x = 0; x < width;)
+        {
+            uint32_t count = width - x < 32 ? width - x : 32;
+            if (PixelsDiffer(address + (uint64_t)y * pitch + x, previous.address + (uint64_t)y * previous.pitch + x,
+                             count))
+            {
+                if (first == width)
+                {
+                    first = x;
+                }
+                last = x + count;
+            }
+            x += count;
+        }
+        if (first < last)
+        {
+            result.Include(first, y, last - first, 1, width, height);
+        }
+    }
+
+    return result;
+}
+
 uint64_t Framebuffer::PresentChanged(const Framebuffer& source, Framebuffer& previous, bool force)
 {
     if (source.width != width || source.height != height || previous.width != width || previous.height != height)
@@ -328,4 +408,70 @@ void FramebufferDamage::Include(uint32_t x, uint32_t y, uint32_t width, uint32_t
             bottom = endY;
         }
     }
+}
+
+void FramebufferDamageList::Include(const FramebufferDamage& region)
+{
+    if (region.Empty())
+    {
+        return;
+    }
+
+    FramebufferDamage merged = region;
+    for (unsigned i = 0; i < count;)
+    {
+        const auto& other = regions[i];
+        if (merged.left <= other.right && other.left <= merged.right && merged.top <= other.bottom &&
+            other.top <= merged.bottom)
+        {
+            if (other.left < merged.left)
+            {
+                merged.left = other.left;
+            }
+            if (other.top < merged.top)
+            {
+                merged.top = other.top;
+            }
+            if (other.right > merged.right)
+            {
+                merged.right = other.right;
+            }
+            if (other.bottom > merged.bottom)
+            {
+                merged.bottom = other.bottom;
+            }
+            regions[i] = regions[--count];
+            i = 0;
+        }
+        else
+        {
+            ++i;
+        }
+    }
+
+    if (count == 16)
+    {
+        for (unsigned i = 0; i < count; ++i)
+        {
+            const auto& other = regions[i];
+            if (other.left < merged.left)
+            {
+                merged.left = other.left;
+            }
+            if (other.top < merged.top)
+            {
+                merged.top = other.top;
+            }
+            if (other.right > merged.right)
+            {
+                merged.right = other.right;
+            }
+            if (other.bottom > merged.bottom)
+            {
+                merged.bottom = other.bottom;
+            }
+        }
+        count = 0;
+    }
+    regions[count++] = merged;
 }

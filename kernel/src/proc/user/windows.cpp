@@ -131,6 +131,7 @@ uint64_t UserWindowBlit(uint64_t handle, const HackosWindowRect* source, const u
 
     if (!window->GetMinimised())
     {
+        Display::SharedDisplay()->WindowCommitted(handle);
         Display::SharedDisplay()->InvalidateRect(window->GetStartX() + rect.x, window->GetStartY() + 30 + rect.y,
                                                  rect.width, rect.height);
     }

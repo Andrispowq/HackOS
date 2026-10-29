@@ -118,10 +118,16 @@ uint64_t Window::Frame(uint64_t operation, HackosWindowFrame& frame)
 
     if (operation == HACKOS_WINDOW_PRESENT)
     {
+        auto changed = staging.ChangedBounds(front);
         FreeSurface(front);
         front = staging;
         staging = {};
-        Invalidate();
+        if (!minimised && !changed.Empty())
+        {
+            Display::SharedDisplay()->WindowCommitted(ID);
+            Display::SharedDisplay()->InvalidateRect(startX + changed.left, startY + navbar_height + changed.top,
+                                                     changed.right - changed.left, changed.bottom - changed.top);
+        }
     }
     else
     {
@@ -317,6 +323,13 @@ void Window::InputOverflow()
 
 void Window::Draw(Framebuffer* framebuffer)
 {
+    uint32_t left = startX ? startX - 1 : 0, top = startY ? startY - 1 : 0;
+    uint32_t width = sizeX + 2, height = sizeY + 2;
+    if (!framebuffer->ClipRect(left, top, width, height))
+    {
+        return;
+    }
+
     if (desktopBackground)
     {
         framebuffer->CopyFrom(front, startX, startY + 30);

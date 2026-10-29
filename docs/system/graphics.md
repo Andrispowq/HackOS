@@ -31,17 +31,26 @@ virtual address `0xD0000000`. Two additional page-backed RAM buffers follow it:
 composition and the previously presented scene. They cost two framebuffer-sized
 allocations (about 15.8 MiB extra at 1920x1080 with an unpadded pitch).
 
-When scene content changes, `Display::DrawBackbuffer` copies the console into
-composition RAM and draws visible windows and the restore bar there. It compares
-the damaged bounds with the previous scene in 32-pixel horizontal blocks,
-coalesces adjacent changed blocks, and copies only changed spans to video memory and the saved
-scene. The first presentation is unconditional. Comparison never reads device
-memory, and all copies respect pitch and screen edges. Text cells, window uploads
-and old/new window geometry contribute clipped damage bounds, merged until presentation. Clears, scrolling, focus/mode changes and
-window lifecycle changes invalidate the full screen. Scene changes still
-recompose the whole screen in RAM, but comparisons and device writes are bounded
-by damage. Widely separated changes can expand the union to a large rectangle;
-this is not a clipped scene renderer or GPU acceleration.
+When scene content changes, `Display::DrawBackbuffer` restores and recomposes
+only damaged regions in retained composition RAM. Console copies, desktop fills,
+window clients, chrome and glyphs obey the same destination clip. Windows outside
+the clip are skipped. Up to 16 disjoint regions are retained without allocation;
+touching regions merge, and overflow conservatively collapses to their union.
+Text cells and old/new window geometry contribute screen-clipped damage. Clears,
+scrolling, focus/mode changes and window lifecycle changes can still invalidate
+the full screen.
+
+Atomic frame presentation compares the replacement client with its previous
+image in 32-pixel blocks and invalidates the changed bounding rectangle. Identical
+frames need no scene repaint; size changes invalidate the new client. Apps still
+render and upload complete replacement frames, and finding changes scans those
+surfaces. This optimizes composition, not application rendering or upload cost.
+
+Within each region the compositor compares against the previously presented RAM
+scene in 32-pixel horizontal blocks and copies only changed spans to video memory
+and the saved scene. The first presentation is unconditional. Comparison never
+reads device memory; copies respect pitch and screen edges. Conservative damage
+may include unchanged pixels, but regions outside it remain untouched.
 
 Cursor-only input takes a separate path: restore the previous 16x16 footprint
 from composition RAM and draw the cursor at a single captured position. It does
@@ -112,6 +121,19 @@ round trips and host scheduling, so compare on the same emulator/host rather
 than treating them as hardware frame times. `display.framesPresented`,
 `sceneFrames` and `pixelsPresented` are debugger-visible cumulative counters;
 `pixelsPresented` counts scene spans only, excluding cursor restoration/drawing.
+`pixelsComposed` counts damaged region area (not layer overdraw), and
+`regionsComposed` counts those regions. `renderTicks`, `lastRenderTicks` and
+`maxRenderTicks` measure compositor duration with the PIT clock (currently 1 ms
+resolution).
+
+`display.latency[0..2]` records sample count, total/last/max ticks for text dispatch,
+drag and resize through scene presentation. Text waits for a matching window
+commit; drag/resize measure geometry presentation, not completion of app redraw.
+Coalesced input uses the oldest pending action, expiring on a new action after
+one second. These are diagnostics, not per-event tracing: they exclude time in
+the input ingress queue, can include unrelated commits in the same window, and
+must not be interpreted as physical input-to-photon latency. See
+[performance checks](../development/testing.md#graphics-presentation-performance).
 
 The shell caret is composed above console text and below windows, with its own
 small damage bounds and a 500 ms blink period. It leaves console pixels and

@@ -15,9 +15,23 @@ struct FramebufferDamage
     }
 };
 
+// Bounded, allocation-free damage tracking. Overflow falls back to one union.
+struct FramebufferDamageList
+{
+    FramebufferDamage regions[16] = {};
+    unsigned count = 0;
+    void Include(const FramebufferDamage& region);
+};
+
 class Framebuffer
 {
   public:
+    // Clip writes in screen coordinates without rebasing the buffer or pitch.
+    void SetClip(const FramebufferDamage& region);
+    void ClearClip();
+    bool ClipRect(uint32_t& x, uint32_t& y, uint32_t& columns, uint32_t& rows) const;
+    FramebufferDamage ChangedBounds(const Framebuffer& previous) const;
+
     void PutPixel(uint32_t x, uint32_t y, uint32_t colour);
     uint32_t GetPixel(uint32_t x, uint32_t y);
     void DrawRect(uint32_t x, uint32_t y, uint32_t width, uint32_t height, uint32_t colour);
@@ -35,6 +49,8 @@ class Framebuffer
 
     uint32_t* address;
     uint32_t width, height, bpp, pitch;
+    bool clipped = false;
+    FramebufferDamage clip = {};
 };
 
 #endif

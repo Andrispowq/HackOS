@@ -300,3 +300,122 @@ TEST(framebuffer_damage_view_preserves_outside_pixels)
 
     return 0;
 }
+
+TEST(framebuffer_clip_preserves_coordinates_and_padding)
+{
+    uint32_t source[11 * 8], pixels[13 * 8 + 2];
+    for (unsigned i = 0; i < 11 * 8; ++i)
+    {
+        source[i] = i + 1;
+    }
+    for (auto& pixel : pixels)
+    {
+        pixel = 0xabcdef;
+    }
+
+    auto from = make_fb(source, 9, 8);
+    from.pitch = 11;
+    auto to = make_fb(pixels + 1, 10, 8);
+    to.pitch = 13;
+    to.SetClip({4, 3, 8, 7});
+    to.Clear(0);
+    to.CopyFrom(from, 2, 1);
+    to.PutPixel(0, 0, 99);
+    to.DrawRect(0xffffffff, 2, 20, 20, 77);
+    for (unsigned y = 0; y < 8; ++y)
+    {
+        for (unsigned x = 0; x < 13; ++x)
+        {
+            bool inside = x >= 4 && x < 8 && y >= 3 && y < 7;
+            CHECK(pixels[1 + y * 13 + x] == (inside ? source[(y - 1) * 11 + x - 2] : 0xabcdef));
+        }
+    }
+    CHECK(pixels[0] == 0xabcdef && pixels[105] == 0xabcdef);
+    to.SetClip({100, 100, 200, 200});
+    to.Clear(33);
+    CHECK(pixels[1] == 0xabcdef);
+    to.ClearClip();
+    to.PutPixel(0, 0, 99);
+    CHECK(pixels[1] == 99);
+    return 0;
+}
+
+TEST(framebuffer_changed_bounds_handles_pitch_and_tail)
+{
+    uint32_t current[70 * 4] = {}, saved[73 * 4] = {};
+    auto from = make_fb(current, 67, 4), previous = make_fb(saved, 67, 4);
+    from.pitch = 70;
+    previous.pitch = 73;
+    CHECK(from.ChangedBounds(previous).Empty());
+    from.PutPixel(66, 3, 1);
+    auto damage = from.ChangedBounds(previous);
+    CHECK(damage.left == 64 && damage.right == 67 && damage.top == 3 && damage.bottom == 4);
+    from.PutPixel(2, 1, 1);
+    damage = from.ChangedBounds(previous);
+    CHECK(damage.left == 0 && damage.right == 67 && damage.top == 1 && damage.bottom == 4);
+    previous.width = 1;
+    damage = from.ChangedBounds(previous);
+    CHECK(damage.left == 0 && damage.right == 67 && damage.top == 0 && damage.bottom == 4);
+    return 0;
+}
+
+TEST(framebuffer_damage_list_merge_and_overflow)
+{
+    FramebufferDamageList list;
+    list.Include({1, 1, 3, 3});
+    list.Include({5, 1, 7, 3});
+    CHECK(list.count == 2);
+    list.Include({3, 1, 5, 3});
+    CHECK(list.count == 1 && list.regions[0].left == 1 && list.regions[0].right == 7);
+    list = {};
+    for (unsigned i = 0; i < 17; ++i)
+    {
+        list.Include({i * 3, 1, i * 3 + 1, 2});
+    }
+    CHECK(list.count == 1 && list.regions[0].left == 0 && list.regions[0].right == 49);
+    list.Include({});
+    CHECK(list.count == 1);
+    return 0;
+}
+
+TEST(framebuffer_clipped_scene_matches_full_redraw)
+{
+    uint32_t retained[83 * 40] = {}, reference[83 * 40] = {}, client[23 * 12];
+    auto partial = make_fb(retained, 80, 40), full = make_fb(reference, 80, 40), window = make_fb(client, 20, 12);
+    partial.pitch = full.pitch = 83;
+    window.pitch = 23;
+    for (unsigned i = 0; i < 23 * 12; ++i)
+    {
+        client[i] = i;
+    }
+    auto draw = [&](Framebuffer& target, unsigned x, unsigned y)
+    {
+        target.Clear(1);
+        target.CopyFrom(window, 9, 5);
+        target.DrawRect(x, y, 25, 14, 42);
+        target.DrawRect(40, 8, 10, 12, 99);
+    };
+    draw(partial, 0, 0);
+    unsigned oldX = 0, oldY = 0;
+    for (unsigned frame = 1; frame < 80; ++frame)
+    {
+        unsigned x = frame % 60, y = frame % 30;
+        FramebufferDamageList damage;
+        FramebufferDamage oldRegion, newRegion;
+        oldRegion.Include(oldX, oldY, 25, 14, 80, 40);
+        newRegion.Include(x, y, 25, 14, 80, 40);
+        damage.Include(oldRegion);
+        damage.Include(newRegion);
+        for (unsigned i = 0; i < damage.count; ++i)
+        {
+            partial.SetClip(damage.regions[i]);
+            draw(partial, x, y);
+        }
+        partial.ClearClip();
+        draw(full, x, y);
+        CHECK(test_equal(retained, reference, sizeof(retained)));
+        oldX = x;
+        oldY = y;
+    }
+    return 0;
+}

@@ -185,6 +185,10 @@ void WindowManager::Keyboard(const GuiKey& key)
         }
         return;
     }
+    if (focused && key.down && key.text && !alt && !control)
+    {
+        Display::SharedDisplay()->ObserveInteraction(0, focused->GetWindowID(), false);
+    }
     if (focused && focused->RichInput())
     {
         focused->Key(key);
@@ -365,6 +369,7 @@ void WindowManager::Mouse(int32_t x, int32_t y, uint32_t buttons)
         int32_t newY = Clamp(y - anchorY, 1, drawBuffer.height - target->GetSizeY() - 1);
         if (newX != (int32_t)target->GetStartX() || newY != (int32_t)target->GetStartY())
         {
+            Display::SharedDisplay()->ObserveInteraction(1, target->GetWindowID(), true);
             target->MoveWindow(newX, newY);
             target->SetMouse(x - newX, y - newY - 30, buttons);
             target->SendEvent(HACKOS_WINDOW_MOVE);
@@ -378,8 +383,10 @@ void WindowManager::Mouse(int32_t x, int32_t y, uint32_t buttons)
         uint32_t height = Clamp((int32_t)originalHeight + y - anchorY, 60, maxHeight);
         if (width != target->GetSizeX() || height != target->GetSizeY())
         {
+            Display::SharedDisplay()->ObserveInteraction(2, target->GetWindowID(), false);
             if (target->ResizeWindow(width, height))
             {
+                Display::SharedDisplay()->ObserveInteraction(2, target->GetWindowID(), true);
                 target->SendEvent(HACKOS_WINDOW_RESIZE);
             }
         }
@@ -471,8 +478,9 @@ void WindowManager::Update()
     }
 }
 
-void WindowManager::Draw()
+void WindowManager::Draw(const FramebufferDamage& clip)
 {
+    drawBuffer.SetClip(clip);
     if (background)
     {
         background->Draw(&drawBuffer);
@@ -493,6 +501,7 @@ void WindowManager::Draw()
     {
         DrawRestoreBar();
     }
+    drawBuffer.ClearClip();
 }
 
 Window* WindowManager::CreateWindow(uint32_t startX, uint32_t startY, uint32_t sizeX, uint32_t sizeY, uint64_t owner)

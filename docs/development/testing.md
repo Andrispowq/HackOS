@@ -714,6 +714,48 @@ The SSE2 fast paths retain scalar tails; the kernel already saves SSE state on
 interrupts. Native ARM sanitizer runs exercise the portable renderer path;
 x86-64 host and guest checks exercise the SSE2 paths.
 
+The 6a compositor additionally checks that a synthetic one-pixel scene update
+composes exactly one pixel, cursor-only updates compose none, and forced full
+updates compose the full screen. Profiling waits for app input/painting to settle
+before injecting damage. At geometry, typing, minimize, restore, close and cleanup
+milestones, the suite compares retained partial composition byte-for-byte with a
+forced full recomposition. Host checks cover nonzero glyph clips, padded copies,
+changed-frame bounds, damage-list overflow and repeated overlapping scene moves.
+
+`input-latency.json` records text/drag/resize sample counts and total/last/max PIT
+ticks from the same run. These start at GUI dispatch; geometry samples do not
+wait for app resize repaint. They include frame pacing, use the oldest coalesced
+action and have millisecond clock resolution. Read them as bounded-workload
+diagnostics, not hardware latency guarantees. The `Display` counters and their
+limitations are described in [graphics](../system/graphics.md#observing-graphics).
+
+The 6a local run (2026-10-29, 1920x1080, seven samples per case) produced these
+median debugger wall times. The baseline firmware runs overlapped; final runs
+were sequential without other test VMs, so this is an exploratory comparison,
+not a controlled speedup estimate. The exact region-area assertions above are
+independent of host timing.
+
+| Firmware | Scene | One-pixel before → after | Forced full before → after |
+| --- | --- | ---: | ---: |
+| BIOS | Small window | 12.60 → 2.46 ms | 15.32 → 14.55 ms |
+| BIOS | Maximized | 18.91 → 2.52 ms | 22.44 → 16.67 ms |
+| UEFI | Small window | 12.06 → 2.43 ms | 13.30 → 15.22 ms |
+| UEFI | Maximized | 11.29 → 2.48 ms | 14.90 → 16.67 ms |
+
+Full presentation remains screen-sized work; the measurements do not establish
+an improvement there. Final cursor-only medians were 1.34–1.53 ms. Raw baseline
+samples are in `tests/out/performance-baseline/`; final small/maximized samples
+are in `tests/out/qemu-windows-{bios,uefi}/*-timings.json`.
+
+The full interaction runs collected one sample per operation: BIOS text/drag/
+resize took 26/4/3 ticks, UEFI 31/3/1 ticks (currently 1 ms each). These sparse
+samples establish that instrumentation works, not latency percentiles. Validation
+passed 217 x86-64 UBSan host checks, fresh BIOS/UEFI builds and the full window,
+desktop, editor and graphical-login suites on both firmware paths. Partial/full
+scene equivalence checks passed, and all 348 project-owned C/C++ files passed
+the style checker. ASan was not used for the x86-64 host suite on this emulated
+host; CI sanitizer policy remains unchanged.
+
 The graphics optimization's sequential local QEMU comparison used seven samples
 per case at 1920x1080. Median compositor wall times (including debugger overhead):
 
@@ -728,7 +770,8 @@ per case at 1920x1080. Median compositor wall times (including debugger overhead
 
 Raw samples and medians are under `tests/out/graphics-{reference,final}-timings/`
 and `tests/out/graphics-comparison.json`. These are workload-dependent diagnostics,
-not frame-rate guarantees; scene composition still traverses the full RAM image.
+not frame-rate guarantees. These historical measurements predate clipped scene
+composition.
 
 Final graphics validation passed 204 x86-64 UBSan host checks, 18 focused native
 ARM Linux ASan/UBSan renderer checks, six boot-asset checks, the BIOS chain probe,

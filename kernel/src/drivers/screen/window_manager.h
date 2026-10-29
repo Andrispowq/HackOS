@@ -15,7 +15,7 @@ class WindowManager
     ~WindowManager();
 
     void Update();
-    void Draw();
+    void Draw(const FramebufferDamage& clip);
 
     Window* CreateWindow(uint32_t startX, uint32_t startY, uint32_t sizeX, uint32_t sizeY, uint64_t owner = 0);
     Window* GetWindow(uint64_t ID);

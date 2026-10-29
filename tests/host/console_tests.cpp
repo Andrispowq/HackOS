@@ -135,3 +135,23 @@ TEST(console_scroll_uses_whole_rows_and_clears_remainder)
     CHECK(fb.GetPixel(0, 0) == 0xff000000 && fb.GetPixel(3, 7) == 0xff000000);
     return 0;
 }
+
+TEST(console_glyph_respects_damage_clip)
+{
+    uint8_t glyphs[256 * 16];
+    test_fill(glyphs, 0xff, sizeof(glyphs));
+    PSF1_HEADER header = {{PSF1_MAGIC0, PSF1_MAGIC1}, 0, 16};
+    PSF1_FONT font = {&header, glyphs};
+    uint32_t pixels[20 * 20] = {};
+    Framebuffer fb = {pixels, 18, 20, 32, 20};
+    fb.SetClip({5, 7, 9, 11});
+    DrawConsoleGlyph(fb, font, 'A', 3, 4, 8, 16, 99);
+    for (unsigned y = 0; y < 20; ++y)
+    {
+        for (unsigned x = 0; x < 20; ++x)
+        {
+            CHECK(pixels[y * 20 + x] == (x >= 5 && x < 9 && y >= 7 && y < 11 ? 99U : 0U));
+        }
+    }
+    return 0;
+}

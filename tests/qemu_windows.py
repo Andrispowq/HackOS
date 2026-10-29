@@ -113,6 +113,23 @@ bp.delete()
                             profiling = """
 import json, time
 samples = {}
+# Drain the wake-up key and any app repaint before injecting synthetic damage.
+settle = gdb.Breakpoint("ReapExitedProcesses()", type=gdb.BP_HARDWARE_BREAKPOINT)
+settle.silent = True
+deadline = time.monotonic() + 15
+while time.monotonic() < deadline:
+    gdb.execute("continue")
+    w = gdb.parse_and_eval("KernelWindowManager->focused")
+    owner = int(w["owner"]) if int(w) else 0
+    p = gdb.parse_and_eval("ready_queue")
+    while int(p) and int(p["pid"]) != owner:
+        p = p["next"]
+    app_idle = not int(w) or (int(p) and int(p["state"]) == 6 and not int(w["events"]["count"]))
+    if app_idle and not int(gdb.parse_and_eval("mouseEvents.count")) and not int(gdb.parse_and_eval("display.dirty")):
+        break
+else:
+    raise AssertionError("Profiling app did not settle")
+settle.delete()
 scene_pixel = "display.backbuffer.address[0]"
 scene_x = scene_y = 0
 window = gdb.parse_and_eval("KernelWindowManager->focused")
@@ -146,9 +163,14 @@ for mode in ("scene", "cursor", "full"):
         fields = [field.name for field in gdb.parse_and_eval("display").type.fields()]
         old_scene = int(gdb.parse_and_eval("display.sceneFrames")) if "sceneFrames" in fields else None
         old_pixels = int(gdb.parse_and_eval("display.pixelsPresented")) if "pixelsPresented" in fields else None
+        old_composed = int(gdb.parse_and_eval("display.pixelsComposed")) if "pixelsComposed" in fields else None
         start = time.monotonic()
         gdb.execute("finish")
         values.append(time.monotonic() - start)
+        if old_composed is not None:
+            area = int(gdb.parse_and_eval("display.pixelsComposed")) - old_composed
+            expected = 0 if mode == "cursor" else 1 if mode == "scene" else int(gdb.parse_and_eval("display.framebuffer.width")) * int(gdb.parse_and_eval("display.framebuffer.height"))
+            assert area == expected, (mode, area, expected)
         if mode == "cursor" and old_scene is not None:
             assert int(gdb.parse_and_eval("display.sceneFrames")) == old_scene, "Cursor recomposed the scene"
             assert int(gdb.parse_and_eval("display.pixelsPresented")) == old_pixels, "Cursor presented scene spans"
@@ -169,6 +191,36 @@ gdb.execute("finish")
 print("GRAPHICS_TIMINGS " + json.dumps(samples))
 """
                             profiling = "saved_x = int(gdb.parse_and_eval('MousePositionX'))\nsaved_y = int(gdb.parse_and_eval('MousePositionY'))\n" + profiling
+                        verification = ""
+                        if name in ("geometry", "key-paint", "minimized", "restore", "close", "cleanup"):
+                            verification = """
+# A full reference composition must match the retained partial scene exactly.
+fields = [field.name for field in gdb.parse_and_eval("display").type.fields()]
+if "damageRegions" in fields:
+    scene = gdb.parse_and_eval("display.composition")
+    size = int(scene["pitch"]) * int(scene["height"]) * 4
+    before = bytes(gdb.selected_inferior().read_memory(scene["address"], size))
+    gdb.execute("set display.presented = false")
+    gdb.execute("set display.dirty = true")
+    full = gdb.Breakpoint("Display::DrawBackbuffer()", type=gdb.BP_HARDWARE_BREAKPOINT)
+    gdb.execute("continue")
+    full.delete()
+    gdb.execute("finish")
+    after = bytes(gdb.selected_inferior().read_memory(scene["address"], size))
+    assert before == after, "Partial scene differs from full redraw"
+"""
+                        if name == "key-paint":
+                            verification += """
+import json
+fields = [field.name for field in gdb.parse_and_eval("display").type.fields()]
+if "latency" in fields:
+    latency = {}
+    for index, label in enumerate(("typing", "dragging", "resizing")):
+        value = gdb.parse_and_eval("display.latency[" + str(index) + "]")
+        assert int(value["samples"]) > 0, "Missing latency samples: " + label
+        latency[label] = {field: int(value[field]) for field in ("samples", "totalTicks", "lastTicks", "maxTicks")}
+    print("INPUT_LATENCY " + json.dumps(latency))
+"""
                         qmp.call("stop")
                         script = directory/(name + ".gdb")
                         script.write_text("set pagination off\nset confirm off\ntarget remote " + str(gdb_path) + "\npython\nimport gdb\n" + """
@@ -189,12 +241,15 @@ assert not int(gdb.parse_and_eval("display.dirty")), "Display did not flush its 
 display = gdb.parse_and_eval("display")
 fb = display["framebuffer"]
 back = display["backbuffer"]
-""" + assertions + profiling + "\nprint('WINDOW_STATE_OK')\nend\ndetach\nquit\n")
+""" + assertions + verification + profiling + "\nprint('WINDOW_STATE_OK')\nend\ndetach\nquit\n")
                         result = command([os.environ.get("GDB", "gdb"), "--batch", "--nx", "-q",
                                           built/"kernel.elf", "-x", script], timeout=30)
                         (directory/(name + ".log")).write_text(result.stdout)
                         require_success(result, "inspect window state")
                         assert "WINDOW_STATE_OK" in result.stdout, result.stdout
+                        if "INPUT_LATENCY " in result.stdout:
+                            latency = re.search(r"INPUT_LATENCY (.*)", result.stdout)
+                            (directory/"input-latency.json").write_text(json.dumps(json.loads(latency[1]), indent=2) + "\n")
                         if profiling:
                             timings = re.search(r"GRAPHICS_TIMINGS (.*)", result.stdout)
                             (directory/(name + "-timings.json")).write_text(json.dumps(json.loads(timings[1]), indent=2) + "\n")

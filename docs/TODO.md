@@ -187,8 +187,11 @@ Milestones 1–4 are implemented; later milestones need a separate request.
    unsaved-change confirmation); [settings](system/settings.md) complete for
    hardware pages, account/group editing, password changes and supported recovery-console
    appearance. Session-wide GUI themes and configurable desktop terminals remain follow-ups.
-6. **Integrated hardening:** framebuffer formats, clipping/input/allocator
-   stress, damaged-region composition and latency measurements on BIOS/UEFI.
+6. **Integrated hardening — in progress:** 6a adds bounded damaged-region
+   composition, clipped drawing and debugger-visible render/input latency counters,
+   with full-scene equivalence and timing checks on BIOS/UEFI. Applications still
+   upload complete replacement frames. Broader framebuffer-format support and
+   input/allocator/window-limit stress remain, followed by terminal polish.
 
 ## Boot and memory
 

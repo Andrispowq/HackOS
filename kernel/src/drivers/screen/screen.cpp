@@ -138,59 +138,107 @@ void Display::Invalidate()
 
 void Display::InvalidateRect(uint32_t x, uint32_t y, uint32_t width, uint32_t height)
 {
-    damage.Include(x, y, width, height, framebuffer.width, framebuffer.height);
-    if (!damage.Empty())
+    FramebufferDamage region;
+    region.Include(x, y, width, height, framebuffer.width, framebuffer.height);
+    if (!region.Empty())
     {
+        damage.Include(x, y, width, height, framebuffer.width, framebuffer.height);
+        damageRegions.Include(region);
         dirty = true;
+    }
+}
+
+void Display::ObserveInteraction(unsigned kind, uint64_t window, bool ready)
+{
+    if (kind >= 3)
+    {
+        return;
+    }
+
+    auto& sample = latency[kind];
+    // Coalesced input measures the oldest action in this frame. Expire actions
+    // that produced no visual update instead of attributing a later edit to them.
+    if (!sample.pending || sample.window != window || tick - sample.started > TimerTicksForMilliseconds(1000))
+    {
+        sample.started = tick;
+        sample.window = window;
+        sample.pending = true;
+        sample.ready = ready;
+    }
+    else
+    {
+        sample.ready = sample.ready || ready;
+    }
+}
+
+void Display::WindowCommitted(uint64_t window)
+{
+    auto& sample = latency[0];
+    if (sample.pending && sample.window == window)
+    {
+        sample.ready = true;
     }
 }
 
 void Display::DrawBackbuffer()
 {
     PreemptionGuard guard;
-    // Restore from the last composed scene, never read device memory. This also
-    // removes the cursor before comparing/presenting a changed scene.
+    uint64_t started = tick;
+    bool scene = dirty || !presented;
     if (presented && KernelWindowManager)
     {
         framebuffer.CopyRegion(composition, cursorX, cursorY, 16, 16);
     }
 
-    if (dirty || !presented)
+    if (scene)
     {
-        if (KernelWindowManager && KernelWindowManager->HasPanel())
-        {
-            composition.Clear(0xff152738);
-        }
-        else
-        {
-            composition.CopyFrom(backbuffer, 0, 0);
-        }
-        if (caretVisible)
-        {
-            composition.DrawRect(caretX * console.char_width, caretY * console.char_height, 2, console.char_height,
-                                 console.Foreground());
-        }
-        if (KernelWindowManager)
-        {
-            KernelWindowManager->Draw();
-        }
-
         if (!presented || damage.Empty())
         {
-            pixelsPresented += framebuffer.PresentChanged(composition, previous, !presented);
+            damageRegions = {};
+            FramebufferDamage full;
+            full.Include(0, 0, framebuffer.width, framebuffer.height, framebuffer.width, framebuffer.height);
+            damageRegions.Include(full);
         }
-        else
+        else if (!damageRegions.count)
         {
+            // Also supports debugger-forced damage used by the profiling tests.
+            damageRegions.Include(damage);
+        }
+
+        for (unsigned i = 0; i < damageRegions.count; ++i)
+        {
+            const auto& region = damageRegions.regions[i];
+            composition.SetClip(region);
+            if (KernelWindowManager && KernelWindowManager->HasPanel())
+            {
+                composition.Clear(0xff152738);
+            }
+            else
+            {
+                composition.CopyFrom(backbuffer, 0, 0);
+            }
+            if (caretVisible)
+            {
+                composition.DrawRect(caretX * console.char_width, caretY * console.char_height, 2, console.char_height,
+                                     console.Foreground());
+            }
+            if (KernelWindowManager)
+            {
+                KernelWindowManager->Draw(region);
+            }
+            composition.ClearClip();
+
             Framebuffer target = framebuffer, current = composition, saved = previous;
             Framebuffer* buffers[] = {&target, &current, &saved};
             for (auto buffer : buffers)
             {
-                buffer->address += (uint64_t)damage.top * buffer->pitch + damage.left;
-                buffer->width = damage.right - damage.left;
-                buffer->height = damage.bottom - damage.top;
+                buffer->address += (uint64_t)region.top * buffer->pitch + region.left;
+                buffer->width = region.right - region.left;
+                buffer->height = region.bottom - region.top;
             }
-
-            pixelsPresented += target.PresentChanged(current, saved, false);
+            pixelsComposed += (uint64_t)target.width * target.height;
+            ++regionsComposed;
+            pixelsPresented += target.PresentChanged(current, saved, !presented);
         }
         ++sceneFrames;
     }
@@ -201,8 +249,32 @@ void Display::DrawBackbuffer()
         DrawMouse(framebuffer, cursorX, cursorY);
     }
 
+    if (scene)
+    {
+        for (auto& sample : latency)
+        {
+            if (sample.pending && sample.ready)
+            {
+                sample.lastTicks = tick - sample.started;
+                sample.totalTicks += sample.lastTicks;
+                if (sample.lastTicks > sample.maxTicks)
+                {
+                    sample.maxTicks = sample.lastTicks;
+                }
+                ++sample.samples;
+                sample.pending = sample.ready = false;
+            }
+        }
+    }
+    lastRenderTicks = tick - started;
+    renderTicks += lastRenderTicks;
+    if (lastRenderTicks > maxRenderTicks)
+    {
+        maxRenderTicks = lastRenderTicks;
+    }
     dirty = false;
     damage = {};
+    damageRegions = {};
     cursorDirty = false;
     presented = true;
     ++framesPresented;

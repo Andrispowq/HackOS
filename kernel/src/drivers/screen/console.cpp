@@ -90,16 +90,20 @@ void DrawConsoleGlyph(Framebuffer& framebuffer, const PSF1_FONT& font, uint8_t c
 
     uint32_t nativeHeight = font.psf1_Header->charsize;
     const uint8_t* glyph = (const uint8_t*)font.glyphBuffer + character * nativeHeight;
-    uint32_t rows = height < framebuffer.height - y ? height : framebuffer.height - y;
-    uint32_t columns = width < framebuffer.width - x ? width : framebuffer.width - x;
-    for (uint32_t row = 0; row < rows; ++row)
+    uint32_t left = x, top = y, columns = width, rows = height;
+    if (!framebuffer.ClipRect(left, top, columns, rows))
     {
-        uint8_t bits = glyph[(uint64_t)row * nativeHeight / height];
-        for (uint32_t column = 0; column < columns; ++column)
+        return;
+    }
+
+    for (uint32_t row = top; row < top + rows; ++row)
+    {
+        uint8_t bits = glyph[(uint64_t)(row - y) * nativeHeight / height];
+        for (uint32_t column = left; column < left + columns; ++column)
         {
-            if (bits & (0x80 >> ((uint64_t)column * 8 / width)))
+            if (bits & (0x80 >> ((uint64_t)(column - x) * 8 / width)))
             {
-                framebuffer.address[(uint64_t)(y + row) * framebuffer.pitch + x + column] = colour;
+                framebuffer.address[(uint64_t)row * framebuffer.pitch + column] = colour;
             }
         }
     }
