@@ -387,13 +387,22 @@ int main(int argc, char** argv)
                                   : action.widget == go ? picker.Get(pickerDirectory)->text
                                                         : directory);
                 }
-                else if (action.widget == browse && picker.Get(pickerList)->selected < entryCount)
+                else if ((action.widget == browse || action.widget == pickerList) &&
+                         picker.Get(pickerList)->selected < entryCount)
                 {
                     auto& entry = entries[picker.Get(pickerList)->selected];
                     if (entry.attributes & HACKOS_DIRECTORY)
                     {
                         page = 0;
                         ListDirectory(entry.name);
+                    }
+                    else if (action.widget == pickerList && !saving)
+                    {
+                        char path[256];
+                        if (NormalizePath(entry.name, directory, path))
+                        {
+                            Open(path);
+                        }
                     }
                 }
                 else if (action.widget == pickerAccept)

@@ -483,6 +483,23 @@ static uint64_t UserAddGroup(uint64_t uid, uint64_t gid)
     return SaveAccounts(accounts.AddGroup(uid, gid), previous);
 }
 
+static uint64_t UserAccountEdit(uint64_t operation, uint64_t id, uint64_t value, const char* name)
+{
+    if (!IsRoot())
+    {
+        return HACKOS_DENIED;
+    }
+    char copy[HACKOS_ACCOUNT_NAME] = {};
+    if (accountStore.Status() != AccountStore::Ready ||
+        ((operation == HACKOS_ACCOUNT_RENAME_USER || operation == HACKOS_ACCOUNT_RENAME_GROUP) &&
+         !Caller()->userSpace->CopyString(copy, (uint64_t)name, sizeof(copy))))
+    {
+        return HACKOS_ERROR;
+    }
+    AccountRegistry previous = accounts;
+    return SaveAccounts(accounts.Edit(operation, id, value, copy), previous);
+}
+
 static bool CopyPassword(const char* source, char (&password)[HACKOS_PASSWORD_MAX + 1])
 {
     if (!Caller()->userSpace->CopyString(password, (uint64_t)source, sizeof(password)))
@@ -578,6 +595,54 @@ static uint64_t UserPasswordSet(uint64_t uid, const char* password)
     accounts.SetPassword(uid, record);
     SecureErase(&record, sizeof(record));
     return SaveAccounts(0, previous);
+}
+
+static uint64_t UserPasswordChange(const char* oldPassword, const char* newPassword)
+{
+    static uint64_t retryAfter = 0;
+    if (accountStore.Status() != AccountStore::Ready || tick < retryAfter)
+    {
+        return HACKOS_RETRY;
+    }
+    const PasswordRecord* stored = nullptr;
+    for (unsigned i = 0; i < accounts.Data().userCount; ++i)
+    {
+        if (accounts.User(i)->credentials.uid == Caller()->credentials.uid)
+        {
+            stored = &accounts.Data().passwords[i];
+            break;
+        }
+    }
+    char password[HACKOS_PASSWORD_MAX + 1] = {};
+    if (!stored || !stored->enabled || !CopyPassword(oldPassword, password))
+    {
+        SecureErase(password, sizeof(password));
+        retryAfter = tick + TimerTicksForMilliseconds(1000);
+        return HACKOS_DENIED;
+    }
+    uint8_t digest[32];
+    Pbkdf2Sha256(password, strlen(password), stored->salt, sizeof(stored->salt), stored->iterations, digest);
+    bool accepted = ConstantEqual(digest, stored->digest, sizeof(digest));
+    SecureErase(password, sizeof(password));
+    SecureErase(digest, sizeof(digest));
+    if (!accepted)
+    {
+        retryAfter = tick + TimerTicksForMilliseconds(1000);
+        return HACKOS_DENIED;
+    }
+    PasswordRecord record = {};
+    auto result = NewPassword(newPassword, record);
+    if (result)
+    {
+        SecureErase(&record, sizeof(record));
+        return result;
+    }
+    AccountRegistry previous = accounts;
+    accounts.SetPassword(Caller()->credentials.uid, record);
+    SecureErase(&record, sizeof(record));
+    result = SaveAccounts(0, previous);
+    SecureErase(&previous, sizeof(previous));
+    return result;
 }
 
 static uint64_t Authenticate(const char* username, const char* source, bool desktop)
@@ -1509,6 +1574,12 @@ static void syscall_handler(Registers* r)
         break;
     case HACKOS_SYS_auth_login:
         r->rax = UserAuthLogin((const char*)r->rdi, (const char*)r->rsi);
+        break;
+    case HACKOS_SYS_account_edit:
+        r->rax = UserAccountEdit(r->rdi, r->rsi, r->rdx, (const char*)r->rcx);
+        break;
+    case HACKOS_SYS_password_change:
+        r->rax = UserPasswordChange((const char*)r->rdi, (const char*)r->rsi);
         break;
     case HACKOS_SYS_password_set:
         r->rax = UserPasswordSet(r->rdi, (const char*)r->rsi);

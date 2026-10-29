@@ -97,3 +97,5 @@ Continue with [memory](memory.md), [devices](devices.md), or [graphics](graphics
 
 The [desktop and terminal guide](desktop.md) covers the authenticated launcher,
 taskbar, independent terminal endpoints and recovery login.
+
+- [Graphical Settings](settings.md): hardware pages, account/group administration and password changes.

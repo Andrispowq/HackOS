@@ -279,3 +279,78 @@ bool AccountRegistry::Validate(const AccountData& value)
 
     return value.users[0].credentials.gid == 0;
 }
+
+uint64_t AccountRegistry::Edit(uint64_t operation, uint64_t id, uint64_t value, const char* name)
+{
+    if (operation == HACKOS_ACCOUNT_RENAME_USER || operation == HACKOS_ACCOUNT_RENAME_GROUP)
+    {
+        if (!ValidName(name))
+        {
+            return HACKOS_ERROR;
+        }
+        char* target = nullptr;
+        bool users = operation == HACKOS_ACCOUNT_RENAME_USER;
+        unsigned count = users ? data.userCount : data.groupCount;
+        for (unsigned i = 0; i < count; ++i)
+        {
+            char* existing = users ? data.users[i].name : data.groups[i].name;
+            uint64_t key = users ? data.users[i].credentials.uid : data.groups[i].gid;
+            if (key == id)
+            {
+                target = existing;
+            }
+            else if (strcmp(existing, (char*)name) == 0)
+            {
+                return HACKOS_ERROR;
+            }
+        }
+        if (!target)
+        {
+            return HACKOS_ERROR;
+        }
+        for (unsigned i = 0; i < HACKOS_ACCOUNT_NAME; ++i)
+        {
+            target[i] = 0;
+        }
+        strcpy(target, name);
+        return 0;
+    }
+    if (!HasGroup(value) || (operation == HACKOS_ACCOUNT_PRIMARY_GROUP && id == 0 && value != 0))
+    {
+        return HACKOS_ERROR;
+    }
+    for (unsigned i = 0; i < data.userCount; ++i)
+    {
+        auto& credentials = data.users[i].credentials;
+        if (credentials.uid != id)
+        {
+            continue;
+        }
+        if (operation != HACKOS_ACCOUNT_PRIMARY_GROUP && operation != HACKOS_ACCOUNT_REMOVE_GROUP)
+        {
+            return HACKOS_ERROR;
+        }
+        if (operation == HACKOS_ACCOUNT_REMOVE_GROUP && credentials.gid == value)
+        {
+            return HACKOS_ERROR;
+        }
+        for (unsigned j = 0; j < credentials.groupCount; ++j)
+        {
+            if (credentials.groups[j] == value)
+            {
+                for (unsigned k = j + 1; k < credentials.groupCount; ++k)
+                {
+                    credentials.groups[k - 1] = credentials.groups[k];
+                }
+                credentials.groups[--credentials.groupCount] = 0;
+                break;
+            }
+        }
+        if (operation == HACKOS_ACCOUNT_PRIMARY_GROUP)
+        {
+            credentials.gid = value;
+        }
+        return 0;
+    }
+    return HACKOS_ERROR;
+}

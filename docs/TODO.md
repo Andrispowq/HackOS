@@ -184,8 +184,9 @@ Milestones 1–4 are implemented; later milestones need a separate request.
    first-boot confirmation, error dialogs, shutdown/restart and text recovery.
 5. **Applications:** file manager complete (bounded read-only previews; file-only
    rename/delete); graphical editor complete (multiline, clipboard, file dialogs,
-   unsaved-change confirmation). Next: settings
-   using existing permission, filesystem and authentication contracts.
+   unsaved-change confirmation); [settings](system/settings.md) complete for
+   hardware pages, account/group editing, password changes and supported recovery-console
+   appearance. Session-wide GUI themes and configurable desktop terminals remain follow-ups.
 6. **Integrated hardening:** framebuffer formats, clipping/input/allocator
    stress, damaged-region composition and latency measurements on BIOS/UEFI.
 

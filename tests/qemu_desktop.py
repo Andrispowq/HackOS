@@ -40,7 +40,7 @@ def test(firmware, timeout):
                 sequence += 1
                 g.qmp.call('stop')
                 script = directory / ('inspect-' + str(sequence) + '.gdb')
-                script.write_text('set pagination off\nset confirm off\ntarget remote ' + str(g.gdb) + '\npython\nimport gdb, time\n' + '''
+                script.write_text('set pagination off\nset confirm off\ntarget remote ' + str(g.gdb) + '\nadd-symbol-file ' + str(built / 'source/libs/desktop/bin/desktop') + '\npython\nimport gdb, time, struct\n' + '''
 bp = gdb.Breakpoint('ReapExitedProcesses', type=gdb.BP_HARDWARE_BREAKPOINT)
 bp.silent = True
 deadline = time.monotonic() + 60
@@ -120,6 +120,22 @@ quit
                     time.sleep(0.1)
 
             inspect("assert number('terminals[0].controller') != 0\nassert number('KernelWindowManager->panel') != 0")
+            inspect("""desktop = next(p for p in processes() if int(p['desktopController']))
+def readDesktop(expr, size):
+    address = number('(unsigned long)&' + expr)
+    data = b''
+    while size:
+        leaf = desktop['userSpace']['leaf']['entries'][(address - 0x400000000000) // 4096]
+        amount = min(size, 4096 - (address & 4095))
+        data += bytes(gdb.selected_inferior().read_memory((int(leaf['address']) << 12) + (address & 4095), amount))
+        address += amount
+        size -= amount
+    return data
+count = struct.unpack('<I', readDesktop('view.count', 4))[0]
+labels = [readDesktop('view.widgets[' + str(i) + '].text', 256).split(bytes(1), 1)[0].decode('ascii') for i in range(count)]
+clocks = [label for label in labels if label.endswith(' UTC')]
+assert len(clocks) == 1 and len(clocks[0]) == 12 and clocks[0][:2].isdigit(), clocks
+assert 'Settings' in labels""")
             shell('echo FIRST_TERMINAL', 'FIRST_TERMINAL')
             shell('cd /tmp', '$ ')
             key('esc', alt=True)
@@ -186,6 +202,13 @@ quit
             g.wait('FILES_READY', mark)
             inspect("assert number('user_windows_live') == 3")
             g.screen('launcher-files')
+            key('f4', alt=True)
+            inspect("assert number('user_windows_live') == 2")
+            mark = len(g.output())
+            click(750, 1000)
+            g.wait('SETTINGS_READY', mark)
+            inspect("assert number('user_windows_live') == 3")
+            g.screen('launcher-settings-clock')
             key('f4', alt=True)
             inspect("assert number('user_windows_live') == 2")
             # Launch a GUI application from the same authenticated launcher.

@@ -106,3 +106,7 @@ Its client retains the normal 30-pixel coordinate offset, but has no chrome.
 It is excluded from Alt-Tab and taskbar enumeration. Client input still uses the
 owned window queue. Desktop exit reclaims both panel and background; the pair
 uses two of the sixteen window slots and the normal aggregate surface budget.
+
+The launcher also opens [Settings](settings.md). The right side displays the RTC
+time as HH:MM:SS UTC, updated once per second. The guest assumes the RTC uses UTC;
+there is no time-zone configuration yet.

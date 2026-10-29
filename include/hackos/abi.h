@@ -284,3 +284,9 @@ constexpr uint64_t HACKOS_DESKTOP_SCREEN = 0, HACKOS_DESKTOP_PANEL = 1, HACKOS_D
                    HACKOS_DESKTOP_BACKGROUND = 6;
 static_assert(sizeof(HackosTerminalState) == 40, "terminal snapshot ABI");
 static_assert(sizeof(HackosDesktopEntry) == 64, "desktop entry ABI");
+
+// Persistent account changes; running processes retain their credential snapshot.
+constexpr uint64_t HACKOS_ACCOUNT_RENAME_USER = 0;
+constexpr uint64_t HACKOS_ACCOUNT_RENAME_GROUP = 1;
+constexpr uint64_t HACKOS_ACCOUNT_PRIMARY_GROUP = 2;
+constexpr uint64_t HACKOS_ACCOUNT_REMOVE_GROUP = 3;

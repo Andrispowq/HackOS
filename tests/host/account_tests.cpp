@@ -82,3 +82,34 @@ TEST(account_memberships_and_snapshot)
     CHECK(registry.AddGroup(1000, 0) == 0);
     return 0;
 }
+
+TEST(account_edit_preserves_ids_and_valid_store)
+{
+    AccountRegistry registry;
+    registry.Initialise();
+    PasswordRecord password = {};
+    password.enabled = 1;
+    password.iterations = 600000;
+    CHECK(registry.Setup("admin", password));
+    CHECK(registry.CreateGroup("staff") == 1001);
+    CHECK(registry.CreateUser("alice", 1000) == 1001);
+    CHECK(registry.Edit(HACKOS_ACCOUNT_RENAME_USER, 1001, 0, "bob") == 0);
+    CHECK(registry.FindUser("alice") == -1 && registry.FindUser("bob") == 2);
+    CHECK(registry.Credentials(1001)->uid == 1001);
+    CHECK(registry.Edit(HACKOS_ACCOUNT_RENAME_USER, 1001, 0, "admin") == HACKOS_ERROR);
+    CHECK(registry.Edit(HACKOS_ACCOUNT_RENAME_GROUP, 1001, 0, "dev") == 0);
+    CHECK(registry.Edit(HACKOS_ACCOUNT_RENAME_GROUP, 1001, 0, "users") == HACKOS_ERROR);
+    CHECK(registry.Edit(HACKOS_ACCOUNT_RENAME_USER, 1ULL << 32, 0, "bad") == HACKOS_ERROR);
+    CHECK(registry.Edit(HACKOS_ACCOUNT_RENAME_USER, 1001, 0, "Bad") == HACKOS_ERROR);
+    CHECK(registry.AddGroup(1001, 1001) == 0);
+    CHECK(registry.Edit(HACKOS_ACCOUNT_PRIMARY_GROUP, 1001, 1001, nullptr) == 0);
+    CHECK(registry.Credentials(1001)->gid == 1001 && registry.Credentials(1001)->groupCount == 0);
+    CHECK(registry.Edit(HACKOS_ACCOUNT_REMOVE_GROUP, 1001, 1001, nullptr) == HACKOS_ERROR);
+    CHECK(registry.AddGroup(1001, 1000) == 0);
+    CHECK(registry.Edit(HACKOS_ACCOUNT_REMOVE_GROUP, 1001, 1000, nullptr) == 0);
+    CHECK(registry.Credentials(1001)->groupCount == 0);
+    CHECK(registry.Edit(HACKOS_ACCOUNT_PRIMARY_GROUP, 0, 1000, nullptr) == HACKOS_ERROR);
+    CHECK(registry.Edit(99, 1001, 1000, nullptr) == HACKOS_ERROR);
+    CHECK(AccountRegistry::Validate(registry.Data()));
+    return 0;
+}

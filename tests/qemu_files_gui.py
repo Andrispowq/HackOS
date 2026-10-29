@@ -110,7 +110,7 @@ quit
                 time.sleep(.1)
 
             mouse = [0, 0]
-            def click(name):
+            def click(name, twice=False):
                 x, y = inspect()[name]
                 while mouse != [x, y]:
                     dx, dy = max(-100, min(100, x-mouse[0])), max(-100, min(100, y-mouse[1]))
@@ -121,9 +121,9 @@ quit
                     mouse[1] += dy
                     time.sleep(.04)
                 inspect()
-                for down in (True, False):
+                for down in ((True, False, True, False) if twice else (True, False)):
                     g.qmp.call('input-send-event', {'events': [{'type': 'btn', 'data': {'down': down, 'button': 'left'}}]})
-                    time.sleep(.15)
+                    time.sleep(.05 if twice else .15)
 
             def fill(name, value):
                 click(name)
@@ -145,7 +145,7 @@ quit
 
             click('entry:alpha.txt')
             inspect("assert 'Created: ' in text(field('datesLabel') + '.text')\nassert 'Modified: ' in text(field('datesLabel') + '.text')\nassert 'Unknown' not in text(field('datesLabel') + '.text')")
-            click('openButton')
+            key('ret')
             inspect("assert text('preview[0]') == 'hello'\nassert text('preview[1]') == 'world'")
             mark = len(g.output())
             click('Edit text')
@@ -162,12 +162,20 @@ quit
             click('entry:large.txt')
             click('openButton')
             inspect("assert '(truncated)' in text(field('status') + '.text')")
+            fill('target', 'new.txt')
+            click('New file')
+            inspect("assert text(field('status') + '.text') == 'Operation completed.'")
+            fill('target', 'alpha.txt')
+            click('New file')
+            inspect("assert flag('view.modal')")
+            key('esc')
+            click('entry:alpha.txt')
+            key('ret')
+            inspect("assert text('preview[0]') == 'hello'")
             fill('target', 'notes')
             click('New folder')
             inspect("assert text(field('status') + '.text') == 'Operation completed.'")
-            click('entry:notes')
-            inspect("assert not flag(field('deleteButton') + '.enabled')")
-            click('openButton')
+            click('entry:notes', twice=True)
             inspect("assert text('cwd').lower() == '~/tmp/notes'")
             click('Up')
             click('entry:alpha.txt')
@@ -216,7 +224,9 @@ quit
             g.qmp.call('cont')
         listing = require_success(command(['mdir', '-i', filesystem(image), '::/tmp/notes']), 'saved folder')
         assert 'renamed' not in listing.lower(), listing
-        return 'Text/hex/truncated previews; navigation; mkdir; move; cancel/confirm delete; missing paths; guest permission errors; close.'
+        empty = require_success(command(['mtype', '-i', filesystem(image), '::/TMP/NEW.TXT']), 'new empty file')
+        assert empty == ''
+        return 'Enter/double-click; create empty file without overwrite; text/hex/truncated previews; navigation; mkdir; move; cancel/confirm delete; missing paths; guest permission errors; close.'
     report.check('file_manager_gui', run)
     return report.finish()
 

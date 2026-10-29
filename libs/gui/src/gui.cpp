@@ -231,6 +231,8 @@ void View::Init()
     widgets[0].padding = widgets[0].gap = 8;
     focused = pressed = savedFocus = dialogPressed = NoWidget;
     buttons = 0;
+    lastClickWidget = NoWidget;
+    lastClickTime = 0;
     dragging = modal = suppressSpace = false;
     dirty = windowFocused = true;
     width = height = 0;
@@ -393,6 +395,7 @@ bool View::SetItems(unsigned id, const char* const* items, unsigned length)
         }
     }
     auto& w = widgets[id];
+    lastClickWidget = NoWidget;
     w.items = items;
     w.itemCount = length;
     w.selected = w.scroll = 0;
@@ -589,6 +592,8 @@ void View::ResetInput(bool value)
     pressed = dialogPressed = NoWidget;
     dragging = suppressSpace = false;
     buttons = 0;
+    lastClickWidget = NoWidget;
+    lastClickTime = 0;
     dirty = true;
 }
 
@@ -644,6 +649,10 @@ Action View::Edit(unsigned id, const HackosWindowEvent2& input, Clipboard clipbo
 {
     auto& w = widgets[id];
     const auto& event = input.event;
+    if (event.type == HACKOS_WINDOW_KEY_DOWN || event.type == HACKOS_WINDOW_WHEEL)
+    {
+        lastClickWidget = NoWidget;
+    }
     bool change = false;
     if (w.secret)
     {
@@ -737,7 +746,7 @@ Action View::Activate(unsigned id)
         dirty = true;
         return {ActionKind::Change, id, w.checked};
     }
-    if ((w.kind == Kind::Button || w.kind == Kind::IconButton))
+    if (w.kind == Kind::Button || w.kind == Kind::IconButton || (w.kind == Kind::List && w.itemCount))
     {
         return {ActionKind::Activate, id, 0};
     }
@@ -810,9 +819,13 @@ Action View::DialogReply(unsigned choice)
     return {ActionKind::Dialog, NoWidget, (int)choice};
 }
 
-Action View::Handle(const HackosWindowEvent2& input, Clipboard clipboard)
+Action View::Handle(const HackosWindowEvent2& input, Clipboard clipboard, uint64_t milliseconds)
 {
     const auto& event = input.event;
+    if (event.type == HACKOS_WINDOW_KEY_DOWN || event.type == HACKOS_WINDOW_WHEEL)
+    {
+        lastClickWidget = NoWidget;
+    }
 
     // A Space activation also has a queued TEXT event. Do not let that event
     // edit a newly restored/focused field after a dialog or button action.
@@ -938,6 +951,10 @@ Action View::Handle(const HackosWindowEvent2& input, Clipboard clipboard)
         buttons = event.buttons;
         if (down)
         {
+            if (hit != lastClickWidget)
+            {
+                lastClickWidget = NoWidget;
+            }
             pressed = hit;
             dragging = false;
             if (hit != NoWidget)
@@ -972,8 +989,13 @@ Action View::Handle(const HackosWindowEvent2& input, Clipboard clipboard)
             unsigned selected = w.scroll + Max(0, (event.y - w.bounds.y - 2) / 20);
             if (selected < w.itemCount)
             {
+                bool twice = milliseconds && lastClickWidget == hit && lastClickItem == selected &&
+                             milliseconds >= lastClickTime && milliseconds - lastClickTime <= 500;
+                lastClickWidget = twice ? NoWidget : hit;
+                lastClickItem = selected;
+                lastClickTime = milliseconds;
                 w.selected = selected;
-                return {ActionKind::Change, hit, (int)selected};
+                return {twice ? ActionKind::Activate : ActionKind::Change, hit, (int)selected};
             }
         }
         if (up)
@@ -982,7 +1004,7 @@ Action View::Handle(const HackosWindowEvent2& input, Clipboard clipboard)
             pressed = NoWidget;
             dragging = false;
             dirty = true;
-            if (old != NoWidget && old == hit)
+            if (old != NoWidget && old == hit && widgets[hit].kind != Kind::List)
             {
                 return Activate(hit);
             }

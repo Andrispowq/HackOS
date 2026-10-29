@@ -118,6 +118,8 @@ struct Widget
 class View
 {
     Widget widgets[MaxWidgets];
+    uint64_t lastClickTime;
+    unsigned lastClickWidget, lastClickItem;
     unsigned count, focused, pressed;
     uint32_t buttons;
     bool dragging, dirty, windowFocused, suppressSpace;
@@ -163,7 +165,7 @@ class View
                     unsigned cancel);
     bool DialogOpen() const;
     Rect DialogButton(unsigned choice) const;
-    Action Handle(const HackosWindowEvent2& event, Clipboard clipboard = {});
+    Action Handle(const HackosWindowEvent2& event, Clipboard clipboard = {}, uint64_t milliseconds = 0);
     void Draw(Canvas& canvas, const Font& font) const;
     bool Dirty() const;
     void Invalidate();

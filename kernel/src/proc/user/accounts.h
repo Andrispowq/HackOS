@@ -27,6 +27,7 @@ class AccountRegistry
     uint64_t CreateUser(const char* name, uint64_t gid);
     uint64_t CreateGroup(const char* name);
     uint64_t AddGroup(uint64_t uid, uint64_t gid);
+    uint64_t Edit(uint64_t operation, uint64_t id, uint64_t value, const char* name);
     int FindUser(const char* name) const;
     bool Setup(const char* name, const PasswordRecord& password);
     bool SetPassword(uint64_t uid, const PasswordRecord& password);

@@ -114,3 +114,7 @@ test-files-gui:
 .PHONY: test-editor
 test-editor:
 	$(PYTHON) qemu_editor.py --firmware $(FIRMWARE)
+
+.PHONY: test-settings
+test-settings:
+	$(PYTHON) qemu_settings.py --firmware $(FIRMWARE)

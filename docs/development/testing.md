@@ -1029,3 +1029,7 @@ GUI tests cover first-start administrator creation on both firmware paths.
 Host GUI tests cover bounded multiline insertion/paste, selection, scrolling,
 resize/clipping and invalid FAT date formatting; filesystem tests check date
 preservation on save/move and directory modification on child changes.
+
+`python3 tests/qemu_settings.py --firmware bios` (repeat with `uefi`) validates
+graphical system pages, durable account/group edits, direct syscall authorization
+probes, read-only guest controls and current-password-verified password changes.

@@ -20,12 +20,18 @@ int main()
         ok = ok && syscall_password_set(0, "Password123") == HACKOS_DENIED;
         ok = ok && syscall_password_set(identity.uid, (const char*)0x100000) == HACKOS_DENIED;
         ok = ok && syscall_power(0) == HACKOS_DENIED && syscall_power(1) == HACKOS_DENIED;
+        for (uint64_t operation = 0; operation < 4; ++operation)
+        {
+            ok = ok && syscall_account_edit(operation, identity.uid, 0, "forged") == HACKOS_DENIED;
+        }
         ok = ok && syscall_user_create("forged", 0) == HACKOS_DENIED;
         ok = ok && syscall_group_create("forged") == HACKOS_DENIED;
         ok = ok && syscall_user_add_group(identity.uid, 0) == HACKOS_DENIED;
     }
     else
     {
+        ok = ok && syscall_account_edit(HACKOS_ACCOUNT_RENAME_USER, 0, 0, (const char*)0x100000) == HACKOS_ERROR;
+        ok = ok && syscall_account_edit(99, 0, 0, nullptr) == HACKOS_ERROR;
         ok = ok && syscall_password_set(0, (const char*)0x100000) == HACKOS_ERROR;
         ok = ok && syscall_password_set(0, "short") == HACKOS_ERROR;
         char password[HACKOS_PASSWORD_MAX + 1];

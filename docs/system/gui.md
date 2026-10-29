@@ -138,3 +138,9 @@ choose how to handle these commands. Modals continue to trap input.
 (icon 1) or folder (icon 2), selected through `SetIcon`. It follows the usual
 clipping, focus and press/release activation rules. Desktop uses these two fixed
 icons; no image assets or icon discovery mechanism are required.
+
+Lists emit Activate on Enter/Space or a second click on the same item within
+500 ms. A single click emits Change. The optional final `View::Handle` argument
+is monotonic milliseconds (zero disables double-click detection); the Window
+adapter supplies clock ticks under the current 1000 Hz PIT contract. Replacing
+items, input reset, keyboard input and wheel scrolling cancel the click pair.

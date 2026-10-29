@@ -71,6 +71,7 @@ def build(firmware):
     make("desktop_program", "libs/desktop", ["all"])
     make("file_manager", "libs/files", ["all"])
     make("graphical_editor", "libs/editor", ["all"])
+    make("graphical_settings", "libs/settings", ["all"])
     make("terminal_program", "libs/term", ["all"])
     make("ring3_program", "libs/ring3", ["all"])
 
@@ -83,7 +84,7 @@ def build(firmware):
         validate_elf(kernel)
         # Large-model .lbss/.ldata must remain in their aligned load segments.
         # The kernel rejects shared pages rather than merging R/W/X permissions.
-        for path in [*(work / "libs/commands/bin").iterdir(), work / "libs/login/bin/login", work / "libs/window/bin/window", work / "libs/desktop/bin/desktop", work / "libs/files/bin/files", work / "libs/editor/bin/editor", work / "libs/term/bin/term"]:
+        for path in [*(work / "libs/commands/bin").iterdir(), work / "libs/login/bin/login", work / "libs/window/bin/window", work / "libs/desktop/bin/desktop", work / "libs/files/bin/files", work / "libs/editor/bin/editor", work / "libs/settings/bin/settings", work / "libs/term/bin/term"]:
             data = path.read_bytes()
             validate_elf(data)
             phoff = struct.unpack_from('<Q', data, 32)[0]
@@ -130,7 +131,7 @@ def build(firmware):
         extracted = directory / "packaged-kernel.elf"
         require_success(command(["mcopy", "-o", "-i", fs_image, "::/KERNEL.ELF", extracted]), "read packaged kernel")
         assert extracted.read_bytes() == kernel, "FAT32 kernel differs"
-        for name in ("/UTIL/FONTS/zap-light16.psf", "/USR/BIN/usertest.elf", "/USR/BIN/test", "/USR/BIN/shell", "/USR/BIN/login", "/SYSTEM/ACCT0.DAT", "/SYSTEM/ACCT1.DAT", "/USR/BIN/ring3", "/USR/BIN/input", "/USR/BIN/window", "/USR/BIN/files", "/USR/BIN/editor", *["/USR/BIN/" + name for name in ("help", "clear", "terminal", "echo", "time", "sysinfo", "ps", "kill", "ls", "wd", "cat", "read", "grep", "wc", "head", "tail", "tee", "more", "sort", "uniq", "cut", "tr", "shutdown", "restart", "id", "whoami", "users", "groups", "useradd", "groupadd", "usermod", "runas", "passwd", "xxd", "mkdir", "rm", "mv", "edit", "chmod", "chown")]):
+        for name in ("/UTIL/FONTS/zap-light16.psf", "/USR/BIN/usertest.elf", "/USR/BIN/test", "/USR/BIN/shell", "/USR/BIN/login", "/SYSTEM/ACCT0.DAT", "/SYSTEM/ACCT1.DAT", "/USR/BIN/ring3", "/USR/BIN/input", "/USR/BIN/window", "/USR/BIN/files", "/USR/BIN/editor", "/USR/BIN/settings", *["/USR/BIN/" + name for name in ("help", "clear", "terminal", "echo", "time", "sysinfo", "ps", "kill", "ls", "wd", "cat", "read", "grep", "wc", "head", "tail", "tee", "more", "sort", "uniq", "cut", "tr", "shutdown", "restart", "id", "whoami", "users", "groups", "useradd", "groupadd", "usermod", "runas", "passwd", "xxd", "mkdir", "rm", "mv", "edit", "chmod", "chown")]):
             require_success(command(["mdir","-a","-i",fs_image,"::"+name]), "image file " + name)
         shutil.copy2(image, directory/"HackOS.img")
         shutil.copy2(work/"kernel/bin/kernel.elf", directory/"kernel.elf")

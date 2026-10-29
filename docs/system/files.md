@@ -48,3 +48,8 @@ close request and releases the window; process exit reclaims remaining resources
 Validation: `python3 tests/qemu_files_gui.py --firmware bios` (also `uefi`) uses a
 fresh disposable built image and real keyboard/mouse input. Build first with
 `tests/build_images.py --firmware ...`.
+
+Enter or double-click a listing entry to open its folder or read-only preview.
+**New file** creates an empty file using the name/destination field and refuses
+an existing destination. It uses the same permission and protected-path checks
+as other file mutations. **Edit text** opens a file in the graphical editor.

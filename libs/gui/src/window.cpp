@@ -132,7 +132,10 @@ uint64_t Window::Next(View& view, Action& action)
     {
         view.Invalidate();
     }
-    action = view.Handle(event, {nullptr, ReadClipboard, WriteClipboard});
+    HackosClock clock = {};
+    // The current PIT contract is 1000 Hz: clock ticks are milliseconds.
+    syscall_clock(&clock);
+    action = view.Handle(event, {nullptr, ReadClipboard, WriteClipboard}, clock.ticks);
     return 1;
 }
 

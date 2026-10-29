@@ -269,6 +269,7 @@ int main(int argc, char** argv)
     view.SetLayout(mutations, 0, 32, 0, 0, 6);
     target = view.Add(Gui::Kind::TextField, mutations);
     view.SetLayout(target, 0, 32, 1);
+    auto newFile = view.Add(Gui::Kind::Button, mutations, "New file");
     auto mkdirButton = view.Add(Gui::Kind::Button, mutations, "New folder");
     renameButton = view.Add(Gui::Kind::Button, mutations, "Rename / Move file");
     datesLabel = view.Add(Gui::Kind::Label, 0, "");
@@ -360,7 +361,7 @@ int main(int argc, char** argv)
                                                          : page + 1;
                 Refresh();
             }
-            else if (action.widget == openButton)
+            else if (action.widget == openButton || action.widget == listing)
             {
                 Open();
             }
@@ -394,7 +395,7 @@ int main(int argc, char** argv)
                 const char* choices[] = {"Delete", "Cancel"};
                 deleting = view.OpenDialog("Permanently delete file?", pending, choices, 2, 1);
             }
-            else if (action.widget == mkdirButton || action.widget == renameButton)
+            else if (action.widget == mkdirButton || action.widget == renameButton || action.widget == newFile)
             {
                 const char* destination = view.Get(target)->text;
                 if (!*destination)
@@ -408,8 +409,9 @@ int main(int argc, char** argv)
                 {
                     continue;
                 }
-                auto result =
-                    action.widget == mkdirButton ? syscall_mkdir(destination) : syscall_rename(source, destination);
+                auto result = action.widget == newFile       ? syscall_file_save(destination, "", 0, HACKOS_SAVE_CREATE)
+                              : action.widget == mkdirButton ? syscall_mkdir(destination)
+                                                             : syscall_rename(source, destination);
                 if (result)
                 {
                     Failure(result);

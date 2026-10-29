@@ -821,3 +821,6 @@ See [desktop and independent terminals](desktop.md) for authenticated desktop
 authority, taskbar controls, per-terminal input/output routing and foreground
 jobs. Syscalls 91–94 add the desktop and terminal endpoint interfaces; existing
 window, stream and recovery-console interfaces retain their contracts.
+
+Account-management additions: syscall 95 `account_edit(op, id, value, name)` and
+96 `password_change(old, new)` are documented in [Settings](settings.md).

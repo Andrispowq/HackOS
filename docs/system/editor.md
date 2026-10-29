@@ -34,3 +34,7 @@ The editor uses static storage, the shared `Gui::TextDocument`/`TextArea`, and
 copied filesystem/window interfaces. `libs/editor` links `libgui.a` and `libc.a`;
 the packaged program is `/usr/bin/editor`. `tests/qemu_editor.py` validates BIOS
 and UEFI with disposable images and copied OVMF VARS.
+
+In the file picker, Enter or double-click navigates into a selected folder; in
+the Open dialog it also opens a selected file. Save dialogs retain the explicit
+Save/overwrite-confirmation flow.

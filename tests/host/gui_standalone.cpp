@@ -270,6 +270,19 @@ static int Controls()
     wheel.event.y = view.Get(list)->bounds.y + 5;
     view.Handle(wheel);
     CHECK(view.Get(list)->scroll == 0 && view.Get(list)->selected == 6);
+    CHECK(view.Handle(Key(HACKOS_PHYSICAL_ENTER)).kind == ActionKind::Activate);
+    auto item = view.Get(list)->bounds;
+    CHECK(view.Handle(Mouse(item.x + 10, item.y + 10, 1), {}, 100).kind == ActionKind::Change);
+    CHECK(view.Handle(Mouse(item.x + 10, item.y + 10, 0), {}, 120).kind == ActionKind::None);
+    CHECK(view.Handle(Mouse(item.x + 10, item.y + 10, 1), {}, 300).kind == ActionKind::Activate);
+    view.Handle(Mouse(item.x + 10, item.y + 10, 0), {}, 320);
+    CHECK(view.Handle(Mouse(item.x + 10, item.y + 10, 1), {}, 900).kind == ActionKind::Change);
+    view.Handle(Mouse(item.x + 10, item.y + 10, 0), {}, 920);
+    view.SetItems(list, items, 10);
+    CHECK(view.Handle(Mouse(item.x + 10, item.y + 10, 1), {}, 1000).kind == ActionKind::Change);
+    view.ResetInput(true);
+    CHECK(view.Handle(Mouse(item.x + 10, item.y + 10, 1), {}, 1100).kind == ActionKind::Change);
+    view.ResetInput(true);
     // The scroll thumb must lie inside the content clip, not under its border.
     Canvas canvas;
     auto bounds = view.Get(list)->bounds;

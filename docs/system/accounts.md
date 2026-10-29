@@ -148,3 +148,8 @@ they are not keyed authentication. Offline image editors can replace the kernel,
 login program or account store, and rollback to an older valid image is possible.
 There is no disk encryption, secure boot, trusted recovery console or remote
 login service.
+
+[Graphical Settings](settings.md) provides root-only creation, renaming and group
+membership editing, plus current-password-verified self-service password changes.
+Renames preserve numeric identities and file ownership; group edits apply to new
+login sessions. The administrator primary group remains GID 0.

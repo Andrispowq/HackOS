@@ -60,8 +60,12 @@ int main()
     auto logout = view.Add(Gui::Kind::Button, launcher, "Log out");
     auto files = view.Add(Gui::Kind::Button, launcher, "Files");
     auto editor = view.Add(Gui::Kind::Button, launcher, "Editor");
+    auto settings = view.Add(Gui::Kind::Button, launcher, "Settings");
     statusLabel = view.Add(Gui::Kind::Label, launcher, "Ready");
     view.SetLayout(statusLabel, 0, 32, 1, 0, 0);
+    auto clockLabel = view.Add(Gui::Kind::Label, launcher, "--:--:-- UTC");
+    view.SetLayout(clockLabel, 104, 32);
+    unsigned lastSecond = 60;
     auto tasks = view.Add(Gui::Kind::Row, 0);
     view.SetLayout(tasks, 0, 36, 0, 0, 3);
     for (unsigned i = 0; i < 15; ++i)
@@ -92,6 +96,19 @@ int main()
     Print("DESKTOP_READY\n");
     for (;;)
     {
+        HackosClock now = {};
+        if (syscall_clock(&now) == 0 && now.second != lastSecond)
+        {
+            char text[] = "00:00:00 UTC";
+            text[0] += now.hour / 10;
+            text[1] += now.hour % 10;
+            text[3] += now.minute / 10;
+            text[4] += now.minute % 10;
+            text[6] += now.second / 10;
+            text[7] += now.second % 10;
+            view.SetText(clockLabel, text);
+            lastSecond = now.second;
+        }
         for (auto& child : children)
         {
             int64_t status = 0;
@@ -146,6 +163,10 @@ int main()
             else if (action.widget == files)
             {
                 Launch("~/USR/BIN/FILES");
+            }
+            else if (action.widget == settings)
+            {
+                Launch("~/USR/BIN/SETTINGS");
             }
             else if (action.widget == editor)
             {

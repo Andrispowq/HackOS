@@ -11,6 +11,13 @@
             return 1;                                                                                                  \
         }                                                                                                              \
     } while (0)
+
+uint64_t syscall_clock(HackosClock* clock)
+{
+    *clock = {};
+    return 0;
+}
+
 static unsigned reads, fdCloses, windowCloses, uploads, cancels, presents;
 static bool shortFont, badHeader, inputFailure, uploadFailure, presentFailure;
 static uint32_t image[64 * 40];

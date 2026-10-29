@@ -338,6 +338,15 @@ jobs:
             --mount "type=bind,source=$PWD,target=/work,readonly" \
             --mount "type=bind,source=$PWD/tests/out,target=/work/tests/out" \
             hackos-tests:toolchain python3 tests/qemu_editor.py --firmware "$FIRMWARE"
+      - name: Exercise graphical settings and account management
+        if: ${{ !cancelled() && steps.build.outcome != 'skipped' }}
+        env:
+          FIRMWARE: ${{ matrix.firmware }}
+        run: |
+          docker run --rm --network none --user "$(id -u):$(id -g)" \
+            --mount "type=bind,source=$PWD,target=/work,readonly" \
+            --mount "type=bind,source=$PWD/tests/out,target=/work/tests/out" \
+            hackos-tests:toolchain python3 tests/qemu_settings.py --firmware "$FIRMWARE"
       - name: Summarize results
         if: always()
         run: python3 tests/summarize.py >> "$GITHUB_STEP_SUMMARY"
@@ -373,3 +382,4 @@ jobs:
             tests/out/qemu-login-gui-${{ matrix.firmware }}/
             tests/out/qemu-files-gui-${{ matrix.firmware }}/
             tests/out/qemu-editor-${{ matrix.firmware }}/
+            tests/out/qemu-settings-${{ matrix.firmware }}/
