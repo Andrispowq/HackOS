@@ -37,6 +37,11 @@ HackosTerminalSettings Console::Settings() const
 bool Console::Configure(uint64_t key, uint64_t value, uint32_t width, uint32_t height)
 {
     Console next = *this;
+    if (key == HACKOS_TERMINAL_DEFAULT && value >= 1 && value <= 3)
+    {
+        key = value;
+        value = key == 1 ? 30 : key == 2 ? 0x000000ff : 0xffffffff;
+    }
     if (key == HACKOS_TERMINAL_RESET && value == 0)
     {
         next = Console{};

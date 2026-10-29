@@ -186,7 +186,7 @@ Milestones 1–4 are implemented; later milestones need a separate request.
    rename/delete); graphical editor complete (multiline, clipboard, file dialogs,
    unsaved-change confirmation); [settings](system/settings.md) complete for
    hardware pages, account/group editing, password changes and supported recovery-console
-   appearance. Session-wide GUI themes and configurable desktop terminals remain follow-ups.
+   appearance. Session-wide GUI themes remain a follow-up.
 6. **Integrated hardening — in progress:** 6a adds bounded damaged-region
    composition, clipped drawing and debugger-visible render/input latency counters,
    with full-scene equivalence and timing checks on BIOS/UEFI. 6b adds physical
@@ -341,5 +341,7 @@ Milestones 1–4 are implemented; later milestones need a separate request.
 
 - [x] Bounded 512-row scrollback, wheel and Shift+PageUp/PageDown/Home/End navigation.
 - [x] Mouse selection and Ctrl+Shift+C session clipboard copy, with explicit size errors.
-- [ ] Configurable window-terminal fonts/colours and ANSI escape sequences.
-- [ ] Terminal paste and drag-selection autoscroll.
+- [x] Configurable window-terminal font size and colours.
+- [ ] ANSI escape sequences.
+- [x] Ctrl+Shift+V paste with bounded input and whitespace normalization.
+- [ ] Drag-selection autoscroll.

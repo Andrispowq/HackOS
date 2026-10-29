@@ -1,6 +1,8 @@
 #pragma once
 #include "hackos/abi.h"
 #include "hackos/runtime/terminal_history.h"
+#include "hackos/runtime/terminal_appearance.h"
+#include "hackos/runtime/terminal_paste.h"
 #include "drivers/keyboard/keyboard.h"
 class Process;
 
@@ -12,6 +14,9 @@ struct TerminalSession
     uint16_t head = 0, count = 0;
     char input[256] = {}, cells[HACKOS_TTY_CELLS] = {};
     TerminalHistory history = {};
+    TerminalAppearance appearance = {};
+    TerminalPaste paste = {};
+    uint64_t window = 0;
 };
 
 extern TerminalSession terminals[HACKOS_TTY_LIMIT];
@@ -26,3 +31,5 @@ uint64_t UserTerminalSession(uint64_t operation, uint64_t value, void* buffer);
 void ReleaseTerminalController(Process* process);
 uint64_t UserDesktop(uint64_t operation, uint64_t value, HackosDesktopEntry* buffer);
 uint64_t UserSessionLogout();
+
+bool ConfigureWindowTerminal(TerminalSession& tty, uint64_t key, uint64_t value);

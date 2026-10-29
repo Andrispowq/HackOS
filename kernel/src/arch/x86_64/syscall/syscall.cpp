@@ -142,7 +142,7 @@ static uint64_t UserTerminalGet(HackosTerminalSettings* destination)
     auto tty = ProcessTerminal(Caller());
     if (tty)
     {
-        settings = {16, 0x101b25ff, 0xe5eef5ff, tty->columns, tty->rows, 0};
+        settings = tty->appearance.Settings(tty->columns, tty->rows);
     }
     return Output(destination, &settings, sizeof(settings)) ? 0 : HACKOS_ERROR;
 }
@@ -153,9 +153,10 @@ static uint64_t UserTerminalSet(uint64_t key, uint64_t value)
     {
         return HACKOS_DENIED;
     }
-    if (ProcessTerminal(Caller()))
+    auto tty = ProcessTerminal(Caller());
+    if (tty)
     {
-        return HACKOS_DENIED;
+        return ConfigureWindowTerminal(*tty, key, value) ? 0 : HACKOS_ERROR;
     }
     return Display::SharedDisplay()->ConfigureTerminal(key, value) ? 0 : HACKOS_ERROR;
 }

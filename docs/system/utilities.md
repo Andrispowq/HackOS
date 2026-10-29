@@ -139,8 +139,8 @@ upstream writers can finish with a broken-pipe result.
 
 ```sh
 terminal get                     # list all settings
-terminal get font_size           # print just 30, by default
-terminal set font_size 60         # double the default text size
+terminal get font_size           # print 16 in a window; 30 in recovery console
+terminal set font_size 60         # set a 60-pixel font height
 terminal set bg_col 0x101820ff
 terminal set font_col 0xe8eef2ff
 terminal get rows | cat > /tmp/terminal-rows
@@ -154,11 +154,11 @@ redirection and print no escape sequences. Set/reset requires the calling
 process to own the foreground terminal, even for UID 0; background attempts
 fail. Queries are readable without ownership and never consume keyboard input.
 
-| Key | Meaning | Default |
+| Key | Meaning | Default (window / recovery console) |
 | --- | --- | --- |
-| `font_size` | Font height in pixels, even integers from 8 through 64; width is half the height | `30` (15×30 cell) |
-| `bg_col` | Background as eight hexadecimal RGBA digits, optionally prefixed by `0x` or `0X` | `0x000000ff` |
-| `font_col` | Text as eight hexadecimal RGBA digits | `0xffffffff` |
+| `font_size` | Font height in pixels, even integers from 8 through 64; width is half the height | `16` / `30` |
+| `bg_col` | Background as eight hexadecimal RGBA digits, optionally prefixed by `0x` or `0X` | `0x101b25ff` / `0x000000ff` |
+| `font_col` | Text as eight hexadecimal RGBA digits | `0xe5eef5ff` / `0xffffffff` |
 | `columns`, `rows` | Read-only count of complete character cells | Framebuffer dimensions divided by cell size |
 
 Colour queries always print `0xrrggbbaa`. Alpha `ff` is opaque and `00` is
@@ -167,13 +167,13 @@ Window surfaces still appear above the console. Each writable key accepts
 `default`. Invalid keys, numbers or colours fail without changing settings.
 `reset` can recover an invisible or low-contrast theme.
 
-Every successful set/reset clears the visible console and moves the cursor to
-the top left. It does not erase shell history. Settings apply to the single
-system console, survive logout, and last until reset or reboot; there is no
-saved per-account profile. Fonts use nearest-neighbour scaling of the bundled
+Every successful set/reset clears the visible terminal and its scrollback and
+moves the cursor to the top left. It does not erase shell command history. Window
+settings apply independently and last until reset/close; recovery-console settings
+survive logout and last until reset/reboot. There is no saved per-account profile. Fonts use nearest-neighbour scaling of the bundled
 PSF glyphs, so non-integral scaling can look less even. Window titles and controls
 keep their native font. Pagers query the updated rows/columns when they start.
-The custom `terminal` interface covers console appearance; it is not a POSIX
+The custom `terminal` interface covers terminal appearance; it is not a POSIX
 `stty` implementation and does not change terminal input modes.
 
 ## Clock

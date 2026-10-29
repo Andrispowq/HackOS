@@ -1182,3 +1182,10 @@ history/clipboard cleanup on logout. Screenshots include scrollback and selectio
 Host/native graphics sanitizer tests cover ring rollover, mixed history/live
 snapshots, width padding, clear wiping, repeated scroll events, reverse selection,
 input reset and exact/oversize clipboard bounds.
+
+Terminal appearance/paste coverage extends the desktop suite with Ctrl+Shift+V,
+per-window font/grid and RGBA changes, background denial, individual defaults and
+reset. Host sanitizer tests cover all even font heights 8–64, glyph sampling,
+scaled selection coordinates, RGBA alpha, paste control-byte rejection, CRLF/tab
+normalization, exact 4096-byte bounds and buffer wiping. Recovery-console tests
+continue to validate its independent defaults and foreground permissions.

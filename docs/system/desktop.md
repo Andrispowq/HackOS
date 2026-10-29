@@ -64,11 +64,14 @@ and clamps the cursor. Each endpoint retains the last 512 scrolled-off rows in a
 bounded ring, captured as output scrolls even when the renderer is busy. Stored
 rows preserve their original columns, padded to 160 cells; resizing does not
 reflow history. `clear` wipes both the visible grid and history. Endpoint teardown
-wipes the ring before reuse. ANSI escape parsing and configurable window-terminal
-fonts/colours remain follow-ups. Window terminals use fixed 8×16
-PSF text and a dark palette; `terminal get` reports their actual geometry/settings,
-while `terminal set/reset` returns denied. Recovery-console settings remain
-configurable and independent of window terminals.
+wipes the ring before reuse. ANSI escape parsing remains a follow-up.
+`terminal get/set/reset` configures each window independently: even font heights
+8–64 (width is half the height) and RGBA background/text colours. The default is
+8×16 PSF text with background `101b25ff` and text `e5eef5ff`. Settings require the
+individual foreground owner, clear screen/history, and last until reset or window
+close. Recovery-console settings remain independent. Window chrome and the status
+row keep their native font. Glyphs use nearest-neighbour scaling; font-family
+selection is not supported.
 
 Wheel scrolls three rows; Shift+PageUp/PageDown scrolls a page; Shift+Home/End
 selects the oldest/live view. Ordinary typing and Escape return to live output.
@@ -79,7 +82,15 @@ scrolling, typing, clear or resize dismisses it. Input reset cancels dragging an
 reconciles held buttons. Copy preserves leading spaces, removes trailing spaces
 from each selected visual row and separates rows with LF. A selection exceeding
 4096 bytes leaves the clipboard unchanged and reports the error in the status row.
-There is no drag autoscroll or terminal paste shortcut yet.
+Ctrl+Shift+V pastes the focused owner's HackOS session clipboard (up to 4096
+bytes). It does not access the host OS clipboard. Printable ASCII is accepted;
+tabs and CR/LF line breaks become spaces (CRLF becomes one space), so paste does
+not invoke completion or execute commands. Other control/non-ASCII bytes reject
+the entire paste. Press Enter to submit; the receiving application's line-length
+limit still applies. A separate bounded paste buffer drains before later physical
+keystrokes and is cleared on foreground-job handoff, input overflow and endpoint
+teardown. Busy input or an earlier pending paste leaves the new paste unapplied
+and reports a retry message. There is no drag-selection autoscroll yet.
 
 `TERM` reserves one 16-pixel status row (the initial grid is 90×26) and renders
 atomic copied history/grid snapshots using bounded window uploads. It retries
@@ -93,7 +104,7 @@ an idle loop. The terminal caret is steady, rather than blinking.
 | --- | --- | --- |
 | 91 | `auth_desktop(name, password)` | Boot login agent only; same authentication as console login, starts DESKTOP as session leader. |
 | 92 | `desktop(operation, value, entry)` | Kernel-designated desktop only; query display, register its fixed panel, enumerate same-session windows, focus/minimize/request close, register an owned background surface. |
-| 93 | `terminal_session(operation, value, buffer)` | Create an endpoint with an owned window, copy state/cells/history, inject a decoded byte or resize the controller's grid. |
+| 93 | `terminal_session(operation, value, buffer)` | Create an endpoint with an owned window, copy grid/history/settings, inject decoded input/paste or resize the controller's grid. |
 | 94 | `session_logout()` | Session shell or desktop only; terminate the session leader and all descendants. |
 
 `HackosDesktopEntry` is 64 bytes; `focused` reports focus (0/1). Enumeration
@@ -117,6 +128,15 @@ on clear; epoch changes on clear/resize so controllers can discard stale views.
 Unused cells are spaces. The complete destination must be writable; success
 returns zero. Access requires the endpoint's individual controller, including
 for UID 0. Existing state/cells operations retain their original layout/semantics.
+
+Operation 6 (`HACKOS_TTY_PASTE`) accepts a copied buffer of `value` bytes (0–4096),
+normalizes it as above, and queues it atomically. It returns zero, `HACKOS_ERROR`
+for bad bytes/ranges, or `HACKOS_WOULD_BLOCK` while input/paste is pending or no
+foreground owner exists. Operation 7 (`HACKOS_TTY_SETTINGS`) copies the existing
+24-byte settings record for the controller's endpoint. Both operations require
+the individual endpoint controller. Foreground applications use syscalls 81/82;
+set operation 4 (`HACKOS_TERMINAL_DEFAULT`) restores just the key specified by
+value 1–3 using the applicable console/window defaults.
 
 The session ID belongs to the authenticated leader, not each terminal shell.
 Individual terminal exit never ends sibling terminals. Whole-session teardown

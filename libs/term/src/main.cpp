@@ -2,11 +2,13 @@
 #include "hackos/user.h"
 #include "hackos/stdio.h"
 #include "hackos/runtime/terminal_view.h"
+#include "hackos/runtime/terminal_appearance.h"
 using namespace User;
 static Gui::Window window;
 static Gui::Font font;
 static TerminalViewport viewport;
 static HackosTerminalView snapshot;
+static HackosTerminalSettings appearance;
 static char copied[HACKOS_CLIPBOARD_LIMIT], notice[80];
 static uint32_t pixels[1024];
 
@@ -77,6 +79,9 @@ static unsigned Key(const HackosWindowEvent2& event)
 static bool Paint()
 {
     const auto& state = viewport.image.state;
+    unsigned height = appearance.fontSize, width = height / 2;
+    uint32_t background = TerminalBlend(appearance.bgColour, 0xff000000);
+    uint32_t foreground = TerminalBlend(appearance.fontColour, background);
     HackosWindowFrame frame = {};
     if (syscall_window_frame(window.Handle(), HACKOS_WINDOW_BEGIN, &frame))
     {
@@ -89,30 +94,33 @@ static bool Paint()
             unsigned w = frame.width - x < 1024 ? frame.width - x : 1024;
             Gui::Canvas canvas;
             canvas.Init(pixels, w, {(int)x, (int)y, (int)w, 1});
-            canvas.Fill({0, 0, (int)frame.width, (int)frame.height}, 0xff101b25);
-            unsigned row = y / 16;
+            canvas.Fill({0, 0, (int)frame.width, (int)frame.height}, background);
+            unsigned row = y / height;
             if (row < state.rows)
             {
-                char line[161] = {};
-                for (unsigned col = 0; col < state.columns; ++col)
+                for (unsigned px = 0; px < w && x + px < state.columns * width; ++px)
                 {
-                    line[col] = viewport.image.cells[row * state.columns + col];
-                    if (viewport.Selected(row * state.columns + col))
+                    unsigned column = (x + px) / width;
+                    unsigned position = row * state.columns + column;
+                    bool selected = viewport.Selected(position);
+                    pixels[px] = selected ? 0xff32699a : background;
+                    if (TerminalGlyphPixel(font.glyphs, viewport.image.cells[position], (x + px) % width, y % height,
+                                           height))
                     {
-                        canvas.Fill({(int)col * 8, (int)row * 16, 8, 16}, 0xff32699a);
+                        pixels[px] = selected ? 0xffffffff : foreground;
                     }
                 }
-                canvas.Text(font, 0, row * 16, line, 0xffe5eef5);
             }
             unsigned position = state.y * state.columns + state.x;
             if (state.caret && !viewport.selected && viewport.image.firstLine == viewport.image.liveLine &&
                 position >= state.caretBack)
             {
                 position -= state.caretBack;
-                canvas.Fill({(int)(position % state.columns * 8), (int)(position / state.columns * 16), 2, 16},
-                            0xff60cfff);
+                canvas.Fill(
+                    {(int)(position % state.columns * width), (int)(position / state.columns * height), 2, (int)height},
+                    0xff60cfff);
             }
-            unsigned statusY = state.rows * 16;
+            unsigned statusY = state.rows * height;
             if (y >= statusY)
             {
                 canvas.Fill({0, (int)statusY, (int)frame.width, 16}, 0xff243545);
@@ -123,12 +131,13 @@ static bool Paint()
                 }
                 else if (viewport.selected)
                 {
-                    snprintf(status, sizeof(status), "Selection held | Ctrl+Shift+C copy | Esc live");
+                    snprintf(status, sizeof(status),
+                             "Selection held | Ctrl+Shift+C copy | Ctrl+Shift+V paste | Esc live");
                 }
                 else
                 {
                     snprintf(status, sizeof(status),
-                             "Back %u/%u | Wheel/Shift+PgUp/PgDn | Drag select | Ctrl+Shift+C copy",
+                             "Back %u/%u | Wheel/Shift+PgUp/Dn | Drag select | Ctrl+Shift+C/V copy/paste",
                              (unsigned)(viewport.image.liveLine - viewport.image.firstLine),
                              (unsigned)(viewport.image.liveLine - viewport.image.oldestLine));
                 }
@@ -176,6 +185,10 @@ int main()
     {
         return 1;
     }
+    if (syscall_terminal_session(HACKOS_TTY_SETTINGS, 0, &appearance))
+    {
+        return 1;
+    }
     viewport.Init();
     uint64_t revision = ~0ULL;
     bool dirty = true;
@@ -206,7 +219,8 @@ int main()
             }
             if (event.event.type == HACKOS_WINDOW_MOUSE)
             {
-                if (viewport.Mouse(event.event.x, event.event.y, event.event.buttons))
+                if (viewport.Mouse(event.event.x, event.event.y, event.event.buttons, appearance.fontSize / 2,
+                                   appearance.fontSize))
                 {
                     notice[0] = 0;
                     dirty = true;
@@ -242,6 +256,44 @@ int main()
                 else
                 {
                     snprintf(notice, sizeof(notice), "Copied %u bytes", (unsigned)length);
+                }
+                dirty = true;
+                continue;
+            }
+            if (down &&
+                (event.modifiers & (HACKOS_MOD_CTRL | HACKOS_MOD_SHIFT)) == (HACKOS_MOD_CTRL | HACKOS_MOD_SHIFT) &&
+                physical == HACKOS_PHYSICAL_V)
+            {
+                auto length = syscall_clipboard(HACKOS_CLIPBOARD_READ, copied, sizeof(copied));
+                if (length > sizeof(copied))
+                {
+                    snprintf(notice, sizeof(notice), "Paste denied; focus this terminal and retry");
+                }
+                else if (!length)
+                {
+                    snprintf(notice, sizeof(notice), "Clipboard is empty");
+                }
+                else
+                {
+                    auto result = syscall_terminal_session(HACKOS_TTY_PASTE, length, copied);
+                    if (result == HACKOS_WOULD_BLOCK)
+                    {
+                        snprintf(notice, sizeof(notice), "Input busy; retry paste after pending input is read");
+                    }
+                    else if (result)
+                    {
+                        snprintf(notice, sizeof(notice), "Paste requires ASCII text; control bytes are not supported");
+                    }
+                    else
+                    {
+                        viewport.Live();
+                        snprintf(notice, sizeof(notice),
+                                 "Pasted text; tabs/line breaks become spaces. Enter to submit.");
+                    }
+                }
+                for (auto& byte : copied)
+                {
+                    byte = 0;
                 }
                 dirty = true;
                 continue;
@@ -289,7 +341,21 @@ int main()
         {
             break;
         }
-        unsigned cols = geometry.width / 8, rows = geometry.height > 16 ? (geometry.height - 16) / 16 : 1;
+        HackosTerminalSettings next = {};
+        if (syscall_terminal_session(HACKOS_TTY_SETTINGS, 0, &next))
+        {
+            break;
+        }
+        if (next.fontSize != appearance.fontSize || next.bgColour != appearance.bgColour ||
+            next.fontColour != appearance.fontColour)
+        {
+            viewport.Live();
+            notice[0] = 0;
+            dirty = true;
+        }
+        appearance = next;
+        unsigned cols = geometry.width / (appearance.fontSize / 2);
+        unsigned rows = geometry.height > 16 ? (geometry.height - 16) / appearance.fontSize : 1;
         if (cols > 160)
         {
             cols = 160;

@@ -38,6 +38,8 @@ int main(int argc, char** argv)
         syscall_desktop(HACKOS_DESKTOP_BACKGROUND, 1, nullptr) != HACKOS_DENIED ||
         syscall_terminal_session(HACKOS_TTY_STATE, 0, &state) != HACKOS_DENIED ||
         syscall_terminal_session(HACKOS_TTY_VIEW, HACKOS_TTY_LIVE, nullptr) != HACKOS_DENIED ||
+        syscall_terminal_session(HACKOS_TTY_PASTE, 1, (void*)"x") != HACKOS_DENIED ||
+        syscall_terminal_session(HACKOS_TTY_SETTINGS, 0, nullptr) != HACKOS_DENIED ||
         syscall_terminal_session(HACKOS_TTY_INPUT, 'x', nullptr) != HACKOS_DENIED ||
         syscall_terminal_session(HACKOS_TTY_CREATE, 0, nullptr) != HACKOS_DENIED ||
         syscall_session_logout() != HACKOS_DENIED)
@@ -50,6 +52,11 @@ int main(int argc, char** argv)
         info.rows != 26)
     {
         return 2;
+    }
+    if (syscall_terminal_set(HACKOS_TERMINAL_FONT_SIZE, 7) != HACKOS_ERROR ||
+        syscall_terminal_set(HACKOS_TERMINAL_BG_COLOUR, 0x100000000ULL) != HACKOS_ERROR)
+    {
+        return 9;
     }
     HackosWindowSpec spec = {10, 10, 200, 100, "Endpoint probe"};
     auto window = syscall_window_create(&spec);
@@ -66,6 +73,8 @@ int main(int argc, char** argv)
         syscall_terminal_session(HACKOS_TTY_STATE, 0, (void*)1) != HACKOS_ERROR ||
         syscall_terminal_session(HACKOS_TTY_CELLS_READ, 0, (void*)1) != HACKOS_ERROR ||
         syscall_terminal_session(HACKOS_TTY_VIEW, HACKOS_TTY_LIVE, (void*)1) != HACKOS_ERROR ||
+        syscall_terminal_session(HACKOS_TTY_SETTINGS, 0, (void*)1) != HACKOS_ERROR ||
+        syscall_terminal_session(HACKOS_TTY_PASTE, 4097, (void*)1) != HACKOS_ERROR ||
         syscall_terminal_session(HACKOS_TTY_INPUT, 256, nullptr) != HACKOS_ERROR ||
         syscall_terminal_session(HACKOS_TTY_RESIZE, 0 | (5 << 16), nullptr) != HACKOS_ERROR ||
         syscall_terminal_session(HACKOS_TTY_RESIZE, 160 | (61 << 16), nullptr) != HACKOS_ERROR ||

@@ -235,7 +235,7 @@ struct HackosTerminalInfo
 static_assert(sizeof(HackosTerminalInfo) == 16, "terminal info ABI");
 
 constexpr uint64_t HACKOS_TERMINAL_RESET = 0, HACKOS_TERMINAL_FONT_SIZE = 1, HACKOS_TERMINAL_BG_COLOUR = 2,
-                   HACKOS_TERMINAL_FONT_COLOUR = 3;
+                   HACKOS_TERMINAL_FONT_COLOUR = 3, HACKOS_TERMINAL_DEFAULT = 4;
 
 struct HackosTerminalSettings
 {
@@ -265,7 +265,7 @@ constexpr uint64_t HACKOS_TERMINAL_CURSOR_MAX = 255;
 constexpr unsigned HACKOS_PROCESS_LIMIT = 64;
 constexpr unsigned HACKOS_TTY_LIMIT = 8, HACKOS_TTY_CELLS = 160 * 60;
 constexpr uint64_t HACKOS_TTY_CREATE = 0, HACKOS_TTY_STATE = 1, HACKOS_TTY_CELLS_READ = 2, HACKOS_TTY_INPUT = 3,
-                   HACKOS_TTY_RESIZE = 4, HACKOS_TTY_VIEW = 5;
+                   HACKOS_TTY_RESIZE = 4, HACKOS_TTY_VIEW = 5, HACKOS_TTY_PASTE = 6, HACKOS_TTY_SETTINGS = 7;
 constexpr unsigned HACKOS_TTY_HISTORY_ROWS = 512;
 constexpr uint64_t HACKOS_TTY_LIVE = ~0ULL;
 

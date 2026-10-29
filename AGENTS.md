@@ -47,10 +47,12 @@ and delegation still require the individual owner. Syscall 80 queries copied ter
 64 KiB line limit; tail retains at most 128 KiB of suffix data. Sort buffers up to
 128 KiB/4096 lines; uniq/cut allow 64 KiB lines and tr streams bytes. See
 `docs/system/utilities.md` for their Unix-like option subsets and bounds.
-`terminal get/set/reset` controls console font height (even 8–64 pixels) and RGBA
+`terminal get/set/reset` controls terminal font height (even 8–64 pixels) and RGBA
 colours through syscalls 81–82. Queries are public; mutations require the individual
-foreground owner and clear the console. Settings last until reset/reboot, and
-window chrome keeps its native font. See `docs/system/utilities.md`.
+foreground owner and clear screen/scrollback. Window settings are independent and
+last until reset/close; recovery-console settings last until reset/reboot. Window
+chrome keeps its native font. Ctrl+Shift+V pastes the bounded session clipboard as
+ASCII text with tabs/line breaks converted to spaces. See `docs/system/utilities.md`.
 Libc has a private 512 KiB heap, allocation/split helpers and userspace integer
 formatting. Heap pages are NX and reclaimed on every exit path; direct heap
 resizing must not be mixed with libc allocation. Process-info records are 296

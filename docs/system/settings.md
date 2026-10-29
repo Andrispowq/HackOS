@@ -51,13 +51,14 @@ The existing root-only `password_set` API remains unchanged.
 
 ## Terminal appearance
 
-The Terminal page exposes the supported recovery-console font height and RGBA
-colours, plus reset. Values use even font heights 8–64 and exactly eight hex
-colour digits, RRGGBBAA. Changes clear the recovery console and last until reboot.
-The existing foreground-owner checks apply: launch `settings` in the foreground
-from a recovery console to change these values. Desktop terminal windows retain
-their fixed font and palette; a desktop-launched Settings app cannot change the
-recovery console. Session-wide graphical themes are not implemented.
+The Terminal page exposes font height and RGBA colours, plus reset. Values use
+even font heights 8–64 and exactly eight hex colour digits, RRGGBBAA. Launch
+`settings` in the foreground from a terminal to configure that terminal; background
+applications and UID 0 still require foreground ownership. Changes clear the
+screen and scrollback. Window settings are independent and last until close;
+recovery-console settings last until reboot. Desktop-launched Settings targets
+the recovery console and cannot mutate it without ownership. Session-wide graphical
+themes and font-family selection are not implemented.
 
 ## Validation
 

@@ -103,3 +103,88 @@ TEST(terminal_selection_clipboard_limit)
     CHECK(viewport.Copy(copy, sizeof(copy)) == HACKOS_ERROR);
     return 0;
 }
+
+#include "hackos/runtime/terminal_paste.h"
+#include "hackos/runtime/terminal_appearance.h"
+
+TEST(terminal_paste_atomic_normalization_and_bounds)
+{
+    TerminalPaste paste = {};
+    CHECK(paste.Set("ab\r\ncd\nef\tgh\r", 13));
+    CHECK(!paste.Set("replacement", 11));
+    const char* expected = "ab cd ef gh ";
+    char ch = 0;
+    for (unsigned i = 0; i < 12; ++i)
+    {
+        CHECK(paste.Read(ch) && ch == expected[i]);
+    }
+    CHECK(!paste.Read(ch));
+    CHECK(!paste.Set("bad\033text", 8));
+    CHECK(!paste.Set("\200", 1));
+    CHECK(!paste.Pending());
+    char full[HACKOS_CLIPBOARD_LIMIT];
+    for (auto& byte : full)
+    {
+        byte = 'x';
+    }
+    CHECK(!paste.Set(full, sizeof(full) + 1));
+    CHECK(paste.Set(full, sizeof(full)));
+    for (unsigned i = 0; i < sizeof(full); ++i)
+    {
+        CHECK(paste.Read(ch) && ch == 'x');
+    }
+    CHECK(!paste.Pending());
+    CHECK(paste.Set("secret", 6));
+    paste.Clear();
+    for (char byte : paste.bytes)
+    {
+        CHECK(byte == 0);
+    }
+    CHECK(!paste.Pending());
+    return 0;
+}
+
+TEST(terminal_appearance_scaling_colour_and_selection)
+{
+    TerminalAppearance appearance = {};
+    appearance.Reset();
+    CHECK(appearance.height == 16 && appearance.background == 0x101b25ff);
+    CHECK(!appearance.Configure(HACKOS_TERMINAL_FONT_SIZE, 7));
+    CHECK(!appearance.Configure(HACKOS_TERMINAL_FONT_SIZE, 65));
+    CHECK(!appearance.Configure(HACKOS_TERMINAL_FONT_SIZE, 31));
+    CHECK(!appearance.Configure(HACKOS_TERMINAL_BG_COLOUR, 0x100000000ULL));
+    CHECK(appearance.height == 16 && appearance.background == 0x101b25ff);
+    CHECK(TerminalBlend(0x123456ff, 0xff000000) == 0xff123456);
+    CHECK(TerminalBlend(0xabcdef00, 0xff123456) == 0xff123456);
+    CHECK(TerminalBlend(0xffffff80, 0xff000000) == 0xff808080);
+    uint8_t glyphs[4096] = {};
+    for (unsigned row = 0; row < 16; ++row)
+    {
+        glyphs[255 * 16 + row] = 0x80 >> (row % 8);
+    }
+    for (unsigned height = 8; height <= 64; height += 2)
+    {
+        CHECK(appearance.Configure(HACKOS_TERMINAL_FONT_SIZE, height));
+        for (unsigned y = 0; y < height; ++y)
+        {
+            for (unsigned x = 0; x < height / 2; ++x)
+            {
+                CHECK(TerminalGlyphPixel(glyphs, 255, x, y, height) == (x * 8 / (height / 2) == (y * 16 / height) % 8));
+            }
+        }
+        TerminalViewport viewport = {};
+        viewport.Init();
+        HackosTerminalView view = {};
+        view.state.columns = 10;
+        view.state.rows = 5;
+        viewport.Accept(view);
+        CHECK(viewport.Mouse(height + 1, height + 1, 1, height / 2, height));
+        CHECK(viewport.anchor == 12);
+        viewport.Mouse(99999, 99999, 0, height / 2, height);
+        CHECK(viewport.cursor == 49);
+    }
+    CHECK(appearance.Configure(HACKOS_TERMINAL_DEFAULT, HACKOS_TERMINAL_FONT_SIZE));
+    CHECK(appearance.height == 16);
+    CHECK(!appearance.Configure(HACKOS_TERMINAL_DEFAULT, 0));
+    return 0;
+}

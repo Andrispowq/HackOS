@@ -281,10 +281,10 @@ static void Build()
     }
     else
     {
-        view.Add(Gui::Kind::Label, 0, "Recovery console appearance (clears console; lasts until reboot).");
+        view.Add(Gui::Kind::Label, 0, "Terminal appearance (clears screen/history; window settings last until close).");
         view.Add(Gui::Kind::Label, 0,
-                 "Changes require foreground ownership of the recovery console. Desktop terminal windows use a fixed "
-                 "font/palette.");
+                 "Launch settings from a terminal to configure it; foreground ownership is required. "
+                 "Desktop-launched Settings targets the recovery console.");
         HackosTerminalSettings settings = {};
         syscall_terminal_get(&settings);
         const char* labels[] = {"Font height (8-64 even)", "Background RRGGBBAA", "Text RRGGBBAA"};
@@ -310,7 +310,7 @@ static void Build()
             view.SetText(terminalFields[i], text);
             terminalApply[i] = view.Add(Gui::Kind::Button, row, "Apply");
         }
-        terminalReset = view.Add(Gui::Kind::Button, 0, "Reset console appearance");
+        terminalReset = view.Add(Gui::Kind::Button, 0, "Reset terminal appearance");
     }
     status = view.Add(Gui::Kind::Label, 0, "Ready");
 }
@@ -473,7 +473,7 @@ int main()
                         Message(result);
                         if (!result)
                         {
-                            view.SetText(status, "Console appearance updated.");
+                            view.SetText(status, "Terminal appearance updated.");
                         }
                     }
                 }

@@ -1,20 +1,19 @@
 #include "output.h"
 
 static const char* keys[] = {"font_size", "bg_col", "font_col", "columns", "rows"};
-static const uint32_t defaults[] = {30, 0x000000ff, 0xffffffff};
 
 static int Usage(bool help)
 {
     const char* text = "Usage: terminal get [key] | terminal set <key> <value> | terminal reset\n"
-                       "  font_size  Font height in pixels: even numbers 8..64 (default 30).\n"
-                       "  bg_col     Background colour as 0xRRGGBBAA (default 0x000000ff).\n"
-                       "  font_col   Text colour as 0xRRGGBBAA (default 0xffffffff).\n"
+                       "  font_size  Font height in pixels: even numbers 8..64 (window default 16; console 30).\n"
+                       "  bg_col     Background colour as 0xRRGGBBAA (window 0x101b25ff; console 0x000000ff).\n"
+                       "  font_col   Text colour as 0xRRGGBBAA (window 0xe5eef5ff; console 0xffffffff).\n"
                        "  columns, rows  Read-only terminal dimensions in characters.\n"
                        "get without a key lists all values. set also accepts 'default'.\n"
                        "Colours accept eight hex digits with optional 0x prefix. Alpha blends\n"
                        "the background over black, then text over that background.\n"
-                       "Changes clear the screen, require the foreground terminal, and last\n"
-                       "until reset or reboot. reset restores all defaults. Use --help for help.\n";
+                       "Changes clear screen/history, require foreground ownership, and last\n"
+                       "until reset/terminal close (console: reboot). reset restores defaults. Use --help for help.\n";
     bool written = Write(help ? 1 : 2, text, Length(text));
     return help ? (written ? 0 : 1) : 2;
 }
@@ -33,12 +32,6 @@ static int Key(const char* name)
 
 static bool Value(int key, const char* text, uint32_t& value)
 {
-    if (Equal(text, "default"))
-    {
-        value = defaults[key];
-        return true;
-    }
-
     value = 0;
     if (key == 0)
     {
@@ -139,11 +132,16 @@ int main(int argc, char** argv)
     if (argc == 4 && Equal(argv[1], "set"))
     {
         int key = Key(argv[2]);
-        if (key < 0 || key >= 3 || !Value(key, argv[3], value))
+        if (key < 0 || key >= 3 || (!Equal(argv[3], "default") && !Value(key, argv[3], value)))
         {
             return Usage(false);
         }
         operation = key + 1;
+        if (Equal(argv[3], "default"))
+        {
+            operation = HACKOS_TERMINAL_DEFAULT;
+            value = key + 1;
+        }
     }
     else if (argc != 2 || !Equal(argv[1], "reset"))
     {

@@ -72,7 +72,7 @@ struct TerminalViewport
         requested = first == image.liveLine ? HACKOS_TTY_LIVE : first;
     }
 
-    bool Mouse(int x, int y, unsigned pressed)
+    bool Mouse(int x, int y, unsigned pressed, unsigned width = 8, unsigned height = 16)
     {
         bool changed = false;
         if (!ready)
@@ -80,18 +80,19 @@ struct TerminalViewport
             buttons = pressed;
             return false;
         }
-        bool inside = x >= 0 && y >= 0 && (unsigned)x < image.state.columns * 8 && (unsigned)y < image.state.rows * 16;
+        bool inside =
+            x >= 0 && y >= 0 && (unsigned)x < image.state.columns * width && (unsigned)y < image.state.rows * height;
         if ((pressed & 1) && !(buttons & 1) && inside)
         {
-            anchor = cursor = (y / 16) * image.state.columns + x / 8;
+            anchor = cursor = (y / height) * image.state.columns + x / width;
             selected = dragging = true;
             requested = image.firstLine;
             changed = true;
         }
         if (dragging)
         {
-            unsigned column = x < 0 ? 0 : (unsigned)x / 8;
-            unsigned row = y < 0 ? 0 : (unsigned)y / 16;
+            unsigned column = x < 0 ? 0 : (unsigned)x / width;
+            unsigned row = y < 0 ? 0 : (unsigned)y / height;
             if (column >= image.state.columns)
             {
                 column = image.state.columns - 1;

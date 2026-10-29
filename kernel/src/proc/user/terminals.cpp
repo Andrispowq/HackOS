@@ -34,6 +34,7 @@ void ClearTerminalInput(Process* process)
     auto tty = ProcessTerminal(process);
     if (tty)
     {
+        tty->paste.Clear();
         tty->head = tty->count = 0;
         tty->overflow = false;
     }
@@ -53,7 +54,12 @@ KeyboardRead ReadProcessTerminal(char& ch)
     if (tty->overflow)
     {
         tty->overflow = false;
+        tty->paste.Clear();
         return KeyboardRead::Overflow;
+    }
+    if (tty->paste.Read(ch))
+    {
+        return KeyboardRead::Character;
     }
     if (!tty->count)
     {
@@ -68,7 +74,7 @@ KeyboardRead ReadProcessTerminal(char& ch)
 bool ProcessTerminalReady()
 {
     auto tty = ProcessTerminal(GetRunningProcess());
-    return tty ? tty->count || tty->overflow : KeyboardReady();
+    return tty ? tty->count || tty->overflow || tty->paste.Pending() : KeyboardReady();
 }
 
 void TerminalClear()
@@ -207,6 +213,8 @@ uint64_t UserTerminalSession(uint64_t operation, uint64_t value, void* buffer)
             item.columns = 80;
             item.rows = 25;
             item.controller = caller->pid;
+            item.window = value;
+            item.appearance.Reset();
             item.columns = window->State().width / 8;
             item.rows = window->State().height / 16;
             if (item.columns > 160)
@@ -263,6 +271,31 @@ uint64_t UserTerminalSession(uint64_t operation, uint64_t value, void* buffer)
     if (!tty)
     {
         return HACKOS_DENIED;
+    }
+    if (operation == HACKOS_TTY_SETTINGS)
+    {
+        auto settings = tty->appearance.Settings(tty->columns, tty->rows);
+        return caller->userSpace->CopyToUser((uint64_t)buffer, &settings, sizeof(settings)) ? 0 : HACKOS_ERROR;
+    }
+    if (operation == HACKOS_TTY_PASTE)
+    {
+        if (value > HACKOS_CLIPBOARD_LIMIT)
+        {
+            return HACKOS_ERROR;
+        }
+        if (!tty->owner || tty->count || tty->overflow || tty->paste.Pending())
+        {
+            return HACKOS_WOULD_BLOCK;
+        }
+        static char paste[HACKOS_CLIPBOARD_LIMIT];
+        if (!caller->userSpace->CopyFromUser(paste, (uint64_t)buffer, value) || !tty->paste.Set(paste, value))
+        {
+            memset(paste, 0, sizeof(paste));
+            return HACKOS_ERROR;
+        }
+        memset(paste, 0, sizeof(paste));
+        WakeTerminalReaders();
+        return 0;
     }
     if (operation == HACKOS_TTY_STATE)
     {
@@ -484,4 +517,20 @@ uint64_t UserSessionLogout()
     // Exit the leader through the ordinary completion path, ending all descendants.
     TerminateProcess(caller->sessionId);
     ExitUserProcess(0);
+}
+
+bool ConfigureWindowTerminal(TerminalSession& tty, uint64_t key, uint64_t value)
+{
+    auto window = KernelWindowManager->GetWindow(tty.window);
+    if (!window || window->GetOwner() != tty.controller || !tty.appearance.Configure(key, value))
+    {
+        return false;
+    }
+    auto geometry = window->State();
+    unsigned columns = geometry.width / (tty.appearance.height / 2);
+    unsigned rows = geometry.height > 16 ? (geometry.height - 16) / tty.appearance.height : 1;
+    tty.columns = columns < 1 ? 1 : columns > 160 ? 160 : columns;
+    tty.rows = rows < 1 ? 1 : rows > 60 ? 60 : rows;
+    TerminalClear();
+    return true;
 }
