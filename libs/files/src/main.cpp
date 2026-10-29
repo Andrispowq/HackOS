@@ -1,4 +1,5 @@
 #include "hackos/gui.h"
+#include "hackos/file_time.h"
 #include "hackos/stdio.h"
 #include "hackos/user.h"
 
@@ -10,7 +11,9 @@ static HackosFileInfo entries[PageSize];
 static char labels[PageSize][256], preview[PreviewRows][PreviewColumns + 1];
 static const char *items[PageSize], *lines[PreviewRows];
 static char bytes[HACKOS_FILE_LIMIT], cwd[256], pending[256];
-static unsigned count, page, address, listing, status, target, previewList;
+static unsigned count, page, address, listing, status, target, previewList, datesLabel;
+static uint64_t editors[8];
+static unsigned editButton;
 static unsigned openButton, renameButton, deleteButton, previousButton, nextButton;
 static bool more, deleting;
 
@@ -50,11 +53,18 @@ static void Selection()
     bool file = valid && !(entries[selected].attributes & HACKOS_DIRECTORY);
     view.SetEnabled(openButton, valid);
     view.SetEnabled(renameButton, file);
+    view.SetEnabled(editButton, file);
     view.SetEnabled(deleteButton, file);
+    view.SetText(datesLabel, "");
     if (valid)
     {
         char details[256];
         auto& entry = entries[selected];
+        char created[20], modified[20], dates[128];
+        FormatFileTime(entry.created, created);
+        FormatFileTime(entry.modified, modified);
+        snprintf(dates, sizeof(dates), "Created: %s    Modified: %s", created, modified);
+        view.SetText(datesLabel, dates);
         snprintf(details, sizeof(details), "%s | %llu bytes | UID %u GID %u | mode %u%u%u%s", entry.name,
                  (unsigned long long)entry.size, entry.uid, entry.gid, (entry.mode >> 6) & 7, (entry.mode >> 3) & 7,
                  entry.mode & 7, file ? "" : " | Folder rename/delete unavailable");
@@ -244,6 +254,7 @@ int main(int argc, char** argv)
     auto toolbar = view.Add(Gui::Kind::Row, 0);
     view.SetLayout(toolbar, 0, 32, 0, 0, 6);
     openButton = view.Add(Gui::Kind::Button, toolbar, "Open");
+    editButton = view.Add(Gui::Kind::Button, toolbar, "Edit text");
     previousButton = view.Add(Gui::Kind::Button, toolbar, "Previous");
     nextButton = view.Add(Gui::Kind::Button, toolbar, "Next");
     deleteButton = view.Add(Gui::Kind::Button, toolbar, "Delete file");
@@ -260,6 +271,7 @@ int main(int argc, char** argv)
     view.SetLayout(target, 0, 32, 1);
     auto mkdirButton = view.Add(Gui::Kind::Button, mutations, "New folder");
     renameButton = view.Add(Gui::Kind::Button, mutations, "Rename / Move file");
+    datesLabel = view.Add(Gui::Kind::Label, 0, "");
     status = view.Add(Gui::Kind::Label, 0, "Select an entry and choose Open. File previews are read-only.");
     HackosWindowSpec spec = {60, 60, 1000, 600, "Files"};
     if (!window.Open(spec))
@@ -275,6 +287,20 @@ int main(int argc, char** argv)
     Print("FILES_READY\n");
     while (window.Handle())
     {
+        bool children = false;
+        for (auto& child : editors)
+        {
+            int64_t code;
+            if (child && syscall_wait(child, &code, HACKOS_WAIT_NOHANG) == child)
+            {
+                child = 0;
+                if (code)
+                {
+                    view.SetText(status, "Editor exited with an error.");
+                }
+            }
+            children = children || child != 0;
+        }
         Gui::Action action;
         for (unsigned n = 0; n < 16; ++n)
         {
@@ -338,6 +364,31 @@ int main(int argc, char** argv)
             {
                 Open();
             }
+            else if (action.widget == editButton)
+            {
+                char path[256];
+                if (!Selected(path))
+                {
+                    continue;
+                }
+                bool launched = false;
+                for (auto& child : editors)
+                {
+                    if (!child)
+                    {
+                        const char* args[] = {"editor", path};
+                        auto pid = syscall_spawn_args("~/USR/BIN/EDITOR", 2, args);
+                        if (pid < HACKOS_NOT_FOUND)
+                        {
+                            child = pid;
+                            children = launched = true;
+                        }
+                        break;
+                    }
+                }
+                view.SetText(status,
+                             launched ? "Opened in Editor." : "Cannot launch Editor (resource limit or permissions).");
+            }
             else if (action.widget == deleteButton && Selected(pending))
             {
                 const char* choices[] = {"Delete", "Cancel"};
@@ -382,7 +433,7 @@ int main(int argc, char** argv)
         }
         else
         {
-            window.Wait();
+            window.Wait(children ? 100 : HACKOS_WAIT_FOREVER);
         }
     }
     return 0;

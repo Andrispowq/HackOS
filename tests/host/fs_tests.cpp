@@ -1,6 +1,8 @@
 #include "fake_fs.hpp"
 #include "fs/vfs.h"
 #include "fs/fat32/fat32.h"
+#include "arch/x86_64/timer/rtc.h"
+extern tm test_rtc_time;
 
 TEST(vfs_selects_volume_and_translates_path)
 {
@@ -1186,5 +1188,47 @@ TEST(fat_directory_batches_match_individual_metadata_and_reduce_reads)
     CHECK(found);
     disk.readError = true;
     CHECK(fs.ReadDirectory("~/TESTS", 0, entries, 16, count) != 0);
+    return 0;
+}
+
+TEST(fat_timestamps_survive_save_move_and_parent_mutation)
+{
+    MemoryDisk disk;
+    FAT32 fs(&disk, 0);
+    tm initial = test_rtc_time;
+    CHECK(fs.MakeDirectory("~/DATES") == 0);
+    CHECK(fs.SaveFile("~/DATES/A.TXT", "one", 3, true) == 0);
+    auto file = fs.OpenFile("~/DATES/A.TXT");
+    CHECK(file && file->GetCreated() && file->GetCreated() == file->GetModified());
+    uint32_t created = file->GetCreated();
+    fs.CloseFile(file);
+    test_rtc_time.second += 4;
+    CHECK(fs.SaveFile("~/DATES/A.TXT", "two", 3, false) == 0);
+    file = fs.OpenFile("~/DATES/A.TXT");
+    CHECK(file && file->GetCreated() == created && file->GetModified() > created);
+    uint32_t modified = file->GetModified();
+    fs.CloseFile(file);
+    test_rtc_time.second += 4;
+    CHECK(fs.MoveFile("~/DATES/A.TXT", "~/DATES/B.TXT") == 0);
+    file = fs.OpenFile("~/DATES/B.TXT");
+    CHECK(file && file->GetCreated() == created && file->GetModified() == modified);
+    fs.CloseFile(file);
+    file = fs.OpenFile("~/DATES");
+    CHECK(file && file->GetCreated() == created && file->GetModified() > modified);
+    fs.CloseFile(file);
+    HackosFileInfo entries[16];
+    uint64_t count = 0;
+    CHECK(fs.ReadDirectory("~/DATES", 0, entries, 16, count) == 0);
+    bool found = false;
+    for (unsigned i = 0; i < count; ++i)
+    {
+        if (test_name_equal(entries[i].name, "B.TXT"))
+        {
+            CHECK(entries[i].created == created && entries[i].modified == modified);
+            found = true;
+        }
+    }
+    CHECK(found);
+    test_rtc_time = initial;
     return 0;
 }

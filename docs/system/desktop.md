@@ -12,6 +12,11 @@ and credential checks. A second copy of DESKTOP does not acquire desktop authori
 - **New terminal** opens another terminal, up to eight concurrently. Windows have
   distinct numbered titles and staggered positions. Each shell has independent
   working directory, history, input, output grid, foreground owner and jobs.
+- The hardcoded **Terminal** and **Files** desktop icons launch on a single click
+  (or Enter/Space while focused). They remain below application windows and are
+  not taskbar entries. The desktop owns this background surface; it cannot be
+  dragged, resized, minimized or raised above applications.
+- **Editor** opens the [graphical text editor](editor.md).
 - **Files** opens the [file manager](files.md).
 - **Widgets** launches the GUI library demonstration.
 - Taskbar buttons list the session's windows, including minimized windows. `>`
@@ -72,7 +77,7 @@ an idle loop. The terminal caret is steady, rather than blinking.
 | Syscall | Interface | Contract |
 | --- | --- | --- |
 | 91 | `auth_desktop(name, password)` | Boot login agent only; same authentication as console login, starts DESKTOP as session leader. |
-| 92 | `desktop(operation, value, entry)` | Kernel-designated desktop only; query display, register its fixed panel, enumerate same-session windows, focus/minimize/request close. |
+| 92 | `desktop(operation, value, entry)` | Kernel-designated desktop only; query display, register its fixed panel, enumerate same-session windows, focus/minimize/request close, register an owned background surface. |
 | 93 | `terminal_session(operation, value, buffer)` | Create an endpoint with an owned window, copy state/cells, inject a decoded byte or resize the controller's grid. |
 | 94 | `session_logout()` | Session shell or desktop only; terminate the session leader and all descendants. |
 
@@ -93,3 +98,11 @@ The session ID belongs to the authenticated leader, not each terminal shell.
 Individual terminal exit never ends sibling terminals. Whole-session teardown
 clears the clipboard and reclaims windows, endpoint state, streams and private
 pages. Desktop authority is not inherited by spawned children, even UID 0 ones.
+
+Desktop operation 6 (`HACKOS_DESKTOP_BACKGROUND`) designates one owned window as
+an immutable bottom layer. It requires desktop authority and exact geometry:
+x/y 1, client width screen-width minus 2 and height screen-height minus 164.
+Its client retains the normal 30-pixel coordinate offset, but has no chrome.
+It is excluded from Alt-Tab and taskbar enumeration. Client input still uses the
+owned window queue. Desktop exit reclaims both panel and background; the pair
+uses two of the sixteen window slots and the normal aggregate surface budget.

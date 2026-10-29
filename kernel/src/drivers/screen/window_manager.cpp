@@ -100,7 +100,7 @@ void WindowManager::CycleFocus(bool reverse)
     for (auto& slot : slots)
     {
         uint64_t id = slot.GetWindowID();
-        if (!id)
+        if (!id || slot.IsDesktopBackground())
         {
             continue;
         }
@@ -228,7 +228,7 @@ Window* WindowManager::Hit(int32_t x, int32_t y)
     for (size_t i = windows.size(); i > 0; i--)
     {
         auto window = windows[i - 1];
-        if (window->GetMinimised())
+        if (window->GetMinimised() || window == background)
         {
             continue;
         }
@@ -241,7 +241,7 @@ Window* WindowManager::Hit(int32_t x, int32_t y)
         }
     }
 
-    return nullptr;
+    return background;
 }
 
 void WindowManager::Mouse(int32_t x, int32_t y, uint32_t buttons)
@@ -293,12 +293,12 @@ void WindowManager::Mouse(int32_t x, int32_t y, uint32_t buttons)
             return;
         }
 
-        if (target == panel)
+        if (target == panel || target == background)
         {
-            capture = panel;
+            capture = target;
             captureMode = 1;
-            panel->SetMouse(x - panel->GetStartX(), y - panel->GetStartY() - 30, buttons);
-            panel->SendEvent(HACKOS_WINDOW_MOUSE);
+            target->SetMouse(x - target->GetStartX(), y - target->GetStartY() - 30, buttons);
+            target->SendEvent(HACKOS_WINDOW_MOUSE);
             return;
         }
         int32_t localX = x - target->GetStartX();
@@ -473,9 +473,13 @@ void WindowManager::Update()
 
 void WindowManager::Draw()
 {
+    if (background)
+    {
+        background->Draw(&drawBuffer);
+    }
     for (size_t i = 0; i < windows.size(); i++)
     {
-        if (windows[i] != panel && !windows[i]->GetMinimised())
+        if (windows[i] != panel && windows[i] != background && !windows[i]->GetMinimised())
         {
             windows[i]->Draw(&drawBuffer);
         }
@@ -531,6 +535,10 @@ Window* WindowManager::GetWindow(uint64_t ID)
 
 void WindowManager::DestroyWindow(Window* window)
 {
+    if (background == window)
+    {
+        background = nullptr;
+    }
     if (panel == window)
     {
         panel = nullptr;
@@ -580,7 +588,7 @@ void WindowManager::FocusTop()
 {
     for (size_t i = windows.size(); i > 0; i--)
     {
-        if (!windows[i - 1]->GetMinimised())
+        if (!windows[i - 1]->GetMinimised() && windows[i - 1] != background)
         {
             Focus(windows[i - 1]);
             return;
@@ -644,7 +652,7 @@ void WindowManager::DrawRestoreBar()
 
 uint64_t WindowManager::ChangeMode(Window* window, uint64_t operation)
 {
-    if (window == panel && operation != HACKOS_WINDOW_QUERY)
+    if ((window == panel || window == background) && operation != HACKOS_WINDOW_QUERY)
     {
         return HACKOS_DENIED;
     }
@@ -770,4 +778,17 @@ uint64_t WindowManager::Activate(Window* window)
     }
     Focus(window);
     return 0;
+}
+
+bool WindowManager::SetBackground(Window* window)
+{
+    if (background)
+    {
+        return false;
+    }
+    background = window;
+    window->SetDesktopBackground();
+    window->SetResizable(false);
+    Display::SharedDisplay()->Invalidate();
+    return true;
 }

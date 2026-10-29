@@ -268,3 +268,6 @@ from the shell does not grant session window-management rights.
 
 `libs/files` builds the graphical file manager, packaged as `/usr/bin/files` and
 listed as **Files** in the desktop launcher. See [file manager](../system/files.md).
+
+`libs/editor` packages `/usr/bin/editor`, available from the launcher and Files.
+Image packaging uses UTC for FAT timestamps to match the default QEMU RTC.

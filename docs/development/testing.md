@@ -468,7 +468,7 @@ Malformed metadata must not be mistaken for an ordinary full-volume failure.
 Guest fixture import helpers add records only to clean disposable test images;
 production used volumes must not be edited by external tools.
 
-The step-16 file-info ABI is 288 bytes; all guest programs are rebuilt. The
+The file-info ABI is 296 bytes (including creation/modification timestamps); all guest programs are rebuilt. The
 non-root editor test now writes under `/tmp`, since root-owned `/` is 0755.
 The shell listing tests check actual mode/UID/GID alongside FAT attributes.
 
@@ -1019,3 +1019,13 @@ The graphical file manager has a QEMU interaction test: `make -C tests test-file
 FIRMWARE=bios` (also `uefi`), after fresh image builds. It checks navigation,
 text/hex previews and truncation, folder creation, file movement, deletion
 confirmation/cancel, missing paths, normal-user permission errors and closing.
+
+`make -C tests test-editor FIRMWARE=bios` (also `uefi`) exercises multiline GUI
+editing, selection/clipboard, open/save/save-as, overwrite confirmation, invalid
+file preservation, denied saves and negotiated close. It checks final bytes in
+the image and zero surviving windows/file handles/children. Desktop tests exercise
+both hardcoded icons, stacking, terminal controls and session cleanup. The login
+GUI tests cover first-start administrator creation on both firmware paths.
+Host GUI tests cover bounded multiline insertion/paste, selection, scrolling,
+resize/clipping and invalid FAT date formatting; filesystem tests check date
+preservation on save/move and directory modification on child changes.

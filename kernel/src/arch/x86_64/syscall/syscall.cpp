@@ -73,6 +73,8 @@ static void Name(char (&destination)[256], const char* source)
 static void Info(HackosFileInfo& info, ActiveFile* file)
 {
     info.size = file->GetSize();
+    info.created = file->GetCreated();
+    info.modified = file->GetModified();
     info.attributes = file->GetAttributes();
     Name(info.name, file->GetName());
     auto permissions = file->GetPermissions();

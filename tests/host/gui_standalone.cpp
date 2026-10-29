@@ -1,4 +1,5 @@
 #include "hackos/gui.h"
+#include "hackos/file_time.h"
 #include <stdio.h>
 #include <string.h>
 #include <limits.h>
@@ -374,11 +375,80 @@ static int Stress()
     return 0;
 }
 
+static int Documents()
+{
+    static TextDocument document;
+    static char full[HACKOS_FILE_LIMIT];
+    CHECK(document.Load("first\nsecond", 12));
+    view.Init();
+    auto editor = view.Add(Kind::TextArea, 0);
+    CHECK(view.SetDocument(editor, &document));
+    view.SetLayout(editor, 0, 0, 1);
+    view.Layout(180, 80);
+    CHECK(view.SetFocus(editor));
+    view.Handle(Key(0xcf), Clip);
+    view.Handle(Key(HACKOS_PHYSICAL_ENTER), Clip);
+    view.Handle(Text('X'), Clip);
+    CHECK(!strcmp(document.text, "first\nX\nsecond") && document.modified);
+    view.Handle(Key(HACKOS_PHYSICAL_A, HACKOS_MOD_CTRL), Clip);
+    view.Handle(Key(HACKOS_PHYSICAL_C, HACKOS_MOD_CTRL), Clip);
+    CHECK(clipboardLength == document.length);
+    view.Handle(Key(HACKOS_PHYSICAL_X, HACKOS_MOD_CTRL), Clip);
+    CHECK(document.length == 0);
+    view.Handle(Key(HACKOS_PHYSICAL_V, HACKOS_MOD_CTRL), Clip);
+    CHECK(!strcmp(document.text, "first\nX\nsecond"));
+    clipboard[0] = 0;
+    clipboardLength = 1;
+    auto length = document.length;
+    view.Handle(Key(HACKOS_PHYSICAL_V, HACKOS_MOD_CTRL), Clip);
+    CHECK(document.length == length);
+    CHECK(!document.Load("bad\r\n", 5) && document.length == length);
+    memset(full, 'a', sizeof(full));
+    CHECK(document.Load(full, sizeof(full)));
+    document.cursor = document.anchor = document.length;
+    CHECK(!document.Replace("b", 1) && document.length == HACKOS_FILE_LIMIT);
+    document.anchor = document.cursor - 1;
+    CHECK(document.Replace("b", 1) && document.text[HACKOS_FILE_LIMIT - 1] == 'b');
+    view.Handle(Key(HACKOS_PHYSICAL_A, HACKOS_MOD_CTRL), Clip);
+    clipboardLength = 0;
+    view.Handle(Key(HACKOS_PHYSICAL_X, HACKOS_MOD_CTRL), Clip);
+    CHECK(document.length == HACKOS_FILE_LIMIT && clipboardLength == 0);
+    CHECK(document.Load("a\nb\nc\nd\ne\nf", 11));
+    view.Handle(Key(0xcf, HACKOS_MOD_CTRL), Clip);
+    CHECK(document.top > 0);
+    view.Handle(Key(0xc7, HACKOS_MOD_CTRL), Clip);
+    CHECK(document.top == 0 && document.cursor == 0);
+    view.Handle(Key(0xd0, HACKOS_MOD_SHIFT), Clip);
+    CHECK(document.cursor == 2 && document.anchor == 0);
+    CHECK(view.Handle(Key(0x1f, HACKOS_MOD_CTRL), Clip).kind == ActionKind::Command);
+    Canvas canvas;
+    for (unsigned i = 0; i < 100; ++i)
+    {
+        view.Layout(i, i);
+        for (auto& pixel : buffer)
+        {
+            pixel = 0xdeadbeef;
+        }
+        canvas.Init(buffer + 1, 32, {0, 0, 32, 32});
+        view.Draw(canvas, font);
+        CHECK(buffer[0] == 0xdeadbeef && buffer[1025] == 0xdeadbeef);
+    }
+    char date[20];
+    FormatFileTime(0, date);
+    CHECK(!strcmp(date, "Unknown"));
+    FormatFileTime(((44U << 9 | 2U << 5 | 29U) << 16) | (23U << 11 | 59U << 5 | 29U), date);
+    CHECK(!strcmp(date, "2024-02-29 23:59:58"));
+    FormatFileTime((43U << 9 | 2U << 5 | 29U) << 16, date);
+    CHECK(!strcmp(date, "Unknown"));
+    ++tests;
+    return 0;
+}
+
 int PlatformTests();
 
 int main()
 {
-    if (Drawing() || Layout() || Editing() || Controls() || Secrets() || Stress() || PlatformTests())
+    if (Drawing() || Layout() || Editing() || Controls() || Secrets() || Documents() || Stress() || PlatformTests())
     {
         return 1;
     }

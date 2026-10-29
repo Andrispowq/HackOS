@@ -35,6 +35,7 @@ userspace:
 	$(MAKE) -C libs/window
 	$(MAKE) -C libs/desktop
 	$(MAKE) -C libs/files
+	$(MAKE) -C libs/editor
 	$(MAKE) -C libs/term
 	$(MAKE) -C libs/ring3
 buildimg:
@@ -60,6 +61,7 @@ clean:
 	$(MAKE) -C libs/window clean
 	$(MAKE) -C libs/desktop clean
 	$(MAKE) -C libs/files clean
+	$(MAKE) -C libs/editor clean
 	$(MAKE) -C libs/term clean
 	$(MAKE) -C libs/ring3 clean
 	rm -rf boot/UEFI/gnu-efi/x86_64

@@ -136,9 +136,9 @@ quit
             click(50, 1040)
             inspect("assert number('KernelWindowManager->focused->owner') == number('terminals[0].controller')")
             click(260, 1000)
-            inspect("assert number('KernelWindowManager->slots[1].minimised') == 1")
+            inspect("assert number('KernelWindowManager->slots[2].minimised') == 1")
             click(50, 1040)
-            inspect("assert number('KernelWindowManager->focused->owner') == number('terminals[0].controller')\nassert number('KernelWindowManager->slots[1].minimised') == 0")
+            inspect("assert number('KernelWindowManager->focused->owner') == number('terminals[0].controller')\nassert number('KernelWindowManager->slots[2].minimised') == 0")
             # Maximize respects the taskbar and preserves the row-aligned grid.
             key('f10', alt=True)
             inspect("assert number('terminals[0].columns') == 160\nassert number('KernelWindowManager->focused->sizeY') < 950")
@@ -169,19 +169,30 @@ quit
             click(50, 1040)
             click(420, 1000)
             inspect("assert number('terminals[0].controller') == 0\nassert number('KernelWindowManager->panel') != 0")
+            # Background icons stay behind windows and launch the same applications.
+            click(60, 80)
+            inspect("assert number('terminals[0].controller') != 0")
+            key('f4', alt=True)
+            inspect("assert number('terminals[0].controller') == 0")
+            mark = len(g.output())
+            click(60, 180)
+            g.wait('FILES_READY', mark)
+            inspect("assert number('user_windows_live') == 3")
+            key('f4', alt=True)
+            inspect("assert number('user_windows_live') == 2")
             # Launch Files from the authenticated launcher and close it cleanly.
             mark = len(g.output())
             click(600, 1000)
             g.wait('FILES_READY', mark)
-            inspect("assert number('user_windows_live') == 2")
+            inspect("assert number('user_windows_live') == 3")
             g.screen('launcher-files')
             key('f4', alt=True)
-            inspect("assert number('user_windows_live') == 1")
+            inspect("assert number('user_windows_live') == 2")
             # Launch a GUI application from the same authenticated launcher.
             mark = len(g.output())
             click(160, 1000)
             g.wait('GUI_WIDGETS_READY', mark)
-            inspect("assert number('user_windows_live') == 2")
+            inspect("assert number('user_windows_live') == 3")
             g.screen('launcher-widgets')
             # Reopen a terminal while the GUI application remains alive;
             # logout must reclaim both applications and all their resources.
@@ -212,7 +223,7 @@ quit
             mark = len(g.output())
             key('ret')
             g.wait('exited 1', mark)
-            inspect("assert sum(number('terminals[' + str(i) + '].controller') != 0 for i in range(8)) == 8\nassert number('user_windows_live') == 9")
+            inspect("assert sum(number('terminals[' + str(i) + '].controller') != 0 for i in range(8)) == 8\nassert number('user_windows_live') == 10")
             g.screen('terminal-capacity')
             # A failed or forcibly stopped desktop must return to login, not
             # strand the terminal controller or leave privileged descendants.

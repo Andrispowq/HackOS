@@ -95,6 +95,13 @@ browsing, bounded read-only text/hex previews, folder creation, file rename/move
 and confirmed deletion with kernel permission errors. Folder rename/delete remain
 unsupported. See `docs/system/files.md`; `tests/qemu_files_gui.py` covers both firmware paths.
 
+Step 5b adds `/USR/BIN/EDITOR` (`libs/editor`), multiline `Gui::TextDocument`,
+open/save forms, selection/clipboard and unsaved-change confirmation. Files can
+launch Editor and displays FAT creation/modification dates from the 296-byte
+file-info record. Writes update modification dates; moves preserve file dates.
+The desktop owns a bottom-layer surface with hardcoded Terminal/Files icons.
+Graphical first-start account setup remains in LOGIN. See `docs/system/editor.md`.
+
 ## Where to look
 
 | Area | Starting points |

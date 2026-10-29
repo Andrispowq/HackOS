@@ -2,8 +2,8 @@
 #include "hackos/stdio.h"
 #include "hackos/user.h"
 using namespace User;
-static Gui::Window panel;
-static Gui::View view;
+static Gui::Window panel, background;
+static Gui::View view, icons;
 static unsigned buttons[15], statusLabel;
 static uint64_t handles[15], children[16];
 static HackosDesktopEntry entries[15];
@@ -59,6 +59,7 @@ int main()
     auto close = view.Add(Gui::Kind::Button, launcher, "Close selected");
     auto logout = view.Add(Gui::Kind::Button, launcher, "Log out");
     auto files = view.Add(Gui::Kind::Button, launcher, "Files");
+    auto editor = view.Add(Gui::Kind::Button, launcher, "Editor");
     statusLabel = view.Add(Gui::Kind::Label, launcher, "Ready");
     view.SetLayout(statusLabel, 0, 32, 1, 0, 0);
     auto tasks = view.Add(Gui::Kind::Row, 0);
@@ -68,6 +69,23 @@ int main()
         buttons[i] = view.Add(Gui::Kind::Button, tasks, "");
         view.SetLayout(buttons[i], 0, 32, 1, 0, 0);
         view.SetVisible(buttons[i], false);
+    }
+    icons.Init();
+    auto palette = Gui::DefaultTheme();
+    palette.background = palette.panel = 0xff172b3b;
+    icons.SetTheme(palette);
+    auto terminalIcon = icons.Add(Gui::Kind::IconButton, 0, "Terminal");
+    auto filesIcon = icons.Add(Gui::Kind::IconButton, 0, "Files");
+    icons.SetLayout(terminalIcon, 112, 96);
+    icons.SetLayout(filesIcon, 112, 96);
+    icons.SetIcon(terminalIcon, 1);
+    icons.SetIcon(filesIcon, 2);
+    HackosWindowSpec backgroundSpec = {1, 1, screen.width - 2, screen.height - 164, "Desktop icons"};
+    if (!background.Open(backgroundSpec) || syscall_desktop(HACKOS_DESKTOP_BACKGROUND, background.Handle(), nullptr))
+    {
+        background.Close();
+        panel.Close();
+        return 1;
     }
     uint64_t selected = 0;
     Launch("~/USR/BIN/TERM");
@@ -129,6 +147,10 @@ int main()
             {
                 Launch("~/USR/BIN/FILES");
             }
+            else if (action.widget == editor)
+            {
+                Launch("~/USR/BIN/EDITOR");
+            }
             else if (action.widget == widgets)
             {
                 Launch("~/USR/BIN/WINDOW", true);
@@ -158,10 +180,34 @@ int main()
                 }
             }
         }
+        for (unsigned n = 0; n < 16 && background.Next(icons, action) == 1; ++n)
+        {
+            if (action.kind == Gui::ActionKind::Close)
+            {
+                background.ReplyClose(false);
+            }
+            else if (action.kind == Gui::ActionKind::Activate)
+            {
+                if (action.widget == terminalIcon)
+                {
+                    Launch("~/USR/BIN/TERM");
+                }
+                else if (action.widget == filesIcon)
+                {
+                    Launch("~/USR/BIN/FILES");
+                }
+            }
+        }
+        if (icons.Dirty())
+        {
+            background.Paint(icons);
+        }
         if (view.Dirty())
         {
             panel.Paint(view);
         }
-        panel.Wait(100);
+        HackosPollFd ready[] = {{panel.Handle(), HACKOS_POLL_WINDOW | HACKOS_POLL_READ, 0},
+                                {background.Handle(), HACKOS_POLL_WINDOW | HACKOS_POLL_READ, 0}};
+        syscall_poll(ready, 2, 100);
     }
 }

@@ -144,8 +144,18 @@ quit
             click('Up')
 
             click('entry:alpha.txt')
+            inspect("assert 'Created: ' in text(field('datesLabel') + '.text')\nassert 'Modified: ' in text(field('datesLabel') + '.text')\nassert 'Unknown' not in text(field('datesLabel') + '.text')")
             click('openButton')
             inspect("assert text('preview[0]') == 'hello'\nassert text('preview[1]') == 'world'")
+            mark = len(g.output())
+            click('Edit text')
+            g.wait('EDITOR_READY', mark)
+            time.sleep(.3)
+            g.qmp.call('input-send-event', {'events': [
+                {'type': 'key', 'data': {'down': down, 'key': {'type': 'qcode', 'data': keycode}}}
+                for down, codes in [(True, ['alt', 'f4']), (False, ['f4', 'alt'])] for keycode in codes]})
+            g.wait('exited 0', mark)
+            inspect("assert text('cwd').lower() == '~/tmp'")
             click('entry:binary.dat')
             click('openButton')
             inspect("assert text('preview[0]') == '00 FF 01 '")

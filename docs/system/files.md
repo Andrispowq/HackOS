@@ -7,7 +7,11 @@ working directory and window. The address field accepts absolute or relative
 paths; choose **Go**, **Up**, or **Refresh** to navigate. Select a row and choose
 **Open** to enter a folder or preview a file. Tab/Shift-Tab traverse controls;
 arrow/Page Up/Page Down keys and the wheel navigate lists. Enter activates focused
-buttons. The status line shows the selected entry's size, UID/GID and mode.
+buttons. The status lines show the selected entry's size, UID/GID, mode, creation and
+modification dates (including folders). Dates use `YYYY-MM-DD HH:MM:SS`, with
+FAT's two-second precision and RTC wall time. Missing/invalid dates, including
+the volume root, show **Unknown**. Packaged image dates use UTC to match the
+default QEMU RTC; FAT does not record a timezone.
 
 Directories use pages of 128 entries with **Previous**/**Next** controls. Entries
 remain in filesystem order, including hidden entries. Refresh returns to page one.
@@ -19,7 +23,8 @@ tabs become spaces and carriage returns are omitted. Other bytes select hex
 preview. Reading is bounded to 32 KiB and display to 256 rows; the status explicitly
 marks truncated content. Empty files are supported. Read descriptors close before
 returning to the event loop. Preview does not execute programs or modify content;
-the graphical editor is a separate milestone.
+choose **Edit text** to launch the [graphical editor](editor.md). Files reaps
+editor child results; at most eight editors can be launched by one Files instance.
 
 Enter a name or destination path in the bottom field and choose **New folder**
 or **Rename / Move file**. Relative destinations resolve against the displayed

@@ -10,7 +10,7 @@ def test():
         binary = directory / 'gui-tests'
         compile = command([os.environ.get('GUI_CXX', 'g++'), '-std=c++17', '-O1', '-g', '-Wall', '-Wextra', '-Werror',
                            '-fsanitize=address,undefined', '-fno-sanitize-recover=all', '-I', ROOT / 'include',
-                           ROOT / 'libs/gui/src/gui.cpp', ROOT / 'libs/gui/src/window.cpp',
+                           ROOT / 'libs/gui/src/gui.cpp', ROOT / 'libs/gui/src/document.cpp', ROOT / 'libs/gui/src/window.cpp',
                            ROOT / 'tests/host/gui_standalone.cpp', ROOT / 'tests/host/gui_platform.cpp', '-o', binary])
         (directory / 'compile.log').write_text(compile.stdout)
         require_success(compile, 'compile GUI checks')

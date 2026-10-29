@@ -55,8 +55,9 @@ class FAT32Driver
     uint32_t AllocateClusterChain(uint32_t count);
     void FreeClusterChain(uint32_t start);
     int DirectorySearch(const char* name, uint32_t cluster, DirEntry* entry);
-    int DirectoryAdd(uint32_t cluster, DirEntry& entry);
-    int UpdateEntry(const DirEntry& entry, bool remove = false);
+    int DirectoryAdd(uint32_t cluster, DirEntry& entry, bool preserveDates = false);
+    int TouchDirectory(uint32_t cluster);
+    int UpdateEntry(DirEntry& entry, bool remove = false);
 
     Device* device;
     uint32_t PartitionStart;

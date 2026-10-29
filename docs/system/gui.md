@@ -121,3 +121,20 @@ is currently a full client repaint; damage tracking remains a later milestone. T
 Text fields can opt into `SetSecret(id, true)`: rendering uses asterisks,
 clipboard operations are disabled, and shortened/cleared values erase the
 remaining buffer. Call `SetText(id, "")` before discarding a secret field.
+
+## Multiline documents and icons
+
+`TextArea` borrows a static `TextDocument` through `SetDocument`. The document
+contains 32768 bytes plus a terminator, selection/cursor offsets and a viewport;
+`Load` validates the whole input before replacing it. `Replace` preserves data on
+invalid/oversized input. Bind only one widget to a document, keep it alive for the
+view's lifetime, and do not pass overlapping document storage to `Replace`.
+Clipboard cut/paste is atomic and limited to 4096 bytes. Text uses ASCII/LF/tab;
+tab displays as one cell. See [editor](editor.md) for keys and behavior.
+`ActionKind::Command` reports Ctrl-N/O/S by physical key in `value`; applications
+choose how to handle these commands. Modals continue to trap input.
+
+`IconButton` is a normal focusable button with a built-in code-drawn terminal
+(icon 1) or folder (icon 2), selected through `SetIcon`. It follows the usual
+clipping, focus and press/release activation rules. Desktop uses these two fixed
+icons; no image assets or icon discovery mechanism are required.

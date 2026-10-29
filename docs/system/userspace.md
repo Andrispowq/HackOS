@@ -451,8 +451,11 @@ records with pinned sizes and zeroed padding. `HackosCredentials` is 48 bytes
 are zero. User records append a 32-byte name (80 bytes total); group records
 contain GID, zero reserved and a 32-byte name (40 bytes). The process record is
 now 296 bytes: its original PID/state/name prefix is followed by UID/GID,
-parent PID and process-group ID at offset 288. `HackosFileInfo` is now 288 bytes: its original 272-byte prefix
-is followed by uint32 UID, GID, mode and metadataVersion (1). All file-info
+parent PID and process-group ID at offset 288. `HackosFileInfo` is now 296 bytes: its original 272-byte prefix
+is followed by uint32 UID, GID, mode and metadataVersion (1), then uint32
+`created` (offset 288) and `modified` (292). These are FAT date/time pairs:
+date in the high 16 bits and time in the low 16 bits, with two-second precision
+and no timezone. Zero/invalid dates are unknown; the FAT root has no date record. All file-info
 and process-info consumers must be rebuilt with these layouts; old binary consumers are unsupported.
 IDs accepted as syscall arguments are validated at full 64-bit width, so high
 bits cannot alias root. Process states 4 and 5 mean blocked terminal input and

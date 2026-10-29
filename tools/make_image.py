@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """Package boot payloads without truncating them or mounting a filesystem."""
 import argparse
+import os
 from pathlib import Path
 import subprocess
 import tempfile
@@ -19,7 +20,8 @@ def package(firmware):
             if not 0 < size <= limit:
                 raise ValueError(f'{name}: {size} bytes exceeds its {limit}-byte BIOS slot')
     def mtool(command, *args):
-        subprocess.run([command, '-i', str(fat), *map(str, args)], check=True)
+        subprocess.run([command, '-i', str(fat), *map(str, args)], check=True,
+                       env=dict(os.environ, TZ="UTC"))
     with tempfile.TemporaryDirectory(prefix='image-', dir=output) as temporary:
         fat = Path(temporary) / 'fat.img'
         format_volume(fat)
@@ -32,6 +34,7 @@ def package(firmware):
                              ('libs/window/bin/window', 'USR/BIN/window'),
                              ('libs/desktop/bin/desktop', 'USR/BIN/desktop'),
                              ('libs/files/bin/files', 'USR/BIN/files'),
+                             ('libs/editor/bin/editor', 'USR/BIN/editor'),
                              ('libs/term/bin/term', 'USR/BIN/term'),
                              ('libs/ring3/bin/ring3', 'USR/BIN/ring3'),
                              ('libs/shell/bin/shell', 'USR/BIN/shell'), ('libs/login/bin/login', 'USR/BIN/login'), ('hello.txt', 'USR/hello.txt')]:

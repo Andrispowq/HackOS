@@ -318,7 +318,7 @@ void View::Traverse(bool reverse)
 unsigned View::Add(Kind kind, unsigned parent, const char* text)
 {
     if (count == MaxWidgets || parent >= count || !Container(widgets[parent].kind) ||
-        (unsigned)kind > (unsigned)Kind::List)
+        (unsigned)kind > (unsigned)Kind::IconButton)
     {
         return NoWidget;
     }
@@ -396,6 +396,28 @@ bool View::SetItems(unsigned id, const char* const* items, unsigned length)
     w.items = items;
     w.itemCount = length;
     w.selected = w.scroll = 0;
+    dirty = true;
+    return true;
+}
+
+bool View::SetDocument(unsigned id, TextDocument* document)
+{
+    if (id >= count || widgets[id].kind != Kind::TextArea || !document)
+    {
+        return false;
+    }
+    widgets[id].document = document;
+    dirty = true;
+    return true;
+}
+
+bool View::SetIcon(unsigned id, unsigned icon)
+{
+    if (id >= count || widgets[id].kind != Kind::IconButton || icon < 1 || icon > 2)
+    {
+        return false;
+    }
+    widgets[id].icon = icon;
     dirty = true;
     return true;
 }
@@ -519,10 +541,21 @@ void View::Arrange(unsigned id)
 
 void View::Layout(unsigned w, unsigned h)
 {
+    bool resized = width != Min(w, 4096) || height != Min(h, 2160);
     width = Min(w, 4096);
     height = Min(h, 2160);
     widgets[0].bounds = widgets[0].clip = {0, 0, (int32_t)width, (int32_t)height};
     Arrange(0);
+    if (resized)
+    {
+        for (unsigned i = 0; i < count; ++i)
+        {
+            if (widgets[i].kind == Kind::TextArea && widgets[i].document)
+            {
+                widgets[i].document->Reveal(widgets[i].bounds);
+            }
+        }
+    }
     ArrangeDialog();
     NormalizeFocus();
     dirty = true;
@@ -704,7 +737,7 @@ Action View::Activate(unsigned id)
         dirty = true;
         return {ActionKind::Change, id, w.checked};
     }
-    if (w.kind == Kind::Button)
+    if ((w.kind == Kind::Button || w.kind == Kind::IconButton))
     {
         return {ActionKind::Activate, id, 0};
     }
@@ -865,6 +898,11 @@ Action View::Handle(const HackosWindowEvent2& input, Clipboard clipboard)
         return Nothing();
     }
     NormalizeFocus();
+    if (event.type == HACKOS_WINDOW_KEY_DOWN && (input.modifiers & HACKOS_MOD_CTRL) &&
+        !(input.flags & HACKOS_KEY_REPEAT) && (event.key == 0x1f || event.key == 0x18 || event.key == 0x31))
+    {
+        return {ActionKind::Command, focused, (int)event.key};
+    }
     if (event.type == HACKOS_WINDOW_KEY_DOWN && event.key == HACKOS_PHYSICAL_TAB)
     {
         Traverse(input.modifiers & HACKOS_MOD_SHIFT);
@@ -882,6 +920,11 @@ Action View::Handle(const HackosWindowEvent2& input, Clipboard clipboard)
         }
         if (event.type == HACKOS_WINDOW_WHEEL)
         {
+            if (hit != NoWidget && widgets[hit].kind == Kind::TextArea && widgets[hit].document)
+            {
+                widgets[hit].document->Scroll((int32_t)event.key);
+                dirty = true;
+            }
             if (hit != NoWidget && widgets[hit].kind == Kind::List)
             {
                 auto& w = widgets[hit];
@@ -902,6 +945,14 @@ Action View::Handle(const HackosWindowEvent2& input, Clipboard clipboard)
                 focused = hit;
                 dirty = true;
             }
+        }
+        if (pressed != NoWidget && widgets[pressed].kind == Kind::TextArea && widgets[pressed].document &&
+            (down || (event.buttons & 1)))
+        {
+            auto& w = widgets[pressed];
+            w.document->Pointer(w.bounds, event.x, event.y, !down || (input.modifiers & HACKOS_MOD_SHIFT));
+            dragging = true;
+            dirty = true;
         }
         if (pressed != NoWidget && widgets[pressed].kind == Kind::TextField && (down || (event.buttons & 1)))
         {
@@ -943,6 +994,12 @@ Action View::Handle(const HackosWindowEvent2& input, Clipboard clipboard)
         return Nothing();
     }
     auto& w = widgets[focused];
+    if (w.kind == Kind::TextArea && w.document)
+    {
+        bool changed = w.document->Handle(input, clipboard, w.bounds);
+        dirty = true;
+        return changed ? Action{ActionKind::Change, focused, 0} : Nothing();
+    }
     if (w.kind == Kind::TextField)
     {
         return Edit(focused, input, clipboard);
@@ -1058,6 +1115,30 @@ void View::Draw(Canvas& canvas, const Font& font) const
                 {
                     canvas.Fill({left + ((int)w.cursor - (int)w.offset) * 8, top, 1, 16}, theme.accent);
                 }
+            }
+            else if (w.kind == Kind::TextArea && w.document)
+            {
+                w.document->Draw(canvas, font, w.bounds, theme, focus);
+            }
+            else if (w.kind == Kind::IconButton)
+            {
+                int x = w.bounds.x + (w.bounds.width - 48) / 2, y = w.bounds.y + 10;
+                if (w.icon == 1)
+                {
+                    canvas.Fill({x, y, 48, 36}, theme.border);
+                    canvas.Fill({x + 3, y + 3, 42, 30}, theme.background);
+                    canvas.Text(font, x + 8, y + 10, ">_", theme.accent);
+                    canvas.Fill({x + 18, y + 36, 12, 4}, theme.border);
+                    canvas.Fill({x + 10, y + 40, 28, 3}, theme.border);
+                }
+                else
+                {
+                    canvas.Fill({x + 2, y + 4, 20, 10}, 0xffd6a84b);
+                    canvas.Fill({x, y + 12, 48, 30}, 0xffe9bd62);
+                    canvas.Fill({x + 3, y + 16, 42, 3}, 0xffffd982);
+                }
+                canvas.Text(font, w.bounds.x + (w.bounds.width - (int)Canvas::Measure(w.text).width) / 2, y + 50,
+                            w.text, ink);
             }
             else if (w.kind == Kind::List)
             {

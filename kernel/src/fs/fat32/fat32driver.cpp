@@ -448,6 +448,8 @@ vector<DirEntry> FAT32Driver::GetDirectories(uint32_t cluster, uint32_t filter, 
 
             entry.cluster = (raw.clusterLow | ((uint32_t)raw.clusterHigh << 16)) & 0x0fffffff;
             entry.size = raw.fileSize;
+            entry.created = ((uint32_t)raw.ctime_date << 16) | raw.ctime_time;
+            entry.modified = ((uint32_t)raw.mtime_date << 16) | raw.mtime_time;
             entry.attributes = raw.attributes;
             entry.parentCluster = chain[c];
             entry.offsetInParentCluster = i;
@@ -589,7 +591,7 @@ int FAT32Driver::OpenFile(const char* path, DirEntry* entry)
     return 0;
 }
 
-int FAT32Driver::UpdateEntry(const DirEntry& entry, bool remove)
+int FAT32Driver::UpdateEntry(DirEntry& entry, bool remove)
 {
     if (ioError || !ValidCluster(entry.parentCluster) || entry.offsetInParentCluster >= ClusterSize / 32)
     {
@@ -623,13 +625,52 @@ int FAT32Driver::UpdateEntry(const DirEntry& entry, bool remove)
         raw.clusterHigh = entry.cluster >> 16;
         raw.fileSize = entry.size;
         raw.attributes = entry.attributes;
+        DirectoryEntry now = {};
+        Stamp(now);
+        raw.mtime_date = now.mtime_date;
+        raw.mtime_time = now.mtime_time;
+        entry.modified = ((uint32_t)raw.mtime_date << 16) | raw.mtime_time;
         WriteCluster(entry.parentCluster, temporaryBuffer);
     }
 
-    return ioError ? -1 : 0;
+    return ioError || (remove && TouchDirectory(entry.directoryCluster)) ? -1 : 0;
 }
 
-int FAT32Driver::DirectoryAdd(uint32_t cluster, DirEntry& file)
+// FAT root has no owning directory entry and therefore no stored timestamp.
+int FAT32Driver::TouchDirectory(uint32_t cluster)
+{
+    if (cluster == RootDirStart)
+    {
+        return 0;
+    }
+    auto children = GetDirectories(cluster, 0, false);
+    uint32_t parent = 0;
+    for (unsigned i = 0; i < children.size(); ++i)
+    {
+        if (SameName(children[i].name, ".."))
+        {
+            parent = children[i].cluster ? children[i].cluster : RootDirStart;
+            break;
+        }
+    }
+    if (!parent)
+    {
+        return -1;
+    }
+    auto siblings = GetDirectories(parent, 0, false);
+    for (unsigned i = 0; i < siblings.size(); ++i)
+    {
+        auto& entry = siblings[i];
+        if (entry.cluster == cluster && (entry.attributes & FILE_DIRECTORY) && !SameName(entry.name, ".") &&
+            !SameName(entry.name, ".."))
+        {
+            return UpdateEntry(entry);
+        }
+    }
+    return -1;
+}
+
+int FAT32Driver::DirectoryAdd(uint32_t cluster, DirEntry& file, bool preserveDates)
 {
     auto chain = GetClusterChain(cluster);
     if (!chain.size())
@@ -747,6 +788,15 @@ int FAT32Driver::DirectoryAdd(uint32_t cluster, DirEntry& file)
     raw.clusterLow = file.cluster & 0xffff;
     raw.clusterHigh = file.cluster >> 16;
     Stamp(raw);
+    if (preserveDates)
+    {
+        raw.ctime_date = file.created >> 16;
+        raw.ctime_time = file.created;
+        raw.mtime_date = file.modified >> 16;
+        raw.mtime_time = file.modified;
+    }
+    file.created = ((uint32_t)raw.ctime_date << 16) | raw.ctime_time;
+    file.modified = ((uint32_t)raw.mtime_date << 16) | raw.mtime_time;
     unsigned longCount = simple ? 0 : (length + 12) / 13;
     unsigned needed = longCount + 1, perCluster = ClusterSize / 32;
     uint64_t first = 0, freeCount = 0, endIndex = (uint64_t)-1;
@@ -858,7 +908,7 @@ int FAT32Driver::DirectoryAdd(uint32_t cluster, DirEntry& file)
     file.directoryCluster = cluster;
     file.firstDirectoryIndex = first;
     file.directoryEntryCount = needed;
-    return !ioError && Permissions(file, true) ? 0 : -1;
+    return !ioError && Permissions(file, true) && !TouchDirectory(cluster) ? 0 : -1;
 }
 
 int FAT32Driver::CreateFile(const char* parentPath, DirEntry* file)
@@ -1297,7 +1347,9 @@ int FAT32Driver::MoveFile(const char* source, const char* destination)
     moved.size = original.size;
     moved.attributes = original.attributes;
     moved.permissions = original.permissions;
-    if (DirectoryAdd(parent.cluster, moved) || !Sync())
+    moved.created = original.created;
+    moved.modified = original.modified;
+    if (DirectoryAdd(parent.cluster, moved, true) || !Sync())
     {
         return -1;
     }

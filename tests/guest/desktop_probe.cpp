@@ -35,6 +35,7 @@ int main(int argc, char** argv)
     HackosTerminalState state = {};
     if (syscall_desktop(HACKOS_DESKTOP_SCREEN, 0, &entry) != HACKOS_DENIED ||
         syscall_desktop(HACKOS_DESKTOP_FOCUS, 1, nullptr) != HACKOS_DENIED ||
+        syscall_desktop(HACKOS_DESKTOP_BACKGROUND, 1, nullptr) != HACKOS_DENIED ||
         syscall_terminal_session(HACKOS_TTY_STATE, 0, &state) != HACKOS_DENIED ||
         syscall_terminal_session(HACKOS_TTY_INPUT, 'x', nullptr) != HACKOS_DENIED ||
         syscall_terminal_session(HACKOS_TTY_CREATE, 0, nullptr) != HACKOS_DENIED ||

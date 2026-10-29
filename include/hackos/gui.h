@@ -51,7 +51,9 @@ enum class Kind
     Button,
     CheckBox,
     TextField,
-    List
+    List,
+    TextArea,
+    IconButton
 };
 enum class ActionKind
 {
@@ -59,7 +61,8 @@ enum class ActionKind
     Activate,
     Change,
     Close,
-    Dialog
+    Dialog,
+    Command
 };
 
 struct Action
@@ -76,6 +79,25 @@ struct Clipboard
     uint64_t (*write)(void*, const void*, uint64_t);
 };
 
+// Borrowed by a TextArea widget. No global constructor or dynamic allocation.
+class TextDocument
+{
+  public:
+    char text[HACKOS_FILE_LIMIT + 1];
+    unsigned length, cursor, anchor, top, left;
+    bool modified;
+
+    unsigned Start(unsigned position) const;
+    unsigned End(unsigned position) const;
+    bool Load(const char* bytes, unsigned size);
+    bool Replace(const char* bytes, unsigned size);
+    void Reveal(Rect bounds);
+    void Pointer(Rect bounds, int x, int y, bool extend);
+    void Scroll(int rows);
+    bool Handle(const HackosWindowEvent2& event, Clipboard clipboard, Rect bounds);
+    void Draw(Canvas& canvas, const Font& font, Rect bounds, Theme theme, bool focus) const;
+};
+
 struct Widget
 {
     Kind kind;
@@ -87,6 +109,8 @@ struct Widget
     unsigned length, cursor, anchor, offset;
     const char* const* items;
     unsigned itemCount, selected, scroll;
+    TextDocument* document;
+    unsigned icon;
 };
 
 // Explicit Init is required, including for static storage. No heap, virtual
@@ -123,6 +147,8 @@ class View
     unsigned Focus() const;
     bool SetFocus(unsigned id);
     bool SetText(unsigned id, const char* text);
+    bool SetDocument(unsigned id, TextDocument* document);
+    bool SetIcon(unsigned id, unsigned icon);
     bool SetSecret(unsigned id, bool secret);
     bool SetItems(unsigned id, const char* const* items, unsigned length);
     bool SetChecked(unsigned id, bool checked);

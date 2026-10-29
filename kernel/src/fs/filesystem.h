@@ -52,6 +52,16 @@ class ActiveFile
         return {0, 0, 0};
     }
 
+    virtual uint32_t GetCreated() const
+    {
+        return 0;
+    }
+
+    virtual uint32_t GetModified() const
+    {
+        return 0;
+    }
+
     size_t seek_position = 0;
     size_t fs_index = -1;
     uint32_t accessMode = 0;

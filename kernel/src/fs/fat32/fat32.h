@@ -17,6 +17,16 @@ struct FAT32_ActiveFile : public ActiveFile
 
     FilePermissions GetPermissions() const override;
 
+    uint32_t GetCreated() const override
+    {
+        return entry.created;
+    }
+
+    uint32_t GetModified() const override
+    {
+        return entry.modified;
+    }
+
     DirEntry entry;
     const char* path = nullptr;
 };

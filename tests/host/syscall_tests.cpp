@@ -39,8 +39,10 @@ TEST(syscall_record_layout)
     CHECK(sizeof(HackosWindowState) == 32);
     CHECK(sizeof(HackosWindowEvent) == 32);
     CHECK(__builtin_offsetof(HackosWindowSpec, title) == 16);
-    CHECK(sizeof(HackosFileInfo) == 288 && sizeof(HackosProcessInfo) == 296);
+    CHECK(sizeof(HackosFileInfo) == 296 && sizeof(HackosProcessInfo) == 296);
     CHECK(__builtin_offsetof(HackosFileInfo, name) == 16);
+    CHECK(__builtin_offsetof(HackosFileInfo, created) == 288);
+    CHECK(__builtin_offsetof(HackosFileInfo, modified) == 292);
     CHECK(__builtin_offsetof(HackosProcessInfo, name) == 16);
     CHECK(__builtin_offsetof(HackosProcessInfo, uid) == 272);
     CHECK(__builtin_offsetof(HackosProcessInfo, parentPid) == 280);

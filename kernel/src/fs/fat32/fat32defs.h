@@ -123,6 +123,7 @@ struct DirEntry
     uint32_t size = 0;
     uint8_t attributes = 0;
 
+    uint32_t created = 0, modified = 0;
     FilePermissions permissions;
     uint32_t parentCluster = 0;
     uint32_t offsetInParentCluster = 0;

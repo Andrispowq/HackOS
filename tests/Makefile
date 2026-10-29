@@ -110,3 +110,7 @@ test-login-gui:
 .PHONY: test-files-gui
 test-files-gui:
 	$(PYTHON) qemu_files_gui.py --firmware $(FIRMWARE)
+
+.PHONY: test-editor
+test-editor:
+	$(PYTHON) qemu_editor.py --firmware $(FIRMWARE)

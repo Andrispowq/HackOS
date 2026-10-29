@@ -457,11 +457,15 @@ int FAT32::ReadDirectory(const char* path, uint64_t index, HackosFileInfo* outpu
             }
             entry.permissions = resolved.permissions;
             entry.size = resolved.size;
+            entry.created = resolved.created;
+            entry.modified = resolved.modified;
             entry.attributes = resolved.attributes;
         }
         HackosFileInfo info = {};
         strcpy(info.name, entry.name);
         info.size = entry.size;
+        info.created = entry.created;
+        info.modified = entry.modified;
         info.attributes = entry.attributes;
         info.uid = entry.permissions.uid;
         info.gid = entry.permissions.gid;

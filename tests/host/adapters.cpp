@@ -34,9 +34,11 @@ void kprintf(const char*, ...)
 {
 }
 
+tm test_rtc_time = {124, 0, 2, 3, 4, 6};
+
 void GetTimeRTC(struct tm* value)
 {
-    *value = {124, 0, 2, 3, 4, 6};
+    *value = test_rtc_time;
 }
 
 Process::Process(const char*, void*, void*)

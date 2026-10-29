@@ -163,3 +163,15 @@ redirection. Console scrolling uses pitch-aware pixel copies toward lower rows.
 The graphical [file manager](files.md) uses the same checked operations.
 `mkdir`, `unlink` and `rename` return `HACKOS_DENIED` when parent-directory
 permission checks fail; other mutation failures remain `HACKOS_ERROR`.
+
+## File and folder timestamps
+
+Copied stat/directory records expose the existing FAT creation and modification
+date/time pairs. They do not add an on-disk metadata format. Creation survives
+content saves, truncation and rename/move. Successful writes update modification
+time; rename/move preserves file dates. Adding/removing/moving a child updates
+the containing directory's modification date within the same journal transaction.
+The root has no owning FAT directory entry, so its dates remain unknown.
+Times come from the RTC, with FAT's two-second precision and no timezone. The
+packager uses UTC, matching QEMU's default RTC. Invalid or zero dates display as
+Unknown. Changing permission metadata alone does not alter content dates.

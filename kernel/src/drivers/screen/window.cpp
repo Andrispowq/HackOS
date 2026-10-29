@@ -85,7 +85,7 @@ void Window::Release()
     mouseX = mouseY = 0;
     owner = 0;
     visible = true;
-    desktopPanel = false;
+    desktopPanel = desktopBackground = false;
     resizable = true;
 }
 
@@ -317,6 +317,11 @@ void Window::InputOverflow()
 
 void Window::Draw(Framebuffer* framebuffer)
 {
+    if (desktopBackground)
+    {
+        framebuffer->CopyFrom(front, startX, startY + 30);
+        return;
+    }
     //Draw navbar
     uint32_t colour = focused ? 0xFF366B96 : 0xFF666666;
     uint32_t borderColour = 0xFF303030;

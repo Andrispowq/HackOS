@@ -425,6 +425,17 @@ uint64_t UserDesktop(uint64_t operation, uint64_t value, HackosDesktopEntry* buf
             KernelWindowManager->SetPanel(window);
             return 0;
         }
+        if (operation == HACKOS_DESKTOP_BACKGROUND && window->GetOwner() == caller->pid)
+        {
+            const auto& screen = Display::SharedDisplay()->framebuffer;
+            auto state = window->State();
+            if (screen.height <= 164 || state.x != 1 || state.y != 1 || state.width != screen.width - 2 ||
+                state.height != screen.height - 164)
+            {
+                return HACKOS_ERROR;
+            }
+            return KernelWindowManager->SetBackground(window) ? 0 : HACKOS_ERROR;
+        }
         if (window->GetOwner() == caller->pid)
         {
             return HACKOS_DENIED;

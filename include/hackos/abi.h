@@ -9,6 +9,8 @@ struct HackosFileInfo
     uint32_t reserved;
     char name[256];
     uint32_t uid, gid, mode, metadataVersion;
+    // FAT local/RTC wall time: date in high 16 bits, time in low 16 bits. Zero = unknown.
+    uint32_t created, modified;
 };
 
 struct HackosProcessInfo
@@ -56,7 +58,7 @@ struct HackosClock
     uint16_t year; // Full Gregorian year; all fields are binary, month is 1..12.
 };
 
-static_assert(sizeof(HackosFileInfo) == 288, "file ABI");
+static_assert(sizeof(HackosFileInfo) == 296, "file ABI");
 static_assert(sizeof(HackosProcessInfo) == 296, "process ABI");
 static_assert(sizeof(HackosClock) == 16, "clock ABI");
 constexpr uint64_t HACKOS_ERROR = ~0ULL;
@@ -278,6 +280,7 @@ struct HackosDesktopEntry
 };
 
 constexpr uint64_t HACKOS_DESKTOP_SCREEN = 0, HACKOS_DESKTOP_PANEL = 1, HACKOS_DESKTOP_ENTRY = 2,
-                   HACKOS_DESKTOP_FOCUS = 3, HACKOS_DESKTOP_MINIMIZE = 4, HACKOS_DESKTOP_CLOSE = 5;
+                   HACKOS_DESKTOP_FOCUS = 3, HACKOS_DESKTOP_MINIMIZE = 4, HACKOS_DESKTOP_CLOSE = 5,
+                   HACKOS_DESKTOP_BACKGROUND = 6;
 static_assert(sizeof(HackosTerminalState) == 40, "terminal snapshot ABI");
 static_assert(sizeof(HackosDesktopEntry) == 64, "desktop entry ABI");

@@ -29,6 +29,7 @@ class WindowManager
     }
 
     void SetPanel(Window* window);
+    bool SetBackground(Window* window);
     void RequestClose(Window* window);
 
     bool HasPanel() const
@@ -52,6 +53,7 @@ class WindowManager
     void Wheel(int32_t x, int32_t y, int32_t delta);
 
     Window* panel = nullptr;
+    Window* background = nullptr;
     Window* focused = nullptr;
     Window* capture = nullptr;
     unsigned captureMode = 0; // 1 client, 2 title drag, 3 resize grip
