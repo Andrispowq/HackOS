@@ -79,6 +79,7 @@ void TerminalClear()
         clrscr();
         return;
     }
+    tty->history.Clear();
     memset(tty->cells, ' ', sizeof(tty->cells));
     tty->x = tty->y = 0;
     ++tty->revision;
@@ -135,6 +136,7 @@ void TerminalPut(char ch)
     }
     if (tty->y >= tty->rows)
     {
+        tty->history.Push(tty->cells, tty->columns);
         for (unsigned i = 0; i < (tty->rows - 1) * tty->columns; ++i)
         {
             tty->cells[i] = tty->cells[i + tty->columns];
@@ -268,6 +270,19 @@ uint64_t UserTerminalSession(uint64_t operation, uint64_t value, void* buffer)
                                      tty->x,        tty->y,     tty->caretBack, tty->caret};
         return caller->userSpace->CopyToUser((uint64_t)buffer, &state, sizeof(state)) ? 0 : HACKOS_ERROR;
     }
+    if (operation == HACKOS_TTY_VIEW)
+    {
+        if (!caller->userSpace->WritableRange((uint64_t)buffer, sizeof(HackosTerminalView)))
+        {
+            return HACKOS_ERROR;
+        }
+        // Protected by the syscall preemption guard; avoid a large kernel-stack copy.
+        static HackosTerminalView view;
+        HackosTerminalState state = {tty->revision, tty->shell, tty->columns,   tty->rows,
+                                     tty->x,        tty->y,     tty->caretBack, tty->caret};
+        tty->history.Snapshot(view, state, tty->cells, value);
+        return caller->userSpace->CopyToUser((uint64_t)buffer, &view, sizeof(view)) ? 0 : HACKOS_ERROR;
+    }
     if (operation == HACKOS_TTY_CELLS_READ)
     {
         return caller->userSpace->CopyToUser((uint64_t)buffer, tty->cells, sizeof(tty->cells)) ? tty->revision
@@ -328,6 +343,7 @@ uint64_t UserTerminalSession(uint64_t operation, uint64_t value, void* buffer)
                 memcpy(resized + row * columns, tty->cells + row * tty->columns, copyColumns);
             }
             memcpy(tty->cells, resized, sizeof(resized));
+            ++tty->history.epoch;
             tty->columns = columns;
             tty->rows = rows;
             if (tty->x >= columns)

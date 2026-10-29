@@ -1,9 +1,13 @@
 #include "hackos/gui.h"
 #include "hackos/user.h"
+#include "hackos/stdio.h"
+#include "hackos/runtime/terminal_view.h"
 using namespace User;
 static Gui::Window window;
 static Gui::Font font;
-static char cells[HACKOS_TTY_CELLS];
+static TerminalViewport viewport;
+static HackosTerminalView snapshot;
+static char copied[HACKOS_CLIPBOARD_LIMIT], notice[80];
 static uint32_t pixels[1024];
 
 static unsigned Key(const HackosWindowEvent2& event)
@@ -70,8 +74,9 @@ static unsigned Key(const HackosWindowEvent2& event)
     }
 }
 
-static bool Paint(const HackosTerminalState& state)
+static bool Paint()
 {
+    const auto& state = viewport.image.state;
     HackosWindowFrame frame = {};
     if (syscall_window_frame(window.Handle(), HACKOS_WINDOW_BEGIN, &frame))
     {
@@ -91,16 +96,43 @@ static bool Paint(const HackosTerminalState& state)
                 char line[161] = {};
                 for (unsigned col = 0; col < state.columns; ++col)
                 {
-                    line[col] = cells[row * state.columns + col];
+                    line[col] = viewport.image.cells[row * state.columns + col];
+                    if (viewport.Selected(row * state.columns + col))
+                    {
+                        canvas.Fill({(int)col * 8, (int)row * 16, 8, 16}, 0xff32699a);
+                    }
                 }
                 canvas.Text(font, 0, row * 16, line, 0xffe5eef5);
             }
             unsigned position = state.y * state.columns + state.x;
-            if (state.caret && position >= state.caretBack)
+            if (state.caret && !viewport.selected && viewport.image.firstLine == viewport.image.liveLine &&
+                position >= state.caretBack)
             {
                 position -= state.caretBack;
                 canvas.Fill({(int)(position % state.columns * 8), (int)(position / state.columns * 16), 2, 16},
                             0xff60cfff);
+            }
+            unsigned statusY = state.rows * 16;
+            if (y >= statusY)
+            {
+                canvas.Fill({0, (int)statusY, (int)frame.width, 16}, 0xff243545);
+                char status[160];
+                if (notice[0])
+                {
+                    snprintf(status, sizeof(status), "%s", notice);
+                }
+                else if (viewport.selected)
+                {
+                    snprintf(status, sizeof(status), "Selection held | Ctrl+Shift+C copy | Esc live");
+                }
+                else
+                {
+                    snprintf(status, sizeof(status),
+                             "Back %u/%u | Wheel/Shift+PgUp/PgDn | Drag select | Ctrl+Shift+C copy",
+                             (unsigned)(viewport.image.liveLine - viewport.image.firstLine),
+                             (unsigned)(viewport.image.liveLine - viewport.image.oldestLine));
+                }
+                canvas.Text(font, 0, statusY, status, 0xffb0c5d8);
             }
             HackosWindowUpload upload = {frame.generation, x, y, w, 1};
             if (syscall_window_upload(window.Handle(), &upload, pixels))
@@ -144,6 +176,7 @@ int main()
     {
         return 1;
     }
+    viewport.Init();
     uint64_t revision = ~0ULL;
     bool dirty = true;
     Print("TERMINAL_READY\n");
@@ -161,23 +194,102 @@ int main()
                 window.ReplyClose(true);
                 return 0;
             }
+            if (event.event.type == HACKOS_WINDOW_INPUT_RESET || event.event.type == HACKOS_WINDOW_OVERFLOW)
+            {
+                HackosWindowInputState input = {};
+                if (!syscall_window_input(window.Handle(), HACKOS_INPUT_QUERY, &input))
+                {
+                    viewport.ResetInput(input.buttons);
+                }
+                dirty = true;
+                continue;
+            }
+            if (event.event.type == HACKOS_WINDOW_MOUSE)
+            {
+                if (viewport.Mouse(event.event.x, event.event.y, event.event.buttons))
+                {
+                    notice[0] = 0;
+                    dirty = true;
+                }
+                continue;
+            }
+            if (event.event.type == HACKOS_WINDOW_WHEEL)
+            {
+                viewport.Scroll(-(int64_t)(int32_t)event.event.key * 3);
+                notice[0] = 0;
+                dirty = true;
+                continue;
+            }
+            bool down = event.event.type == HACKOS_WINDOW_KEY_DOWN;
+            unsigned physical = event.event.key;
+            if (down &&
+                (event.modifiers & (HACKOS_MOD_CTRL | HACKOS_MOD_SHIFT)) == (HACKOS_MOD_CTRL | HACKOS_MOD_SHIFT) &&
+                physical == HACKOS_PHYSICAL_C)
+            {
+                auto length = viewport.Copy(copied, sizeof(copied));
+                if (length == HACKOS_BUFFER_SMALL)
+                {
+                    snprintf(notice, sizeof(notice), "Selection exceeds 4096 bytes; clipboard unchanged");
+                }
+                else if (length == HACKOS_ERROR)
+                {
+                    snprintf(notice, sizeof(notice), "Drag to select text first");
+                }
+                else if (syscall_clipboard(HACKOS_CLIPBOARD_WRITE, copied, length) != length)
+                {
+                    snprintf(notice, sizeof(notice), "Copy denied; focus this terminal and retry");
+                }
+                else
+                {
+                    snprintf(notice, sizeof(notice), "Copied %u bytes", (unsigned)length);
+                }
+                dirty = true;
+                continue;
+            }
+            if (down && (event.modifiers & HACKOS_MOD_SHIFT) &&
+                (physical == 0xc9 || physical == 0xd1 || physical == 0xc7 || physical == 0xcf))
+            {
+                if (physical == 0xcf)
+                {
+                    viewport.Live();
+                }
+                else
+                {
+                    int64_t amount = viewport.ready ? viewport.image.state.rows : 1;
+                    viewport.Scroll(physical == 0xc7 ? HACKOS_TTY_HISTORY_ROWS : physical == 0xc9 ? amount : -amount);
+                }
+                notice[0] = 0;
+                dirty = true;
+                continue;
+            }
+            if (down && physical == HACKOS_PHYSICAL_ESCAPE &&
+                (viewport.selected || viewport.requested != HACKOS_TTY_LIVE))
+            {
+                viewport.Live();
+                notice[0] = 0;
+                dirty = true;
+                continue;
+            }
             auto key = Key(event);
             if (key)
             {
+                dirty |= viewport.selected || viewport.requested != HACKOS_TTY_LIVE;
+                viewport.Live();
+                notice[0] = 0;
                 syscall_terminal_session(HACKOS_TTY_INPUT, key, nullptr);
             }
-            if (event.event.type == HACKOS_WINDOW_RESIZE || event.event.type == HACKOS_WINDOW_MODE ||
-                event.event.type == HACKOS_WINDOW_INPUT_RESET || event.event.type == HACKOS_WINDOW_OVERFLOW)
+            if (event.event.type == HACKOS_WINDOW_RESIZE || event.event.type == HACKOS_WINDOW_MODE)
             {
                 dirty = true;
             }
         }
+
         HackosWindowState geometry = {};
         if (syscall_window_state(window.Handle(), &geometry))
         {
             break;
         }
-        unsigned cols = geometry.width / 8, rows = geometry.height / 16;
+        unsigned cols = geometry.width / 8, rows = geometry.height > 16 ? (geometry.height - 16) / 16 : 1;
         if (cols > 160)
         {
             cols = 160;
@@ -203,14 +315,27 @@ int main()
         if ((dirty || state.revision != revision) &&
             !(syscall_window_mode(window.Handle(), HACKOS_WINDOW_QUERY) & HACKOS_WINDOW_MINIMIZED))
         {
-            auto copied = syscall_terminal_session(HACKOS_TTY_CELLS_READ, 0, cells);
-            // A writer between snapshots is retried; only a coherent grid is rendered.
-            if (copied == state.revision && Paint(state))
+            if (!syscall_terminal_session(HACKOS_TTY_VIEW, viewport.requested, &snapshot))
             {
-                revision = copied;
-                dirty = false;
+                if (viewport.ready && viewport.image.epoch != snapshot.epoch)
+                {
+                    viewport.Live();
+                    notice[0] = 0;
+                    if (syscall_terminal_session(HACKOS_TTY_VIEW, HACKOS_TTY_LIVE, &snapshot))
+                    {
+                        window.Wait(32);
+                        continue;
+                    }
+                }
+                revision = snapshot.state.revision;
+                dirty |= viewport.Accept(snapshot);
+                if (dirty && Paint())
+                {
+                    dirty = false;
+                }
             }
         }
+
         window.Wait(32);
     }
     window.Close();

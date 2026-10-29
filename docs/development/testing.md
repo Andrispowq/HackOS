@@ -1174,3 +1174,11 @@ probes, read-only guest controls and current-password-verified password changes.
 including alignment, sign/zero padding, precision, invalid formats, truncation and
 field limits. `make -C tests test-formatting-qemu FIRMWARE=bios` (repeat with `uefi`)
 checks the runtime and redirected console table columns in a real guest.
+
+The desktop BIOS/UEFI test also emits 600 labelled lines to overflow the terminal
+history ring, checks keyboard navigation, selects and copies text through physical
+mouse/key input, checks resize dismissal and return to live output, and verifies
+history/clipboard cleanup on logout. Screenshots include scrollback and selection.
+Host/native graphics sanitizer tests cover ring rollover, mixed history/live
+snapshots, width padding, clear wiping, repeated scroll events, reverse selection,
+input reset and exact/oversize clipboard bounds.

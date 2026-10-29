@@ -1,5 +1,6 @@
 #pragma once
 #include "hackos/abi.h"
+#include "hackos/runtime/terminal_history.h"
 #include "drivers/keyboard/keyboard.h"
 class Process;
 
@@ -10,6 +11,7 @@ struct TerminalSession
     bool caret = false, overflow = false;
     uint16_t head = 0, count = 0;
     char input[256] = {}, cells[HACKOS_TTY_CELLS] = {};
+    TerminalHistory history = {};
 };
 
 extern TerminalSession terminals[HACKOS_TTY_LIMIT];

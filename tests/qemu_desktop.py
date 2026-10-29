@@ -21,6 +21,9 @@ def test(firmware, timeout, stress_cycles=0):
         shutil.copy2(built / 'HackOS.img', image)
         probe = build_probe(directory, built / 'source', extra=('desktop_probe.cpp', 'DESKPROBE'))
         require_success(command(['mcopy', '-i', filesystem(image), probe, '::/USR/BIN/DESKPROBE']), 'install desktop probe')
+        fixture = directory / 'scrollback.txt'
+        fixture.write_text(''.join('SCROLL%04d\n' % i for i in range(600)))
+        require_success(command(['mcopy', '-i', filesystem(image), fixture, '::/TMP/SCROLLBACK.TXT']), 'install scrollback fixture')
         from session import provision_imports
         provision_imports(image, firmware)
         with boot(directory, image, firmware, 'desktop', timeout) as g:
@@ -238,11 +241,14 @@ assert 'Settings' in labels""")
             # logout must reclaim both applications and all their resources.
             click(50, 1000)
             inspect("assert number('terminals[0].controller') != 0\nassert 'root@root:~$ ' in grid(0)")
+            from terminal_scrollback import run as scrollback
+            scrollback(g, inspect, key, shell, mouse, built)
             mark = len(g.output())
             type_command('logout')
             g.wait('Logged out.', mark)
             g.wait('Action: ', mark)
             inspect("assert number('KernelWindowManager->panel') == 0\nassert all(number('terminals[' + str(i) + '].controller') == 0 for i in range(8))\nassert not any(int(p['sessionId']) for p in processes() if int(p['state']) != 1)\nassert number('user_windows_live') == 0")
+            inspect("assert number('clipboardLength') == 0\nassert all(number('terminals[' + str(i) + '].history.count') == 0 for i in range(8))")
             g.login('root', ADMIN_PASSWORD)
             shell('echo RECOVERY_CONSOLE', 'RECOVERY_CONSOLE')
             shell('deskprobe --orphan', 'ORPHAN_SIGNALS_OK')
@@ -272,7 +278,7 @@ assert 'Settings' in labels""")
             key('esc', alt=True, control=True)
             g.wait('Logged out.', mark)
             inspect("assert number('KernelWindowManager->panel') == 0\nassert number('user_windows_live') == 0\nassert all(number('terminals[' + str(i) + '].controller') == 0 for i in range(8))")
-            return 'Desktop login; launcher and taskbar focus/minimize/restore/close; isolated grids/cwd/input; terminal jobs; resize; ownership and malformed ABI denial; eight-endpoint limit; logout, console and forced-desktop recovery.'
+            return '512-row terminal history overflow; keyboard/wheel navigation; mouse selection and clipboard copy; resize and logout cleanup; desktop login; launcher and taskbar focus/minimize/restore/close; isolated grids/cwd/input; terminal jobs; resize; ownership and malformed ABI denial; eight-endpoint limit; logout, console and forced-desktop recovery.'
     report.check('desktop_and_terminals', run)
     return report.finish()
 

@@ -37,6 +37,7 @@ int main(int argc, char** argv)
         syscall_desktop(HACKOS_DESKTOP_FOCUS, 1, nullptr) != HACKOS_DENIED ||
         syscall_desktop(HACKOS_DESKTOP_BACKGROUND, 1, nullptr) != HACKOS_DENIED ||
         syscall_terminal_session(HACKOS_TTY_STATE, 0, &state) != HACKOS_DENIED ||
+        syscall_terminal_session(HACKOS_TTY_VIEW, HACKOS_TTY_LIVE, nullptr) != HACKOS_DENIED ||
         syscall_terminal_session(HACKOS_TTY_INPUT, 'x', nullptr) != HACKOS_DENIED ||
         syscall_terminal_session(HACKOS_TTY_CREATE, 0, nullptr) != HACKOS_DENIED ||
         syscall_session_logout() != HACKOS_DENIED)
@@ -46,7 +47,7 @@ int main(int argc, char** argv)
     }
     HackosTerminalInfo info = {};
     if (syscall_terminal_info(0, &info) || !(info.flags & HACKOS_TERMINAL_FOREGROUND) || info.columns != 90 ||
-        info.rows != 27)
+        info.rows != 26)
     {
         return 2;
     }
@@ -64,6 +65,7 @@ int main(int argc, char** argv)
     if (syscall_terminal_session(HACKOS_TTY_CREATE, window, nullptr) != HACKOS_ERROR ||
         syscall_terminal_session(HACKOS_TTY_STATE, 0, (void*)1) != HACKOS_ERROR ||
         syscall_terminal_session(HACKOS_TTY_CELLS_READ, 0, (void*)1) != HACKOS_ERROR ||
+        syscall_terminal_session(HACKOS_TTY_VIEW, HACKOS_TTY_LIVE, (void*)1) != HACKOS_ERROR ||
         syscall_terminal_session(HACKOS_TTY_INPUT, 256, nullptr) != HACKOS_ERROR ||
         syscall_terminal_session(HACKOS_TTY_RESIZE, 0 | (5 << 16), nullptr) != HACKOS_ERROR ||
         syscall_terminal_session(HACKOS_TTY_RESIZE, 160 | (61 << 16), nullptr) != HACKOS_ERROR ||
@@ -81,6 +83,12 @@ int main(int argc, char** argv)
         syscall_terminal_session(HACKOS_TTY_STATE, 0, &state) != 0 || state.columns != 160 || state.rows != 60)
     {
         return 7;
+    }
+    static HackosTerminalView view;
+    if (syscall_terminal_session(HACKOS_TTY_VIEW, HACKOS_TTY_LIVE, &view) || view.firstLine != view.liveLine ||
+        view.state.columns != 160 || view.state.rows != 60)
+    {
+        return 8;
     }
     User::Print("DESKTOP_DENIALS_OK\n");
     return 0;

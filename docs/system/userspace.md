@@ -832,3 +832,8 @@ window, stream and recovery-console interfaces retain their contracts.
 
 Account-management additions: syscall 95 `account_edit(op, id, value, name)` and
 96 `password_change(old, new)` are documented in [Settings](settings.md).
+
+Window terminal controllers can use terminal-session operation 5 to atomically
+copy a live or historical viewport. See [the terminal contract](desktop.md#abi-and-authority)
+for its 9672-byte record, row IDs, epoch, and controller-only authority. Existing
+state and cell reads remain supported unchanged.

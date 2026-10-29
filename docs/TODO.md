@@ -336,3 +336,10 @@ Milestones 1–4 are implemented; later milestones need a separate request.
 - [ ] Add secondary CPU startup and synchronization before claiming SMP support.
 - [ ] Add networking and useful user programs after isolation and storage
   behavior are reliable.
+
+### Window-terminal polish
+
+- [x] Bounded 512-row scrollback, wheel and Shift+PageUp/PageDown/Home/End navigation.
+- [x] Mouse selection and Ctrl+Shift+C session clipboard copy, with explicit size errors.
+- [ ] Configurable window-terminal fonts/colours and ANSI escape sequences.
+- [ ] Terminal paste and drag-selection autoscroll.

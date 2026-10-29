@@ -265,13 +265,25 @@ constexpr uint64_t HACKOS_TERMINAL_CURSOR_MAX = 255;
 constexpr unsigned HACKOS_PROCESS_LIMIT = 64;
 constexpr unsigned HACKOS_TTY_LIMIT = 8, HACKOS_TTY_CELLS = 160 * 60;
 constexpr uint64_t HACKOS_TTY_CREATE = 0, HACKOS_TTY_STATE = 1, HACKOS_TTY_CELLS_READ = 2, HACKOS_TTY_INPUT = 3,
-                   HACKOS_TTY_RESIZE = 4;
+                   HACKOS_TTY_RESIZE = 4, HACKOS_TTY_VIEW = 5;
+constexpr unsigned HACKOS_TTY_HISTORY_ROWS = 512;
+constexpr uint64_t HACKOS_TTY_LIVE = ~0ULL;
 
 struct HackosTerminalState
 {
     uint64_t revision, shell;
     uint32_t columns, rows, x, y, caretBack, caret;
 };
+
+// Atomic viewport copy; value=LIVE follows output, otherwise an absolute top row.
+struct HackosTerminalView
+{
+    HackosTerminalState state;
+    uint64_t firstLine, liveLine, oldestLine, epoch;
+    char cells[HACKOS_TTY_CELLS];
+};
+
+static_assert(sizeof(HackosTerminalView) == 9672, "terminal viewport ABI");
 
 struct HackosDesktopEntry
 {
