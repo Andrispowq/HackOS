@@ -1,4 +1,6 @@
 #include "tcp.h"
+
+void WakeStreamWaiters();
 #include "route.h"
 #include "drivers/net/e1000.h"
 #include "hackos/abi.h"
@@ -14,8 +16,11 @@ enum Phase { Free, Syn, Exchange, TimeWait, Reset, Done };
 struct Connection
 {
     uint64_t owner, started, sentAt, finished, lastActivity;
+    uint64_t handle, progress, persistAt, totalSent, totalReceived;
+    uint32_t txBase, txSize;
+    bool stream, shutdown;
     Phase phase;
-    uint32_t initial, una, next, receive;
+    uint32_t initial, una, next, receive, windowSequence, windowAck;
     uint16_t window, mss;
     unsigned tries;
     bool transmitted, ack, finSent, finReceived;
@@ -28,6 +33,7 @@ uint16_t nextPort = 49152;
 uint64_t lastStart, lastWire;
 bool startedOnce, wired;
 unsigned cursor;
+uint64_t nextHandle;
 
 bool Before(uint32_t a, uint32_t b)
 {
@@ -40,6 +46,7 @@ void Fail(Connection& c, uint32_t state, bool reset = true)
     c.finished = tick;
     c.phase = reset && c.transmitted ? Reset : Done;
     c.ack = false;
+    WakeStreamWaiters();
 }
 
 void Expire()
@@ -47,14 +54,27 @@ void Expire()
     for (auto& c : connections)
     {
         if (c.phase == Free) continue;
-        if (c.result.state == HACKOS_TCP_PENDING && tick - c.started >= TimerTicksForMilliseconds(20000))
+        if (c.result.state == HACKOS_TCP_PENDING &&
+            ((!c.stream && tick - c.started >= TimerTicksForMilliseconds(20000)) ||
+             (c.stream && (c.phase == Syn || c.txSize || c.shutdown) &&
+              tick - c.progress >= TimerTicksForMilliseconds(20000))))
         {
             Fail(c, HACKOS_TCP_TIMEOUT);
         }
-        if (c.result.state != HACKOS_TCP_PENDING && tick - c.finished >= TimerTicksForMilliseconds(10000)) c.owner = 0;
+        if (!c.stream && c.result.state != HACKOS_TCP_PENDING && tick - c.finished >= TimerTicksForMilliseconds(10000)) c.owner = 0;
         if (c.phase == TimeWait)
         {
-            if (tick - c.lastActivity >= TimerTicksForMilliseconds(120000)) c = {};
+            if (tick - c.lastActivity >= TimerTicksForMilliseconds(120000))
+            {
+                if (c.stream && c.owner)
+                {
+                    c.phase = Done;
+                }
+                else
+                {
+                    c = {};
+                }
+            }
         }
         else if (!c.owner && c.phase == Done)
         {
@@ -86,22 +106,30 @@ void CancelTcp(uint64_t pid)
     }
 }
 
-uint64_t TcpControl(uint64_t pid, uint64_t operation, HackosTcp& record)
+static uint64_t TcpControlImpl(uint64_t pid, uint64_t operation, HackosTcp& record, bool stream, Connection** created)
 {
     PreemptionGuard guard;
     if (!pid) return HACKOS_ERROR;
     Expire();
     if (operation == HACKOS_TCP_CANCEL)
     {
-        CancelTcp(pid);
+        for (auto& c : connections)
+        {
+            if (c.owner != pid || c.stream) continue;
+            c.owner = 0;
+            if (c.phase == TimeWait) continue;
+            if (c.result.state == HACKOS_TCP_PENDING) Fail(c, HACKOS_TCP_RESET);
+            if (c.phase == Done) c = {};
+        }
         return 0;
     }
     Connection* found = nullptr;
     Connection* free = nullptr;
-    unsigned owners = 0;
+    unsigned owners = 0, streamsOwned = 0;
     for (auto& c : connections)
     {
-        if (c.owner == pid) found = &c;
+        if (c.owner == pid && !c.stream) found = &c;
+        if (c.owner == pid && c.stream) ++streamsOwned;
         if (c.owner) ++owners;
         if (c.phase == Free && !free) free = &c;
     }
@@ -117,7 +145,7 @@ uint64_t TcpControl(uint64_t pid, uint64_t operation, HackosTcp& record)
     {
         return HACKOS_ERROR;
     }
-    if (found || owners >= 8 || !free || (startedOnce && tick - lastStart < TimerTicksForMilliseconds(100))) return HACKOS_RETRY;
+    if ((!stream && found) || (stream && streamsOwned >= 4) || owners >= 8 || !free || (startedOnce && tick - lastStart < TimerTicksForMilliseconds(100))) return HACKOS_RETRY;
     if (!RandomSalt(random)) return HACKOS_ERROR;
     uint16_t port = 0;
     for (unsigned attempt = 0; attempt < 33 && !port; ++attempt)
@@ -136,9 +164,13 @@ uint64_t TcpControl(uint64_t pid, uint64_t operation, HackosTcp& record)
     c = {};
     c.owner = pid;
     c.phase = Syn;
-    c.started = tick;
+    c.started = c.progress = tick;
+    c.stream = stream;
+    c.shutdown = !stream;
     c.initial = ((uint32_t)random[0] << 24) | ((uint32_t)random[1] << 16) | ((uint32_t)random[2] << 8) | random[3];
     c.una = c.next = c.initial;
+    c.txBase = c.initial + 1;
+    c.txSize = record.size;
     c.result.peerPort = record.peerPort;
     c.result.localPort = port;
     c.result.size = record.size;
@@ -152,7 +184,154 @@ uint64_t TcpControl(uint64_t pid, uint64_t operation, HackosTcp& record)
     }
     lastStart = tick;
     startedOnce = true;
+    if (created) *created = &c;
     return 0;
+}
+
+uint64_t TcpControl(uint64_t pid, uint64_t operation, HackosTcp& record)
+{
+    return TcpControlImpl(pid, operation, record, false, nullptr);
+}
+
+namespace
+{
+Connection* FindStream(uint64_t pid, uint64_t handle)
+{
+    if (!pid || !handle) return nullptr;
+    for (auto& c : connections)
+    {
+        if (c.stream && c.owner == pid && c.handle == handle) return &c;
+    }
+    return nullptr;
+}
+
+void StreamSnapshot(const Connection& c, HackosTcpStream& record)
+{
+    record = {};
+    for (unsigned i = 0; i < 4; ++i)
+    {
+        record.address[i] = c.result.address[i];
+    }
+    record.peerPort = c.result.peerPort;
+    record.localPort = c.result.localPort;
+    record.state = c.result.state;
+    record.queued = c.result.received;
+    record.pending = c.txSize ? c.txSize - (c.una - c.txBase) : 0;
+    record.retransmissions = c.result.retransmissions;
+    record.sent = c.totalSent;
+    record.received = c.totalReceived;
+    if (c.phase == Exchange) record.flags |= HACKOS_TCP_CONNECTED;
+    if (c.phase == Exchange && !c.shutdown && !c.txSize) record.flags |= HACKOS_TCP_WRITABLE;
+    if (c.finReceived) record.flags |= HACKOS_TCP_EOF;
+    if (c.shutdown) record.flags |= HACKOS_TCP_WRITE_CLOSED;
+}
+}
+
+uint64_t TcpStreamControl(uint64_t pid, uint64_t operation, uint64_t handle, HackosTcpStream& record)
+{
+    PreemptionGuard guard;
+    if (!pid) return HACKOS_ERROR;
+    Expire();
+    if (operation == HACKOS_TCP_CONNECT)
+    {
+        if (handle || record.localPort || record.size || nextHandle >= 0x7fffffffffffffffULL) return HACKOS_ERROR;
+        HackosTcp request = {};
+        for (unsigned i = 0; i < 4; ++i)
+        {
+            request.address[i] = record.address[i];
+        }
+        request.peerPort = record.peerPort;
+        Connection* c = nullptr;
+        uint64_t status = TcpControlImpl(pid, HACKOS_TCP_START, request, true, &c);
+        if (status) return status;
+        c->handle = ++nextHandle;
+        return c->handle;
+    }
+    auto* c = FindStream(pid, handle);
+    if (!c) return HACKOS_NOT_FOUND;
+    if (operation == HACKOS_TCP_STATUS)
+    {
+        StreamSnapshot(*c, record);
+        return 0;
+    }
+    if (operation == HACKOS_TCP_CLOSE)
+    {
+        c->owner = 0;
+        if (c->phase != TimeWait && c->result.state == HACKOS_TCP_PENDING) Fail(*c, HACKOS_TCP_RESET);
+        if (c->phase == Done) *c = {};
+        WakeStreamWaiters();
+        return 0;
+    }
+    if (operation == HACKOS_TCP_READ)
+    {
+        unsigned capacity = record.size;
+        if (capacity > sizeof(record.data)) return HACKOS_ERROR;
+        StreamSnapshot(*c, record);
+        if (!capacity) return 0;
+        unsigned size = c->result.received;
+        if (size > capacity) size = capacity;
+        if (!size)
+        {
+            if (c->result.state != HACKOS_TCP_PENDING && c->result.state != HACKOS_TCP_COMPLETE) return HACKOS_ERROR;
+            return c->finReceived ? 0 : HACKOS_RETRY;
+        }
+        record.size = size;
+        for (unsigned i = 0; i < size; ++i)
+        {
+            record.data[i] = c->result.data[i];
+        }
+        return 0;
+    }
+    if (operation == HACKOS_TCP_WRITE || operation == HACKOS_TCP_SHUTDOWN_WRITE)
+    {
+        if (c->result.state != HACKOS_TCP_PENDING) return HACKOS_ERROR;
+        if (c->phase == Syn) return HACKOS_RETRY;
+        if (c->phase != Exchange) return HACKOS_ERROR;
+        if (operation == HACKOS_TCP_SHUTDOWN_WRITE)
+        {
+            if (!c->shutdown) c->progress = tick;
+            c->shutdown = true;
+            WakeStreamWaiters();
+            return 0;
+        }
+        if (c->shutdown || record.size > sizeof(c->outgoing)) return HACKOS_ERROR;
+        if (!record.size) return 0;
+        if (c->txSize) return HACKOS_RETRY;
+        c->txBase = c->next;
+        c->txSize = record.size;
+        for (unsigned i = 0; i < record.size; ++i)
+        {
+            c->outgoing[i] = record.data[i];
+        }
+        c->progress = c->persistAt = tick;
+        return 0;
+    }
+    return HACKOS_ERROR;
+}
+
+void ConsumeTcp(uint64_t pid, uint64_t handle, unsigned size)
+{
+    auto* c = FindStream(pid, handle);
+    if (!c || size > c->result.received || !size) return;
+    c->result.received -= size;
+    for (unsigned i = 0; i < c->result.received; ++i)
+    {
+        c->result.data[i] = c->result.data[i + size];
+    }
+    if (c->phase == Exchange) c->ack = true; // Publish the reopened receive window.
+    WakeStreamWaiters();
+}
+
+uint32_t TcpReadiness(uint64_t pid, uint64_t handle, uint32_t events)
+{
+    auto* c = FindStream(pid, handle);
+    if (!c) return HACKOS_POLL_INVALID;
+    uint32_t ready = 0;
+    if (c->result.state != HACKOS_TCP_PENDING && c->result.state != HACKOS_TCP_COMPLETE) ready |= HACKOS_POLL_ERROR;
+    if (c->finReceived) ready |= HACKOS_POLL_HANGUP;
+    if (c->result.received || c->finReceived) ready |= events & HACKOS_POLL_READ;
+    if (c->phase == Exchange && !c->shutdown && !c->txSize) ready |= events & HACKOS_POLL_WRITE;
+    return ready;
 }
 
 void ReceiveTcp(const uint8_t* frame, unsigned length, const uint8_t* mac, const uint8_t* ip)
@@ -179,8 +358,12 @@ void ReceiveTcp(const uint8_t* frame, unsigned length, const uint8_t* mac, const
             c.receive = p.sequence + 1;
             c.una = c.next;
             c.window = p.window;
+            c.windowSequence = p.sequence;
+            c.windowAck = p.acknowledgement;
             c.mss = p.mss < 512 ? p.mss : 512;
             c.phase = Exchange;
+            c.progress = tick;
+            WakeStreamWaiters();
             c.tries = 0;
             c.ack = true;
             return;
@@ -196,7 +379,14 @@ void ReceiveTcp(const uint8_t* frame, unsigned length, const uint8_t* mac, const
         }
         if (p.flags & TcpRst)
         {
-            if (p.sequence == c.receive) Fail(c, HACKOS_TCP_RESET, false);
+            if (p.sequence == c.receive)
+            {
+                Fail(c, HACKOS_TCP_RESET, false);
+            }
+            else if (p.sequence - c.receive < sizeof(c.result.data) - c.result.received)
+            {
+                c.ack = true;
+            }
             return;
         }
         if (p.flags & TcpSyn)
@@ -217,10 +407,24 @@ void ReceiveTcp(const uint8_t* frame, unsigned length, const uint8_t* mac, const
             return;
         }
         if (Before(p.acknowledgement, c.una)) return;
-        c.window = p.window;
+        if (Before(c.windowSequence, p.sequence) ||
+            (c.windowSequence == p.sequence && !Before(p.acknowledgement, c.windowAck)))
+        {
+            c.window = p.window;
+            c.windowSequence = p.sequence;
+            c.windowAck = p.acknowledgement;
+        }
         if (Before(c.una, p.acknowledgement))
         {
+            if (c.stream && !c.finSent) c.totalSent += p.acknowledgement - c.una;
             c.una = p.acknowledgement;
+            c.progress = tick;
+            if (c.stream && !c.finSent && c.una == c.txBase + c.txSize)
+            {
+                c.txSize = 0;
+                c.txBase = c.una;
+                WakeStreamWaiters();
+            }
             c.tries = 0;
             c.sentAt = tick;
         }
@@ -231,19 +435,27 @@ void ReceiveTcp(const uint8_t* frame, unsigned length, const uint8_t* mac, const
         {
             if (size > sizeof(c.result.data) - c.result.received)
             {
-                Fail(c, HACKOS_TCP_TOO_LARGE);
-                return;
+                if (!c.stream)
+                {
+                    Fail(c, HACKOS_TCP_TOO_LARGE);
+                    return;
+                }
+                size = sizeof(c.result.data) - c.result.received;
             }
             for (unsigned i = 0; i < size; ++i)
             {
                 c.result.data[c.result.received++] = p.data[skip + i];
             }
             c.receive += size;
+            c.totalReceived += size;
+            if (size) WakeStreamWaiters();
         }
-        if (!c.finReceived && (p.flags & TcpFin) && p.sequence + p.size == c.receive)
+        if (!c.finReceived && (p.flags & TcpFin) && p.sequence + p.size == c.receive &&
+            (!c.stream || c.result.received < sizeof(c.result.data)))
         {
             ++c.receive;
             c.finReceived = true;
+            WakeStreamWaiters();
         }
         if (p.size || (p.flags & TcpFin)) c.ack = true;
         Complete(c);
@@ -281,7 +493,7 @@ void PollTcp(bool ready, bool link, const uint8_t* mac, const uint8_t* ip)
         uint8_t flags = TcpAck;
         uint32_t sequence = c.next;
         unsigned size = 0, offset = 0;
-        bool retry = false, consumes = false;
+        bool retry = false, consumes = false, probe = false;
         if (c.phase == Reset)
         {
             flags = TcpRst | TcpAck;
@@ -306,7 +518,7 @@ void PollTcp(bool ready, bool link, const uint8_t* mac, const uint8_t* ip)
             }
             else
             {
-                offset = c.una - (c.initial + 1);
+                offset = c.una - c.txBase;
                 size = c.next - c.una;
                 flags |= TcpPush;
             }
@@ -318,20 +530,37 @@ void PollTcp(bool ready, bool link, const uint8_t* mac, const uint8_t* ip)
         }
         else if (!c.finSent)
         {
-            offset = c.una - (c.initial + 1);
-            size = c.result.size - offset;
+            offset = c.una - c.txBase;
+            size = c.txSize - offset;
             if (size)
             {
-                if (!c.window) continue; // Bounded exchange times out if the peer never opens its window.
+                if (!c.window)
+                {
+                    if (!c.stream || tick - c.persistAt < TimerTicksForMilliseconds(1000)) continue;
+                    // An old-sequence empty segment elicits the peer's current window.
+                    probe = true;
+                    sequence = c.next - 1;
+                    size = 0;
+                }
                 if (size > c.mss) size = c.mss;
                 if (size > c.window) size = c.window;
-                flags |= TcpPush;
+                if (size) flags |= TcpPush;
             }
             else
             {
-                flags |= TcpFin;
+                if (!c.shutdown) continue;
+                if (c.stream && !c.window)
+                {
+                    if (tick - c.persistAt < TimerTicksForMilliseconds(1000)) continue;
+                    probe = true;
+                    sequence = c.next - 1;
+                }
+                else
+                {
+                    flags |= TcpFin;
+                }
             }
-            consumes = true;
+            consumes = !probe;
         }
         else
         {
@@ -350,6 +579,10 @@ void PollTcp(bool ready, bool link, const uint8_t* mac, const uint8_t* ip)
         {
             c.phase = Done;
         }
+        else if (probe)
+        {
+            c.persistAt = tick;
+        }
         else if (c.ack)
         {
             c.ack = false;
@@ -357,6 +590,7 @@ void PollTcp(bool ready, bool link, const uint8_t* mac, const uint8_t* ip)
             {
                 c.result.state = HACKOS_TCP_COMPLETE;
                 c.finished = tick;
+                WakeStreamWaiters();
             }
         }
         else
@@ -387,6 +621,7 @@ void InvalidateTcp()
         // Never emit old-tuple ACKs or RSTs using a newly leased address.
         c.phase = Done;
         c.ack = false;
+        if (c.stream) c.result.received = 0;
     }
 }
 }

@@ -246,6 +246,18 @@ jobs:
               hackos-tests:toolchain python3 tests/qemu_tcp.py --firmware "$FIRMWARE" \
                 --image "tests/out/build-$FIRMWARE/HackOS.img" $MODE
           done
+      - name: Exercise TCP streams, readiness and host echo
+        if: ${{ !cancelled() && steps.build.outcome == 'success' }}
+        env:
+          FIRMWARE: ${{ matrix.firmware }}
+        run: |
+          for MODE in "" "--host-echo"; do
+            docker run --rm --network none --user "$(id -u):$(id -g)" \
+              --mount "type=bind,source=$PWD,target=/work,readonly" \
+              --mount "type=bind,source=$PWD/tests/out,target=/work/tests/out" \
+              hackos-tests:toolchain python3 tests/qemu_tcp_stream.py --firmware "$FIRMWARE" \
+                --image "tests/out/build-$FIRMWARE/HackOS.img" $MODE
+          done
       - name: Exercise DHCP lease lifecycle
         if: ${{ !cancelled() && steps.build.outcome == 'success' }}
         env:

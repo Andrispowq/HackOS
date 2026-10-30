@@ -1,4 +1,5 @@
 #include "streams.h"
+#include "net/tcp.h"
 #include "terminals.h"
 #include "address_space.h"
 #include "proc/tasking/process.h"
@@ -541,7 +542,7 @@ uint64_t UserPoll(HackosPollFd* destination, uint64_t count, uint64_t timeout)
 
     for (unsigned i = 0; i < count; ++i)
     {
-        if (items[i].events & ~(HACKOS_POLL_READ | HACKOS_POLL_WRITE | HACKOS_POLL_WINDOW) ||
+        if (items[i].events & ~(HACKOS_POLL_READ | HACKOS_POLL_WRITE | HACKOS_POLL_WINDOW | HACKOS_POLL_TCP) ||
             ((items[i].events & HACKOS_POLL_WINDOW) && items[i].events != (HACKOS_POLL_WINDOW | HACKOS_POLL_READ)))
         {
             return HACKOS_ERROR;
@@ -555,7 +556,9 @@ uint64_t UserPoll(HackosPollFd* destination, uint64_t count, uint64_t timeout)
         {
             items[i].revents = (items[i].events & HACKOS_POLL_WINDOW)
                                    ? UserWindowReadiness(items[i].fd)
-                                   : Readiness(Descriptor(items[i].fd), items[i].events);
+                                   : (items[i].events & HACKOS_POLL_TCP)
+                                         ? Net::TcpReadiness(GetRunningProcess()->pid, items[i].fd, items[i].events)
+                                         : Readiness(Descriptor(items[i].fd), items[i].events);
             ready += items[i].revents != 0;
         }
 

@@ -45,9 +45,12 @@ def run(firmware, image, web=False, debug=False, snapshot=False, serial_log=None
                 echo = subprocess.Popen([sys.executable, str(ROOT / 'tools/udp_echo.py')])
                 processes.append(echo)
             tcp_echo = None
+            tcp_stream_echo = None
             if tcp_demo:
                 tcp_echo = subprocess.Popen([sys.executable, str(ROOT / 'tools/tcp_echo.py')])
                 processes.append(tcp_echo)
+                tcp_stream_echo = subprocess.Popen([sys.executable, str(ROOT / 'tools/tcp_echo.py'), '--stream', '--port', '7779'])
+                processes.append(tcp_stream_echo)
             qemu = subprocess.Popen(args, env=env)
             processes.append(qemu)
             if web:
@@ -57,6 +60,7 @@ def run(firmware, image, web=False, debug=False, snapshot=False, serial_log=None
             while qemu.poll() is None:
                 if echo and echo.poll() is not None: raise RuntimeError('UDP demo echo service exited unexpectedly')
                 if tcp_echo and tcp_echo.poll() is not None: raise RuntimeError('TCP demo echo service exited unexpectedly')
+                if tcp_stream_echo and tcp_stream_echo.poll() is not None: raise RuntimeError('TCP streaming echo service exited unexpectedly')
                 if web and proxy.poll() is not None: raise RuntimeError('Browser console exited unexpectedly')
                 time.sleep(0.2)
             if qemu.returncode: raise RuntimeError(f'QEMU exited with status {qemu.returncode}')

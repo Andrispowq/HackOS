@@ -1519,6 +1519,29 @@ static void syscall_handler(Registers* r)
         }
         break;
     }
+    case HACKOS_SYS_tcp_stream:
+    {
+        HackosTcpStream record = {};
+        if ((r->rdi == HACKOS_TCP_CONNECT || r->rdi == HACKOS_TCP_WRITE || r->rdi == HACKOS_TCP_READ) &&
+            !Caller()->userSpace->CopyFromUser(&record, r->rdx, sizeof(record)))
+        {
+            r->rax = HACKOS_ERROR;
+            break;
+        }
+        r->rax = Net::TcpStreamControl(Caller()->pid, r->rdi, r->rsi, record);
+        if (!r->rax && (r->rdi == HACKOS_TCP_READ || r->rdi == HACKOS_TCP_STATUS))
+        {
+            if (!Output((void*)r->rdx, &record, sizeof(record)))
+            {
+                r->rax = HACKOS_ERROR;
+            }
+            else if (r->rdi == HACKOS_TCP_READ)
+            {
+                Net::ConsumeTcp(Caller()->pid, r->rsi, record.size);
+            }
+        }
+        break;
+    }
     case HACKOS_SYS_tcp:
     {
         HackosTcp record = {};

@@ -1,10 +1,13 @@
 #include "resolve.h"
+#include "tcp_stream.h"
 #include "hackos/runtime/ipv4.h"
 
 int main(int argc, char** argv)
 {
+    if (argc > 1 && Equal(argv[1], "--stream")) return TcpDemo::Run(argc, argv);
     const char* usage = "Usage: tcp <IPv4-address|hostname> <port> <message>\n"
                         "Send up to 512 bytes, half-close, and collect up to 2048 reply bytes through EOF.\n"
+                        "Streaming: tcp --stream <host> <port> <count> <message>\n"
                         "Demo: tcp 10.0.2.2 7778 \"hello over TCP\"\n";
     if (argc == 2 && (Equal(argv[1], "--help") || Equal(argv[1], "-h")))
     {

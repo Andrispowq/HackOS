@@ -173,3 +173,7 @@ test-dhcp:
 .PHONY: test-tcp
 test-tcp:
 	$(PYTHON) qemu_tcp.py --firmware $(FIRMWARE) --image $(IMAGE)
+
+.PHONY: test-tcp-stream
+test-tcp-stream:
+	$(PYTHON) qemu_tcp_stream.py --firmware $(FIRMWARE) --image $(IMAGE)

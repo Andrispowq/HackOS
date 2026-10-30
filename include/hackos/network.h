@@ -120,3 +120,26 @@ struct HackosTcp
 };
 static_assert(sizeof(HackosTcp) == 2072, "TCP exchange ABI");
 static_assert(__builtin_offsetof(HackosTcp, data) == 24, "TCP data ABI");
+
+// Nonblocking active TCP stream handles; independent of inherited file descriptors.
+enum HackosTcpStreamOperation : uint64_t
+{
+    HACKOS_TCP_CONNECT,
+    HACKOS_TCP_WRITE,
+    HACKOS_TCP_READ,
+    HACKOS_TCP_STATUS,
+    HACKOS_TCP_SHUTDOWN_WRITE,
+    HACKOS_TCP_CLOSE
+};
+constexpr uint32_t HACKOS_TCP_CONNECTED = 1, HACKOS_TCP_WRITABLE = 2;
+constexpr uint32_t HACKOS_TCP_EOF = 4, HACKOS_TCP_WRITE_CLOSED = 8;
+struct HackosTcpStream
+{
+    uint8_t address[4];
+    uint16_t peerPort, localPort;
+    uint32_t size, state, flags, queued, pending, retransmissions;
+    uint64_t sent, received;
+    uint8_t data[512];
+};
+static_assert(sizeof(HackosTcpStream) == 560, "TCP stream ABI");
+static_assert(__builtin_offsetof(HackosTcpStream, data) == 48, "TCP stream data ABI");

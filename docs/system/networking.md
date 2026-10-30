@@ -21,10 +21,10 @@ subnet mask, default gateway and DNS server automatically. The normal lease is
 `10.0.2.15/24`, gateway `10.0.2.2`, DNS `10.0.2.3`, but those are no longer routing
 constants. Same-subnet targets resolve directly with ARP; other supported targets
 use the supplied gateway while retaining the destination IP. Connected UDP and
-bounded DNS lookup and bounded active TCP exchanges are available. General stream
-sockets and listening TCP servers are not implemented.
+bounded DNS lookup and bounded active TCP exchanges are available. Active TCP stream handles support incremental I/O and scheduler polling.
+Listening TCP servers and inherited socket descriptors are not implemented.
 Diagnostics use the root-only hardware query; Echo uses syscall 97, DNS lookup
-uses syscall 98, connected UDP uses syscall 99 and TCP exchanges use syscall 100.
+uses syscall 98, connected UDP uses syscall 99 and TCP exchanges use syscall 100; incremental streams use syscall 101.
 
 ## Browser demo
 
@@ -40,6 +40,7 @@ nslookup example.com
 ping -c 2 example.com
 udp 10.0.2.2 7777 "hello from HackOS"
 tcp 10.0.2.2 7778 "hello over TCP"
+tcp --stream 10.0.2.2 7779 256 "hello over TCP"
 sysinfo network
 sysinfo network > /tmp/network.txt
 cat /tmp/network.txt
@@ -452,9 +453,8 @@ Errors distinguish timeout, unavailable network, failed ARP, reset/refusal and
 response overflow. Partial data on a failed exchange is not reported as success.
 
 This is an experimental bounded transaction client, not a complete general TCP
-stack. It has no listen/accept, simultaneous open, stream descriptors, poll
-integration, out-of-order queue, SACK, window scaling, timestamps, urgent-data
-interface, adaptive RTT/RTO or zero-window persist probes. A peer that keeps its
+stack. It has no listen/accept, simultaneous open, inherited stream descriptors, out-of-order queue, SACK, window scaling, timestamps, urgent-data
+interface, adaptive RTT/RTO in the transaction API. A peer that keeps its
 window closed or never sends EOF times out. The conservative one-segment flight
 limit replaces a growing congestion window in this milestone. There is no IP
 fragmentation/reassembly or ICMP/PMTU feedback. DNS TCP fallback, HTTP and TLS are
@@ -469,3 +469,77 @@ bounds, ownership, process cleanup, direct/routed/DNS peers, redirection and lin
 recovery. `--host-echo` runs against a real host TCP socket through QEMU user
 networking. Host sanitizer tests also cover malformed/truncated packets, partial
 ACKs, TIME-WAIT cleanup, zero-window updates, buffer exhaustion and slot limits.
+
+## Incremental TCP streams
+
+`tcp --stream <host> <port> <count> <message>` demonstrates repeated writes and
+reads on one active connection. Compose's immediate echo helper is at
+`10.0.2.2:7779`; the original half-close echo helper remains at port 7778.
+`tcp --stream 10.0.2.2 7779 256 "hello over TCP"` verifies 3584 bytes each way
+without reconnecting. Count is 1–1024 and the message is 1–512 bytes. The demo
+waits in scheduler `poll`, validates each echo before its next write, then shuts
+down its write side and drains EOF. It prints totals rather than remote text.
+
+Syscall 101 `tcp_stream(operation, handle, HackosTcpStream*)` is a nonblocking,
+process-owned handle API. It does not use/inherit file descriptors or support
+listen/accept. Up to four stream handles belong to one process, with eight owned
+TCP records globally shared with the transaction API. Both APIs share the 32
+record/TIME-WAIT pool and wire/admission limits. Monotonic handles prevent stale
+references from accessing a replacement socket. Transaction QUERY/CANCEL cannot
+access or cancel stream handles. Process exit closes both types.
+
+The copied record is 560 bytes, with a 512-byte data array at offset 48. Its
+fields include peer/local addresses/ports, size, result state, flags, queued
+receive bytes, unacknowledged queued send bytes, retransmissions and 64-bit total
+acknowledged/successfully received byte counters. There is no whole-transfer
+size limit: bounded storage is reused as the application drains and refills it.
+
+| Operation | Behavior |
+| --- | --- |
+| CONNECT | Requires handle/localPort/size zero and a valid peer/port. Returns a positive handle while connecting; ERROR for invalid input, RETRY for admission pressure. |
+| WRITE | Queues all 1–512 bytes or returns RETRY while connecting/previous data is unacknowledged. Zero length is a no-op on an open write side. No successful return promises peer acknowledgement. |
+| READ | Input size is capacity 0–512. Returns up to that many queued bytes, RETRY if empty and still open, or success with size zero after peer EOF. A failed user copy consumes nothing. Zero capacity is a no-op. |
+| STATUS | Returns a nondestructive snapshot. State remains PENDING while open; flags distinguish connecting, connected, writable, peer EOF and local write shutdown. |
+| SHUTDOWN_WRITE | Idempotently seals writes, drains queued data and sends FIN; receiving remains available. Returns RETRY while connecting. |
+| CLOSE | Releases ownership and aborts a still-active connection. To close gracefully, use SHUTDOWN_WRITE and await peer EOF/COMPLETE first. No record pointer is required. |
+
+Missing or foreign handles return NOT_FOUND. Invalid operations/sizes return
+ERROR. On failure, ERROR from READ follows any already-buffered bytes; STATUS
+retains the specific timeout/network/ARP/reset error. Configuration loss/change
+also clears queued receives and prevents traffic using the old configuration.
+Handles/results persist until explicit close or process exit, including after
+failure and clean completion. TIME-WAIT expiration stops answering old FINs while keeping a still-owned
+handle, its reserved port and unread data until close.
+
+`poll` accepts `HACKOS_POLL_TCP` (64) with READ/WRITE; `fd` then denotes the owned
+TCP handle. It can be mixed with ordinary descriptors and window handles in one
+16-entry poll array, with the existing timeout rules. READ signals queued data
+or EOF; WRITE signals connected with room for a new write and no local shutdown.
+HANGUP signals peer EOF, ERROR signals terminal failure, and INVALID signals an
+unknown/foreign/closed handle. HANGUP and ERROR are returned independently of
+requested READ/WRITE. TCP and WINDOW tags cannot be combined in one entry.
+Connection, receive, send-acknowledgement, EOF and failure events wake scheduler
+I/O waiters. Callers must inspect returned bits, not equate HANGUP with writable.
+
+Each stream holds one 512-byte send buffer and a 2048-byte receive queue. Reads
+reopen the advertised receive window; bytes beyond that window are left
+unacknowledged for retransmission rather than overflowing storage. FIN is not
+accepted beyond a full stream receive window. Stream send/FIN operations respect
+zero peer windows, sending an old-sequence empty probe at most once per second
+to recover a lost window update. ACK window updates reject older sequence/ACK
+pairs, and in-window RSTs with the wrong sequence elicit a bounded challenge ACK.
+The conservative one-segment flight limit and retransmission rules remain.
+
+Idle established streams have no automatic lifetime limit. Connect, queued-send
+and write-shutdown work fail after 20 seconds without acknowledgement progress;
+a caller separately controls read waits through poll timeouts. The existing
+transaction API retains its whole-exchange deadline. These are bounded active
+client streams, not a claim of full TCP conformance: no adaptive RTO/congestion
+window, out-of-order queue, listen/accept, inherited descriptors, TLS or HTTP yet.
+
+`tests/qemu_tcp_stream.py` checks incremental I/O, failed-copy preservation,
+foreign/stale handles, process cleanup, mixed/timed polling, 8 KiB receive with
+window closure/reopening, EOF/half-close, direct/DNS routing and retransmission.
+Its `--host-echo` mode transfers 3200 bytes through a real host TCP socket with
+73-byte reads, independently splitting application messages. Both boot paths are
+covered; host sanitizers additionally cover persist probes and idle lifetime.

@@ -19,6 +19,10 @@ unsigned BuildTcp(uint8_t* frame, const uint8_t* mac, const uint8_t* peerMac,
                   uint8_t flags, uint16_t window, const uint8_t* data, unsigned size);
 bool ParseTcp(const uint8_t* frame, unsigned length, const uint8_t* mac, const uint8_t* ip, TcpPacket& packet);
 uint64_t TcpControl(uint64_t pid, uint64_t operation, HackosTcp& record);
+uint64_t TcpStreamControl(uint64_t pid, uint64_t operation, uint64_t handle, HackosTcpStream& record);
+// READ peeks; dispatcher commits only after a successful user copy under its guard.
+void ConsumeTcp(uint64_t pid, uint64_t handle, unsigned size);
+uint32_t TcpReadiness(uint64_t pid, uint64_t handle, uint32_t events);
 void CancelTcp(uint64_t pid);
 void InvalidateTcp();
 void PollTcp(bool ready, bool link, const uint8_t* mac, const uint8_t* ip);

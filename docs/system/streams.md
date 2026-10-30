@@ -191,3 +191,13 @@ See [desktop and independent terminals](desktop.md) for authenticated desktop
 authority, taskbar controls, per-terminal input/output routing and foreground
 jobs. Syscalls 91–94 add the desktop and terminal endpoint interfaces; existing
 window, stream and recovery-console interfaces retain their contracts.
+
+## TCP readiness
+
+Incremental active TCP uses process-owned handles through syscall 101 rather
+than inherited descriptors. Poll can still combine those handles with ordinary
+streams/windows: set HACKOS_POLL_TCP (64), put the TCP handle in `fd`, and request
+READ and/or WRITE. These bits and terminal HANGUP/ERROR/INVALID outcomes follow
+the [TCP stream contract](networking.md#incremental-tcp-streams). TCP I/O itself
+uses `tcp_stream` READ/WRITE; read/write_fd, dup2, pipes and descriptor inheritance
+do not operate on TCP handles. No change is made to the 16-byte poll record.

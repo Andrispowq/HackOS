@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """Standard streams, pipelines, deadlines and COM1 diagnostics on fresh guest images."""
 import argparse
+from pathlib import Path
 import os
 import re
 import shutil
@@ -11,10 +12,10 @@ from qemu_shell import build_probe
 from session import provision_imports
 
 
-def test(firmware, timeout):
+def test(firmware, timeout, image_path=None):
     directory = OUT / ('qemu-streams-' + firmware)
     report = Report('qemu-streams-' + firmware, directory)
-    built = OUT / ('build-' + firmware)
+    built = image_path.parent if image_path else OUT / ('build-' + firmware)
     image = directory / 'HackOS.img'
 
     def inspect(g, name, checks):
@@ -58,7 +59,7 @@ quit
         g.qmp.call('cont')
 
     def run():
-        shutil.copy2(built / 'HackOS.img', image)
+        shutil.copy2(image_path or built / 'HackOS.img', image)
         probe = build_probe(directory, built / 'source', extra=('streams_probe.cpp', 'STREAMPROBE'))
         require_success(command(['mcopy', '-i', filesystem(image), probe, '::/USR/BIN/STREAMPROBE']), 'install streams probe')
         provision_imports(image, firmware)
@@ -190,5 +191,6 @@ if __name__ == '__main__':
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--firmware', required=True, choices=('bios', 'uefi'))
     parser.add_argument('--timeout', type=int, default=60)
+    parser.add_argument('--image', type=Path, help='Image beside its kernel.elf and source build artifacts')
     args = parser.parse_args()
-    sys.exit(test(args.firmware, args.timeout))
+    sys.exit(test(args.firmware, args.timeout, args.image.resolve() if args.image else None))

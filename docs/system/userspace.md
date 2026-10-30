@@ -899,3 +899,23 @@ closed TIME-WAIT tuples separately from ownership for 120 seconds. Results expir
 after ten seconds; pending work has a 20-second deadline. No descriptor or poll
 integration is provided yet. See [networking](networking.md#bounded-tcp-exchanges)
 for protocol limits and lease-change behavior.
+
+## Incremental TCP stream handles
+
+Syscall 101 `tcp_stream(operation, handle, HackosTcpStream*)` adds CONNECT, WRITE,
+READ, STATUS, SHUTDOWN_WRITE and CLOSE. The copied record is 560 bytes with data
+at offset 48. Handles are process-owned (four per process, eight globally shared
+with TCP transactions), monotonic and not inherited descriptors. Writes queue up
+to 512 bytes atomically; reads consume at most their 0–512-byte input capacity
+only after successful copy-out. A 2048-byte receive queue is reusable, so streams
+can transfer more than 2 KiB. READ returns RETRY while empty/open and zero size
+on EOF. CLOSE aborts active work; SHUTDOWN_WRITE drains queued output and sends
+FIN while allowing further reads. Results/handles persist until close or exit.
+
+`HackosPollFd.events` accepts HACKOS_POLL_TCP (64) with READ/WRITE, using `fd` as
+the TCP handle. It supports mixed descriptor/window/TCP polls and normal timed
+scheduler waits. HANGUP, ERROR and INVALID are reported independently of request
+bits. CONNECT completion wakes WRITE; queued data or EOF wakes READ. Stream and
+window tags cannot be combined. See [networking](networking.md#incremental-tcp-streams)
+for state flags, backpressure, timeout and ownership rules. The syscall-100
+transaction ABI remains unchanged and its CANCEL affects only its own request.

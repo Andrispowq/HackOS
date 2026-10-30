@@ -20,7 +20,7 @@ with tempfile.TemporaryDirectory(prefix='hackos-net-host-') as directory:
                     str(ROOT / 'tests/host/dns.cpp'), str(ROOT / 'kernel/src/net/dns.cpp'),
                     str(ROOT / 'kernel/src/net/udp.cpp'), str(ROOT / 'kernel/src/net/socket.cpp'),
                     str(ROOT / 'tests/host/udp_socket.cpp'), str(ROOT / 'tests/host/dhcp.cpp'),
-                    str(ROOT / 'tests/host/tcp.cpp'), str(ROOT / 'kernel/src/net/tcp.cpp'), str(ROOT / 'kernel/src/net/tcp_codec.cpp'),
+                    str(ROOT / 'tests/host/tcp_stream.cpp'), str(ROOT / 'tests/host/tcp.cpp'), str(ROOT / 'kernel/src/net/tcp.cpp'), str(ROOT / 'kernel/src/net/tcp_codec.cpp'),
                     str(ROOT / 'kernel/src/net/dhcp.cpp'), str(ROOT / 'kernel/src/net/dhcp_codec.cpp'), str(ROOT / 'kernel/src/net/resolve.cpp'),
                     str(ROOT / 'kernel/src/net/icmp.cpp'), str(ROOT / 'kernel/src/net/ping.cpp'), str(ROOT / 'kernel/src/net/arp.cpp'),
                     '-o', str(binary)], check=True, timeout=120)

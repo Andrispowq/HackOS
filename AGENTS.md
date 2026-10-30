@@ -133,7 +133,11 @@ TCP milestone adds bounded active transactions through syscall 100 and `tcp`:
 512-byte request, 2048-byte response, automatic half-close/EOF, retransmissions,
 20-second deadline and detached 120-second TIME-WAIT. Eight process-owned records
 share 32 total records with retained tuples. Compose supplies a loopback TCP echo
-peer on port 7778. General stream sockets, HTTP and TLS remain future work; see
+peer on port 7778. Incremental TCP uses syscall 101 with process-owned handles, READ/WRITE/STATUS,
+write-side shutdown, and HACKOS_POLL_TCP (64) readiness. It reuses 512-byte send
+and 2048-byte receive storage across unlimited total bytes; handles persist until
+close/exit. Compose immediate stream echo is port 7779 (`tcp --stream`).
+Inherited descriptors, listen/accept, HTTP and TLS remain future work; see
 `docs/system/networking.md`. `tests/qemu_tcp.py` covers both firmware paths and
 has a real host socket mode (`--host-echo`).
 

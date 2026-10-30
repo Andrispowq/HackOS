@@ -315,3 +315,13 @@ control/binary bytes are escaped. Compose supplies a local echo peer:
 `tcp 10.0.2.2 7778 "hello over TCP"`. It is available to normal users and supports
 shell redirection. Exchanges time out after 20 seconds; this is not an interactive
 stream socket utility. See [networking](networking.md#bounded-tcp-exchanges).
+
+### Incremental TCP demo
+
+`tcp --stream <host> <port> <count:1..1024> <message>` repeats a 1–512-byte message
+on one connection, verifies each echo, and shuts down cleanly. Use the immediate
+echo helper: `tcp --stream 10.0.2.2 7779 256 "hello over TCP"` transfers 3584 bytes
+each way. Port 7778 remains the original helper that waits for EOF before
+replying, so use it with the original `tcp host port message` command. Stream
+mode waits with poll and reports byte totals; a mismatch, early EOF, socket
+failure or timeout returns a nonzero exit status.

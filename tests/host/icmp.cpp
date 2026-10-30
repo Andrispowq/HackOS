@@ -15,6 +15,10 @@ void SerialText(const char*)
 {
 }
 
+void WakeStreamWaiters()
+{
+}
+
 void DisablePreemption()
 {
 }

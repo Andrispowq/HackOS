@@ -1320,3 +1320,16 @@ exchange. These tests require local QEMU sockets, not public Internet access.
 `tests/network.py` sanitizes the real TCP codec/state machine alongside the other
 network protocols. `make -C tests test-tcp FIRMWARE=bios IMAGE=...` runs the peer
 suite. Captures, serial logs and screenshots are written under `tests/out/tcp-*`.
+
+### Incremental TCP streams
+
+Run `tests/qemu_tcp_stream.py --firmware bios --image out/tcp-stream/bios/HackOS.img`
+and its UEFI equivalent after fresh builds. Repeat with `--host-echo` to check a
+real host socket and independently segmented reads. The virtual peer/probe checks
+poll wakeups/timeouts, failed-copy non-consumption, ownership/exit cleanup, 8 KiB
+receive backpressure, half-close, DNS/direct routing and packet loss. Captures and
+screenshots live under `tests/out/tcp-stream-*`. `test-tcp-stream` is the matching
+Makefile target; the network sanitizer suite includes stream state-machine tests.
+
+The existing pipe/descriptor regression suite also accepts `qemu_streams.py --image PATH`
+when the image is beside its `kernel.elf` and `source` build artifacts.

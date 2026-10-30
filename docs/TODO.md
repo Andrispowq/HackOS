@@ -348,7 +348,8 @@ Milestones 1–4 are implemented; later milestones need a separate request.
 - [x] Add bounded DHCPv4 acquisition, renewal/rebinding, expiry/NAK recovery and visible lease state.
 - [ ] Add DHCP conflict detection/DECLINE, lease persistence, RELEASE and manual configuration.
 - [x] Add bounded active TCP exchanges, retransmission/close handling and a local echo demo.
-- [ ] Add general TCP stream sockets, readiness/poll, adaptive RTO/congestion control and DNS TCP fallback.
+- [x] Add active TCP stream handles, incremental I/O, receive backpressure and readiness/poll.
+- [ ] Add inherited socket descriptors, listen/accept, adaptive RTO/congestion control and DNS TCP fallback.
 - [ ] Add HTTP fetching, followed by TLS/HTTPS.
 - [ ] Add network configuration and useful network user programs.
 

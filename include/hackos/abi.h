@@ -214,6 +214,7 @@ constexpr uint64_t HACKOS_BROKEN_PIPE = ~9ULL;
 constexpr uint64_t HACKOS_OPEN_TRUNCATE = 8;
 constexpr uint64_t HACKOS_OPEN_APPEND = 16;
 constexpr uint32_t HACKOS_POLL_READ = 1, HACKOS_POLL_WRITE = 2;
+constexpr uint32_t HACKOS_POLL_TCP = 64; // fd is a process-owned TCP stream handle.
 constexpr uint32_t HACKOS_POLL_WINDOW = 32; // fd is an owned window handle; request READ.
 constexpr uint32_t HACKOS_POLL_HANGUP = 4, HACKOS_POLL_ERROR = 8, HACKOS_POLL_INVALID = 16;
 
