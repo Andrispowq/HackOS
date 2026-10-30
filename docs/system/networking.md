@@ -1,4 +1,4 @@
-# Experimental networking: Ethernet, routing, ping and DNS
+# Experimental networking: Ethernet, routing, DHCP, UDP and TCP
 
 [System index](index.md) · [Devices](devices.md) · [Testing](../development/testing.md)
 
@@ -21,9 +21,10 @@ subnet mask, default gateway and DNS server automatically. The normal lease is
 `10.0.2.15/24`, gateway `10.0.2.2`, DNS `10.0.2.3`, but those are no longer routing
 constants. Same-subnet targets resolve directly with ARP; other supported targets
 use the supplied gateway while retaining the destination IP. Connected UDP and
-bounded DNS lookup are available. TCP and stream sockets are not implemented.
+bounded DNS lookup and bounded active TCP exchanges are available. General stream
+sockets and listening TCP servers are not implemented.
 Diagnostics use the root-only hardware query; Echo uses syscall 97, DNS lookup
-uses syscall 98 and connected UDP uses syscall 99.
+uses syscall 98, connected UDP uses syscall 99 and TCP exchanges use syscall 100.
 
 ## Browser demo
 
@@ -38,6 +39,7 @@ ping -c 2 10.0.2.2
 nslookup example.com
 ping -c 2 example.com
 udp 10.0.2.2 7777 "hello from HackOS"
+tcp 10.0.2.2 7778 "hello over TCP"
 sysinfo network
 sysinfo network > /tmp/network.txt
 cat /tmp/network.txt
@@ -401,3 +403,69 @@ paths. Shared virtual peers provide DHCP to the older routing/DNS/UDP suites.
 Artifacts are saved under `tests/out/dhcp-<firmware>/`. Host sanitizer tests also
 cover startup fallback, prefix routing, malformed options and outstanding-request
 invalidation at lease loss.
+
+## Bounded TCP exchanges
+
+`tcp <IPv4-address|hostname> <port> <message>` performs an active IPv4 TCP open,
+sends 0–512 bytes, half-closes its sending direction after acknowledgement, and
+collects up to 2048 response bytes through peer EOF. It succeeds only after its
+FIN is acknowledged, the peer FIN is received, and the final ACK is queued to the
+NIC. Binary/control reply bytes are escaped for terminal safety. Normal users
+can run it; output supports redirection. Compose starts a loopback-only TCP echo
+helper on port 7778, alongside the UDP helper. No extra host port is published.
+The echo helper waits for the client's half-close before replying, demonstrating
+that receiving remains possible after sending EOF. Direct runs can select
+`--network --tcp-demo`.
+
+Syscall 100 `tcp(operation, HackosTcp*)` uses a copied 2072-byte record:
+address/peer port, kernel-selected local port, request size, result state,
+received count, retransmission count and 2048 data bytes. START copies the first
+`size` bytes (maximum 512) as the request. QUERY is nondestructive and returns
+only initialized response bytes; CANCEL ignores its pointer. One result/request
+belongs to each process, with eight owned slots globally. A process must cancel
+its previous result before starting another exchange. Invalid inputs return
+ERROR, missing ownership returns NOT_FOUND, and admission pressure returns RETRY.
+Process exit cancels its exchange; no network operation blocks inside a guard.
+The command sleeps between status queries. Results expire after ten seconds.
+
+The implementation has 32 fixed records, including detached TIME-WAIT tuples.
+After a clean close the tuple remains reserved for 120 seconds and answers
+repeated FINs even after its process exits. Duplicate FIN restarts that timer.
+Ephemeral ports 49152–65535 are selected without colliding with retained TCP
+records. Admission is limited to ten starts per second; transmission is globally
+limited to 100 segments per second, with rotating slot priority. The initial
+sequence number comes from RDRAND-backed random bytes. Network configuration
+loss/change fails pending exchanges and prevents old-tuple traffic from being
+sent using the replacement configuration.
+
+IPv4 and TCP lengths, checksums, destination and options are validated before
+matching the connection tuple. Only the expected SYN acknowledgement opens the
+connection. SYN advertises MSS 512; outgoing data respects the peer's MSS and
+advertised window. At most one data segment is outstanding. Cumulative and
+partial ACKs advance only over transmitted bytes; retransmission resends the
+unacknowledged suffix. Sequence comparisons handle 32-bit wrap. Out-of-order
+segments trigger a cumulative ACK without being buffered, and retransmitted
+prefixes are trimmed. An established RST must match the next expected sequence;
+a SYN-stage RST must acknowledge the SYN. SYN, data and FIN retransmissions use
+1, 2, 4 and then 8 second intervals. Every exchange has a 20-second total deadline.
+Errors distinguish timeout, unavailable network, failed ARP, reset/refusal and
+response overflow. Partial data on a failed exchange is not reported as success.
+
+This is an experimental bounded transaction client, not a complete general TCP
+stack. It has no listen/accept, simultaneous open, stream descriptors, poll
+integration, out-of-order queue, SACK, window scaling, timestamps, urgent-data
+interface, adaptive RTT/RTO or zero-window persist probes. A peer that keeps its
+window closed or never sends EOF times out. The conservative one-segment flight
+limit replaces a growing congestion window in this milestone. There is no IP
+fragmentation/reassembly or ICMP/PMTU feedback. DNS TCP fallback, HTTP and TLS are
+still future work. Wire/state handling is based on
+[RFC 9293](https://www.rfc-editor.org/rfc/rfc9293.html); these explicit limits are
+not a claim of full RFC conformance.
+
+`tests/qemu_tcp.py` exercises both firmware paths with a deterministic virtual
+peer: SYN/data/FIN loss, duplicate/overlapping and out-of-order data, sequence
+wrap, forged ACK/RST, binary/max-sized input, empty exchanges, copied-pointer
+bounds, ownership, process cleanup, direct/routed/DNS peers, redirection and link
+recovery. `--host-echo` runs against a real host TCP socket through QEMU user
+networking. Host sanitizer tests also cover malformed/truncated packets, partial
+ACKs, TIME-WAIT cleanup, zero-window updates, buffer exhaustion and slot limits.

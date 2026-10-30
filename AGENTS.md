@@ -129,6 +129,14 @@ receive copies do not consume packets. `udp` demonstrates a send/reply exchange;
 Compose supplies a container-loopback echo peer at guest 10.0.2.2:7777. See `docs/system/networking.md` and
 `tests/qemu_network.py` for packet capture, ring reuse and failure checks.
 
+TCP milestone adds bounded active transactions through syscall 100 and `tcp`:
+512-byte request, 2048-byte response, automatic half-close/EOF, retransmissions,
+20-second deadline and detached 120-second TIME-WAIT. Eight process-owned records
+share 32 total records with retained tuples. Compose supplies a loopback TCP echo
+peer on port 7778. General stream sockets, HTTP and TLS remain future work; see
+`docs/system/networking.md`. `tests/qemu_tcp.py` covers both firmware paths and
+has a real host socket mode (`--host-echo`).
+
 ## Where to look
 
 | Area | Starting points |

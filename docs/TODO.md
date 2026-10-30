@@ -347,7 +347,9 @@ Milestones 1–4 are implemented; later milestones need a separate request.
 - [ ] Add wildcard UDP binding, readiness/poll integration and ICMP socket errors.
 - [x] Add bounded DHCPv4 acquisition, renewal/rebinding, expiry/NAK recovery and visible lease state.
 - [ ] Add DHCP conflict detection/DECLINE, lease persistence, RELEASE and manual configuration.
-- [ ] Add TCP, DNS TCP fallback and stream sockets.
+- [x] Add bounded active TCP exchanges, retransmission/close handling and a local echo demo.
+- [ ] Add general TCP stream sockets, readiness/poll, adaptive RTO/congestion control and DNS TCP fallback.
+- [ ] Add HTTP fetching, followed by TLS/HTTPS.
 - [ ] Add network configuration and useful network user programs.
 
 ### Window-terminal polish

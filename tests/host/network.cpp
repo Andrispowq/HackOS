@@ -14,6 +14,7 @@ void TestRoute();
 void TestDns();
 void TestUdpSockets();
 void TestDhcp();
+void TestTcp();
 
 int main()
 {
@@ -22,6 +23,7 @@ int main()
     TestDns();
     TestUdpSockets();
     TestDhcp();
+    TestTcp();
     const uint8_t mac[6] = {0x52, 0x54, 0, 0x12, 0x34, 0x56};
     const uint8_t peer[6] = {0x52, 0x55, 10, 0, 2, 2};
     const uint8_t ip[4] = {10, 0, 2, 15}, gateway[4] = {10, 0, 2, 2};

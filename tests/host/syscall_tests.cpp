@@ -1,6 +1,7 @@
 #include "support.hpp"
 #include "hackos/abi.h"
 #include "hackos/hardware.h"
+#include "hackos/network.h"
 #include "hackos/syscall_numbers.h"
 static_assert(HACKOS_SYS_exit == 0 && HACKOS_SYS_user_write == 14 && HACKOS_SYS_input == 15 && HACKOS_SYS_power == 26 &&
                   HACKOS_SYS_yield == 27 && HACKOS_SYS_spawn_args == 28 && HACKOS_SYS_wait == 29 &&
@@ -22,7 +23,7 @@ static_assert(HACKOS_SYS_exit == 0 && HACKOS_SYS_user_write == 14 && HACKOS_SYS_
                   HACKOS_SYS_window_close_reply == 90 && HACKOS_SYS_auth_desktop == 91 && HACKOS_SYS_desktop == 92 &&
                   HACKOS_SYS_terminal_session == 93 && HACKOS_SYS_session_logout == 94 &&
                   HACKOS_SYS_account_edit == 95 && HACKOS_SYS_password_change == 96 && HACKOS_SYS_echo == 97 &&
-                  HACKOS_SYS_resolve == 98 && HACKOS_SYS_udp == 99 && HACKOS_SYSCALL_COUNT == 100,
+                  HACKOS_SYS_resolve == 98 && HACKOS_SYS_udp == 99 && HACKOS_SYS_tcp == 100 && HACKOS_SYSCALL_COUNT == 101,
               "User syscall ABI changed");
 
 TEST(syscall_record_layout)
@@ -32,6 +33,7 @@ TEST(syscall_record_layout)
     CHECK(sizeof(HackosTerminalInfo) == 16 && sizeof(HackosTerminalSettings) == 24);
     CHECK(sizeof(HackosClock) == 16 && __builtin_offsetof(HackosClock, year) == 14);
     CHECK(sizeof(HackosHardwareInfo) == 128);
+    CHECK(sizeof(HackosTcp) == 2072 && __builtin_offsetof(HackosTcp, data) == 24);
     CHECK(sizeof(HackosWindowSpec) == 48);
     CHECK(sizeof(HackosWindowRect) == 16);
     CHECK(sizeof(HackosWindowFrame) == 16);

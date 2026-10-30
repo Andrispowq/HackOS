@@ -1,6 +1,7 @@
 #include "net/ping.h"
 #include "net/dns.h"
 #include "net/socket.h"
+#include "net/tcp.h"
 #include "process.h"
 #include "proc/user/terminals.h"
 #include "deadline.h"
@@ -317,6 +318,7 @@ Process::Process(const char* label, void* entry, void* parameter)
 Process::~Process()
 {
     Net::CancelEcho(pid);
+    Net::CancelTcp(pid);
     Net::CancelResolve(pid);
     Net::CloseUdpSockets(pid);
     ReleaseUserWindows(this);

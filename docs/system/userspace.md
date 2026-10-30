@@ -886,3 +886,16 @@ lease/remaining seconds, T1/T2 and attempt count appended after the old fields.
 Configuration loss/change fails pending network work and clears UDP receive
 queues; socket handles remain owned and valid. Identical-configuration renewals
 preserve active traffic. See [DHCP](networking.md#dhcp-configuration-and-leases).
+
+## Bounded TCP transactions
+
+Syscall 100 `tcp(operation, HackosTcp*)` offers START/QUERY/CANCEL for one active
+exchange/result per process (eight owned records globally). The copied record is
+2072 bytes, with data at offset 24. START accepts 0–512 outgoing bytes and an IPv4
+peer/port; localPort must be zero. QUERY returns up to 2048 received bytes,
+completion/error state and retransmission count, without consuming the result.
+CANCEL ignores its record pointer. Exit cancels owned work; the kernel retains
+closed TIME-WAIT tuples separately from ownership for 120 seconds. Results expire
+after ten seconds; pending work has a 20-second deadline. No descriptor or poll
+integration is provided yet. See [networking](networking.md#bounded-tcp-exchanges)
+for protocol limits and lease-change behavior.

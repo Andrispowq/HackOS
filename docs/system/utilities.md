@@ -305,3 +305,13 @@ binary bytes are displayed as `\xNN`. Exit status is 0 after a reply, 1 for
 network/lookup/output failure, and 2 for invalid command arguments. Compose's
 local echo demo is `udp 10.0.2.2 7777 "hello from HackOS"`. See
 [networking](networking.md#connected-udp-endpoints) for bounded waits and semantics.
+
+### TCP exchange demo
+
+`tcp <IPv4-address|hostname> <port> <message>` sends at most 512 bytes, half-closes
+and waits for up to 2048 response bytes and peer EOF. It reports clean completion,
+byte counts and retransmissions; failure returns a nonzero exit status. Reply
+control/binary bytes are escaped. Compose supplies a local echo peer:
+`tcp 10.0.2.2 7778 "hello over TCP"`. It is available to normal users and supports
+shell redirection. Exchanges time out after 20 seconds; this is not an interactive
+stream socket utility. See [networking](networking.md#bounded-tcp-exchanges).

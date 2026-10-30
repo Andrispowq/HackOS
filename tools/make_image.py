@@ -40,7 +40,7 @@ def package(firmware):
                              ('libs/ring3/bin/ring3', 'USR/BIN/ring3'),
                              ('libs/shell/bin/shell', 'USR/BIN/shell'), ('libs/login/bin/login', 'USR/BIN/login'), ('hello.txt', 'USR/hello.txt')]:
             mtool('mcopy', ROOT / source, '::/' + dest)
-        for name in ('help', 'clear', 'terminal', 'echo', 'time', 'ping', 'nslookup', 'udp', 'sysinfo', 'ps', 'kill', 'ls', 'wd', 'cat', 'read', 'grep', 'wc', 'head', 'tail', 'tee', 'more', 'sort', 'uniq', 'cut', 'tr', 'shutdown', 'restart', 'id', 'whoami', 'users', 'groups', 'useradd', 'groupadd', 'usermod', 'runas', 'passwd', 'xxd', 'mkdir', 'rm', 'mv', 'edit', 'chmod', 'chown'):
+        for name in ('help', 'clear', 'terminal', 'echo', 'time', 'ping', 'nslookup', 'udp', 'tcp', 'sysinfo', 'ps', 'kill', 'ls', 'wd', 'cat', 'read', 'grep', 'wc', 'head', 'tail', 'tee', 'more', 'sort', 'uniq', 'cut', 'tr', 'shutdown', 'restart', 'id', 'whoami', 'users', 'groups', 'useradd', 'groupadd', 'usermod', 'runas', 'passwd', 'xxd', 'mkdir', 'rm', 'mv', 'edit', 'chmod', 'chown'):
             mtool('mcopy', ROOT / 'libs/commands/bin' / name, '::/USR/BIN/' + name)
         empty_accounts = Path(temporary) / 'accounts.dat'
         empty_accounts.write_bytes(bytes(8192))

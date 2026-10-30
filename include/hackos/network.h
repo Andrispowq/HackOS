@@ -93,3 +93,30 @@ struct HackosDatagram
 };
 static_assert(sizeof(HackosDatagram) == 544, "UDP ABI");
 static_assert(__builtin_offsetof(HackosDatagram, data) == 32, "UDP payload ABI");
+
+// Bounded active TCP exchange: send once, half-close, collect through peer EOF.
+enum HackosTcpOperation : uint64_t
+{
+    HACKOS_TCP_START,
+    HACKOS_TCP_QUERY,
+    HACKOS_TCP_CANCEL
+};
+enum HackosTcpState : uint32_t
+{
+    HACKOS_TCP_PENDING,
+    HACKOS_TCP_COMPLETE,
+    HACKOS_TCP_TIMEOUT,
+    HACKOS_TCP_UNAVAILABLE,
+    HACKOS_TCP_NEIGHBOR_FAILED,
+    HACKOS_TCP_RESET,
+    HACKOS_TCP_TOO_LARGE
+};
+struct HackosTcp
+{
+    uint8_t address[4];
+    uint16_t peerPort, localPort;
+    uint32_t size, state, received, retransmissions;
+    uint8_t data[2048]; // START: first size bytes (0..512); QUERY: received bytes.
+};
+static_assert(sizeof(HackosTcp) == 2072, "TCP exchange ABI");
+static_assert(__builtin_offsetof(HackosTcp, data) == 24, "TCP data ABI");

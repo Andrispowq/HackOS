@@ -169,3 +169,7 @@ test-udp:
 .PHONY: test-dhcp
 test-dhcp:
 	$(PYTHON) qemu_dhcp.py --firmware $(FIRMWARE) --image $(IMAGE)
+
+.PHONY: test-tcp
+test-tcp:
+	$(PYTHON) qemu_tcp.py --firmware $(FIRMWARE) --image $(IMAGE)

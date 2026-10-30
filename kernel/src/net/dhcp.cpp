@@ -4,6 +4,7 @@
 #include "ping.h"
 #include "dns.h"
 #include "socket.h"
+#include "tcp.h"
 #include "drivers/net/e1000.h"
 #include "drivers/serial/serial.h"
 #include "arch/x86_64/timer/pit.h"
@@ -33,6 +34,7 @@ void Apply(const uint8_t* address, const uint8_t* mask, const uint8_t* gateway, 
         InvalidateEcho();
         InvalidateResolve();
         InvalidateUdpSockets();
+        InvalidateTcp();
     }
 }
 

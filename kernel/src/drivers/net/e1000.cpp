@@ -6,6 +6,7 @@
 #include "net/ping.h"
 #include "net/dns.h"
 #include "net/socket.h"
+#include "net/tcp.h"
 #include "net/dhcp.h"
 #include "net/route.h"
 #include "arch/x86_64/interrupts/guard.h"
@@ -116,6 +117,7 @@ void Receive(const uint8_t* frame, uint32_t length)
 {
     ReceiveDhcp(frame, length, mac);
     if (!NetworkConfigured()) return;
+    ReceiveTcp(frame, length, mac, localIp);
     ReceiveEcho(frame, length, mac, localIp);
     ReceiveResolve(frame, length, mac, localIp);
     ReceiveUdpSockets(frame, length, mac, localIp);
@@ -253,6 +255,7 @@ void Poll()
     {
         if (!announced) SerialText("NET: no supported NIC\n");
         announced = true;
+        PollTcp(false, false, mac, localIp);
         PollEcho(false, false, mac, localIp);
         PollResolve(false, false, mac, localIp);
         PollUdpSockets(false, false, mac, localIp);
@@ -302,6 +305,7 @@ void Poll()
         ResolveNeighbor(gatewayIp, gatewayMac);
         gatewayPrimed = true;
     }
+    PollTcp(ready, linkUp && NetworkConfigured(), mac, localIp);
     PollEcho(ready, linkUp && NetworkConfigured(), mac, localIp);
     PollResolve(ready, linkUp && NetworkConfigured(), mac, localIp);
     PollUdpSockets(ready, linkUp && NetworkConfigured(), mac, localIp);

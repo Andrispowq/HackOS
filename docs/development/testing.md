@@ -1308,3 +1308,15 @@ normal QEMU network demo checks the built-in DHCP server. Existing scripted
 routing/DNS/UDP peers also supply leases; the ARP-only peer/silent checks exercise
 the explicit startup fallback. Host tests sanitize packet parsing and verify
 lease loss invalidates pending work without destroying UDP handle ownership.
+
+### TCP exchanges
+
+After fresh BIOS/UEFI builds, run `tests/qemu_tcp.py --firmware bios --image
+out/tcp/bios/HackOS.img` (and the UEFI equivalent). Repeat with `--host-echo`
+for a real loopback TCP socket through QEMU user networking. The deterministic
+peer injects loss, reordered/overlapping data and invalid ACK/RST values; the
+ring-3 probe checks copied pointers, ownership, cleanup and a 512-byte binary
+exchange. These tests require local QEMU sockets, not public Internet access.
+`tests/network.py` sanitizes the real TCP codec/state machine alongside the other
+network protocols. `make -C tests test-tcp FIRMWARE=bios IMAGE=...` runs the peer
+suite. Captures, serial logs and screenshots are written under `tests/out/tcp-*`.
