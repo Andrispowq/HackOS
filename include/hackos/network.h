@@ -20,7 +20,7 @@ enum HackosEchoState : uint32_t
 };
 
 // START copies address only; QUERY copies the entire record. CANCEL ignores it.
-// One request per process, eight globally. Static connected /24 plus default route.
+// One request per process, eight globally. Configured connected subnet plus default route.
 struct HackosEcho
 {
     uint8_t address[4];

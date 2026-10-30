@@ -16,12 +16,14 @@ python3 tools/run_qemu.py --firmware bios --image out/network/bios/HackOS.img \
 ```
 
 Use `--firmware uefi` and the corresponding UEFI image for the other boot path.
-QEMU user networking supplies the test gateway. The guest uses static address
-`10.0.2.15/24` and default gateway `10.0.2.2`. Numeric IPv4 targets on that subnet
-are resolved directly with ARP; other supported targets use the gateway's MAC
-while retaining the destination IP. Bounded UDP carries DNS queries to QEMU's resolver at `10.0.2.3`. Connected UDP endpoints are available to userspace. DHCP, TCP, configurable
-routes and stream sockets are not implemented. Diagnostics use the root-only hardware query;
-process-owned Echo requests use syscall 97 and DNS lookups use syscall 98. Connected UDP uses syscall 99.
+QEMU user networking supplies a DHCP server. The guest requests its IPv4 address,
+subnet mask, default gateway and DNS server automatically. The normal lease is
+`10.0.2.15/24`, gateway `10.0.2.2`, DNS `10.0.2.3`, but those are no longer routing
+constants. Same-subnet targets resolve directly with ARP; other supported targets
+use the supplied gateway while retaining the destination IP. Connected UDP and
+bounded DNS lookup are available. TCP and stream sockets are not implemented.
+Diagnostics use the root-only hardware query; Echo uses syscall 97, DNS lookup
+uses syscall 98 and connected UDP uses syscall 99.
 
 ## Browser demo
 
@@ -41,7 +43,7 @@ sysinfo network > /tmp/network.txt
 cat /tmp/network.txt
 ```
 
-Expect link `up`, static address `10.0.2.15`, gateway `10.0.2.2`, gateway ARP
+Expect link `up`, DHCP state `bound`, address `10.0.2.15`, gateway `10.0.2.2`, gateway ARP
 `resolved`, gateway MAC `52:55:0a:00:02:02`, and nonzero TX/RX counts. This is a
 real guest-driver exchange with QEMU's virtual gateway. The browser transports
 keyboard input and framebuffer pixels over noVNC; Ethernet frames travel through
@@ -50,7 +52,7 @@ depends on the other. `ping` sends real IPv4/ICMP Echo requests and reports the
 validated reply TTL, elapsed milliseconds and loss. Normal users may run ping;
 `sysinfo network` remains root-only.
 
-The report is a copied 128-byte hardware record (88-byte network member), with
+The report is a copied 128-byte hardware record (120-byte network member), with
 no pointers and unchanged existing section numbers. Reading it does not send
 packets or restart probing. Counters are cumulative since boot: TX counts queued
 frames, RX counts complete error-free frames accepted for protocol inspection,
@@ -160,8 +162,8 @@ status queries while idle performs bounded packet work.
 
 ## UDP and DNS
 
-`nslookup <hostname>` prints the resolver, normalized name, first IPv4 answer and
-TTL. `ping <hostname>` resolves once, prints the selected address, then uses the
+`nslookup <hostname>` prints the normalized name, first IPv4 answer and TTL.
+`sysinfo network` reports the configured DNS server. `ping <hostname>` resolves once, prints the selected address, then uses the
 existing Echo path. A successful DNS lookup does not imply the target answers
 ICMP. Both commands support normal users and stdout redirection.
 
@@ -170,7 +172,7 @@ header and no fragments/options. Userspace endpoints carry UDP payloads only;
 there is no raw Ethernet/IP interface. It emits
 UDP pseudo-header checksums and checks incoming nonzero checksums; IPv4's
 permitted zero UDP checksum is accepted. Ethernet padding is excluded using the
-IP/UDP lengths. DNS accepts only the configured server `10.0.2.3:53`, matching
+IP/UDP lengths. DNS accepts only the configured DNS server on port 53, matching
 local port, transaction ID and question. IDs and ephemeral ports (49152–65535)
 come from the existing bounded RDRAND source. Failure to obtain entropy rejects
 START; live-port collisions return RETRY. Correlation is not DNS authentication.
@@ -207,6 +209,60 @@ responses produce an explicit error instead of accepting partial data.
 
 The wire formats follow [RFC 768](https://www.rfc-editor.org/rfc/rfc768) and
 [RFC 1035](https://www.rfc-editor.org/rfc/rfc1035).
+
+## DHCP configuration and leases
+
+Link-up starts DISCOVER → OFFER → REQUEST → ACK with a random transaction ID and
+the NIC MAC/client identifier. The interface has no usable address until ACK or
+startup fallback. Acquisition sends at 0, 4 and 12 seconds, with a 28-second
+per-phase deadline. Replies must match the transaction, client MAC, UDP ports
+67→68, server identifier and source IPv4 address. A selected server's OFFER is
+not applied until its ACK arrives. Broadcast reception is enabled only in the
+DHCP parser; ordinary UDP destinations and privileged local ports remain bounded.
+
+The decoder checks BOOTP fields/cookie, lengths, critical-option duplicates,
+end markers, contiguous masks and usable addresses. It selects the first router
+and first DNS address from their option lists. Address, mask, router, DNS and a
+lease of at least eight seconds are required; unchanged mask/router/DNS options
+may be inherited from the selected lease when ACK omits them. The gateway must
+be another usable address on the leased subnet. Masks /1 through /30 are
+supported. T1/T2 default to half and seven-eighths of the lease, or use valid
+server-supplied values with `0 < T1 < T2 < lease`.
+
+At T1 the client unicasts REQUEST to the lease server, resolving its next-hop MAC
+through ARP. At T2 it broadcasts REQUEST and may accept a different server's ACK
+for the same leased address. Retries use half the remaining phase time, clamped
+to 1–60 seconds for the short leases used by this emulator. A separate ten-packet
+per-second limiter survives link changes. An ACK restarts the lease clock; the
+address remains usable while renewal/rebinding is pending. Expiry, NAK or
+link-down removes the address immediately. New discovery then begins with a
+fresh transaction ID; old replies cannot restore the expired configuration.
+
+If no valid lease has ever been acquired or NAK received during this boot,
+startup acquisition failure enables the old static QEMU values after 28 seconds.
+`sysinfo network` labels this **static fallback**, with no lease duration or DHCP
+server. Discovery is retried after 60 seconds while this fallback remains usable.
+Fallback is an emulator compatibility path, not a safe general-LAN configuration
+policy. After a real lease or valid NAK, failure leaves networking unconfigured
+until DHCP succeeds; it does not silently reuse the previous lease or defaults.
+
+Configuration changes atomically replace the address/mask/gateway/DNS records,
+clear ARP neighbors and fail pending Echo, DNS and UDP sends as unavailable.
+UDP receive queues are cleared, while process-owned handles/port bindings remain
+open and can send again after configuration succeeds. A renewal with identical
+configuration preserves active traffic. Lease durations/remaining seconds,
+renew/rebind intervals, server, DNS and phase attempts extend the network member
+to 120 bytes; the outer copied hardware record remains 128 bytes and existing
+field offsets are unchanged. Reading diagnostics never sends packets.
+
+This is a bounded emulator DHCPv4 client, not a full DHCP implementation: it uses
+one interface and one router/DNS address, accepts direct servers only (no relay
+`giaddr`), and rejects overloaded/concatenated critical options. Incoming UDP
+payloads are bounded to 548 bytes (576-byte IPv4 message), with no fragmentation
+or IP options. There is no ARP duplicate-address detection/DECLINE, RELEASE,
+persisted lease/INIT-REBOOT, manual configuration interface, DHCPv6 or DHCP
+authentication yet. The protocol follows [RFC 2131](https://www.rfc-editor.org/rfc/rfc2131)
+and [RFC 2132](https://www.rfc-editor.org/rfc/rfc2132) within these limits.
 
 ## Connected UDP endpoints
 
@@ -267,7 +323,7 @@ late datagram from the same peer, even though stale handles remain invalid.
 
 Idle services sends round-robin at up to twenty socket datagrams per second,
 independently of the existing DNS/ARP/Echo ceilings. Closing/reopening cannot
-reset the global limiter. Sends wait for static routing/ARP within their deadline;
+reset the global limiter. Sends wait for the current routing/ARP within their deadline;
 there is no retransmission after NIC submission. Link-down fails pending sends,
 while received data and open bindings remain until consumed/closed. There is no
 wildcard listening, socket inheritance, stream-descriptor/poll integration,
@@ -290,6 +346,8 @@ python3 tests/qemu_dns.py --firmware bios --image out/network/bios/HackOS.img
 python3 tests/qemu_dns.py --firmware uefi --image out/network/uefi/HackOS.img
 python3 tests/qemu_udp.py --firmware bios --image out/network/bios/HackOS.img
 python3 tests/qemu_udp.py --firmware uefi --image out/network/uefi/HackOS.img
+python3 tests/qemu_dhcp.py --firmware bios --image out/network/bios/HackOS.img
+python3 tests/qemu_dhcp.py --firmware uefi --image out/network/uefi/HackOS.img
 ```
 
 The host test compiles the real codec and checks truncated/malformed frames under
@@ -335,3 +393,11 @@ filtering, direct/routed/DNS destinations, redirection, ARP failure and no-NIC/l
 recovery. `--host-echo` uses a real loopback UDP server through QEMU user networking.
 Both modes need no external Internet access. Artifacts are in
 `tests/out/udp-<firmware>/` and `tests/out/udp-<firmware>-host/`.
+
+`qemu_dhcp.py` supplies a non-default /25 lease and checks the actual source
+address, direct/routed destination MACs, configured DNS, UDP, renewal, broadcast
+rebinding, expiry, NAK, malformed/stale offers and link recovery on both firmware
+paths. Shared virtual peers provide DHCP to the older routing/DNS/UDP suites.
+Artifacts are saved under `tests/out/dhcp-<firmware>/`. Host sanitizer tests also
+cover startup fallback, prefix routing, malformed options and outstanding-request
+invalidation at lease loss.

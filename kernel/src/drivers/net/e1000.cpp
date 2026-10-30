@@ -6,6 +6,7 @@
 #include "net/ping.h"
 #include "net/dns.h"
 #include "net/socket.h"
+#include "net/dhcp.h"
 #include "net/route.h"
 #include "arch/x86_64/interrupts/guard.h"
 
@@ -47,6 +48,7 @@ alignas(4096) uint8_t receiveBuffers[Count][BufferSize];
 alignas(4096) uint8_t transmitBuffers[Count][BufferSize];
 volatile uint32_t* registers;
 uint32_t nextRx, nextTx;
+uint64_t observedConfiguration;
 bool ready, announced, linkUp, dropping, gatewayPrimed;
 uint8_t mac[6];
 uint64_t txFrames, rxFrames, txDropped, rxDropped, arpReplies;
@@ -112,6 +114,8 @@ bool Send(const uint8_t* frame, uint32_t length)
 
 void Receive(const uint8_t* frame, uint32_t length)
 {
+    ReceiveDhcp(frame, length, mac);
+    if (!NetworkConfigured()) return;
     ReceiveEcho(frame, length, mac, localIp);
     ReceiveResolve(frame, length, mac, localIp);
     ReceiveUdpSockets(frame, length, mac, localIp);
@@ -133,7 +137,9 @@ void Receive(const uint8_t* frame, uint32_t length)
         auto gateway = InspectNeighbor(gatewayIp);
         if (before != NeighborState::Resolved && gateway.state == NeighborState::Resolved)
         {
-            SerialText("NET: ARP gateway 10.0.2.2 resolved ");
+            SerialText("NET: ARP gateway ");
+            PrintNetworkAddress(gatewayIp);
+            SerialText(" resolved ");
             PrintMac(gateway.mac);
         }
     }
@@ -258,9 +264,10 @@ void Poll()
         SerialText(currentLink ? "NET: link up\n" : "NET: link down\n");
         announced = true;
         linkUp = currentLink;
-        ResetNeighbors();
+        DhcpLink(linkUp, mac);
         gatewayPrimed = false;
     }
+    PollDhcp(mac);
     // Never monopolize idle, even when the host continuously supplies frames.
     for (unsigned work = 0; work < Count; ++work)
     {
@@ -284,15 +291,20 @@ void Poll()
         Write(RDT, nextRx);
         nextRx = (nextRx + 1) % Count;
     }
-    if (linkUp && !gatewayPrimed)
+    if (observedConfiguration != ConfigurationGeneration)
+    {
+        observedConfiguration = ConfigurationGeneration;
+        gatewayPrimed = false;
+    }
+    if (linkUp && NetworkConfigured() && !gatewayPrimed)
     {
         uint8_t gatewayMac[6];
         ResolveNeighbor(gatewayIp, gatewayMac);
         gatewayPrimed = true;
     }
-    PollEcho(ready, linkUp, mac, localIp);
-    PollResolve(ready, linkUp, mac, localIp);
-    PollUdpSockets(ready, linkUp, mac, localIp);
+    PollEcho(ready, linkUp && NetworkConfigured(), mac, localIp);
+    PollResolve(ready, linkUp && NetworkConfigured(), mac, localIp);
+    PollUdpSockets(ready, linkUp && NetworkConfigured(), mac, localIp);
     if (linkUp) PollNeighbors(mac);
 }
 
@@ -323,6 +335,7 @@ void Snapshot(HackosHardwareInfo& info)
     network.rxDropped = rxDropped;
     network.arpReplies = arpReplies;
     network.neighbors = NeighborCount();
+    SnapshotDhcp(info);
 }
 
 }

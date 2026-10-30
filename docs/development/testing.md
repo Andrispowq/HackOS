@@ -1297,3 +1297,14 @@ child exit cleanup, FIFO overflow, stale handles and network failure paths.
 `qemu_udp.py --host-echo` additionally checks a real loopback echo peer through
 QEMU user networking, without Internet access. The host networking sanitizer
 suite covers global pool exhaustion, send deadlines and rate limiting.
+
+### DHCP lease lifecycle
+
+`make -C tests test-dhcp FIRMWARE=bios IMAGE=../out/dhcp/bios/HackOS.img`
+(and the UEFI equivalent) checks a non-default /25 lease, DNS and routed traffic,
+renewal, rebinding, expiry, NAK, stale/malformed offers and link reacquisition.
+The loopback peer uses short leases and validates actual packet addresses. The
+normal QEMU network demo checks the built-in DHCP server. Existing scripted
+routing/DNS/UDP peers also supply leases; the ARP-only peer/silent checks exercise
+the explicit startup fallback. Host tests sanitize packet parsing and verify
+lease loss invalidates pending work without destroying UDP handle ownership.

@@ -12,7 +12,7 @@ namespace Net
 {
 namespace
 {
-const uint8_t server[4] = {10, 0, 2, 3};
+const uint8_t* server = DnsAddress;
 struct Lookup
 {
     uint64_t owner, started, lastAttempt, finished;
@@ -163,6 +163,21 @@ void ReceiveResolve(const uint8_t* frame, unsigned length, const uint8_t* mac, c
             lookup.finished = tick;
         }
         return;
+    }
+}
+}
+
+namespace Net
+{
+void InvalidateResolve()
+{
+    for (auto& lookup : lookups)
+    {
+        if (lookup.owner && lookup.result.state == HACKOS_RESOLVE_PENDING)
+        {
+            lookup.result.state = HACKOS_RESOLVE_UNAVAILABLE;
+            lookup.finished = tick;
+        }
     }
 }
 }

@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """Bounded DNS/UDP and hostname ping against a deterministic virtual DNS server."""
 import argparse
+from dhcp_peer import wait_serial
 from pathlib import Path
 import shutil
 import struct
@@ -34,6 +35,8 @@ class DnsRouter(Router):
         self.send(GUEST_MAC + SERVER_MAC + b'\x08\0' + ip + udp)
 
     def handle(self, frame):
+        if len(frame) >= 42 and frame[12:14] == b'\x08\0' and frame[23] == 17 and frame[34:38] == b'\0\x44\0\x43':
+            return super().handle(frame)
         if frame[12:14] == b'\x08\x06' and frame[20:22] == b'\0\1' and frame[38:42] == SERVER:
             reply = GUEST_MAC + SERVER_MAC + bytes.fromhex('08060001080006040002') + SERVER_MAC + SERVER + GUEST_MAC + LOCAL
             self.send(reply.ljust(60, b'\0'))
@@ -127,7 +130,9 @@ def test(firmware, image, timeout, internet):
                     guest.shell('nslookup ' + name, 'invalid hostname')
                 guest.qmp.call('set_link', {'name': 'net0', 'up': False})
                 guest.shell('nslookup demo.test', 'network unavailable')
+                offset = len(guest.serial.read_text(errors="replace"))
                 guest.qmp.call('set_link', {'name': 'net0', 'up': True})
+                wait_serial(guest, 'NET: DHCP lease bound', offset)
                 guest.shell('nslookup demo.test', 'Address: 198.51.100.9')
         if router:
             assert router.failure is None, repr(router.failure)

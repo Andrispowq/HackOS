@@ -72,15 +72,21 @@ unsigned BuildUdp(uint8_t* frame, const uint8_t* mac, const uint8_t* peerMac,
     return length;
 }
 
-bool ParseUdp(const uint8_t* frame, unsigned length, const uint8_t* mac, const uint8_t* ip, UdpPacket& packet)
+bool ParseUdp(const uint8_t* frame, unsigned length, const uint8_t* mac, const uint8_t* ip, UdpPacket& packet, bool bootstrap)
 {
     if (!frame || length < 42 || length > 1514) return false;
-    if (!EqualBytes(frame, mac, 6) || frame[12] != 8 || frame[13]) return false;
+    static const uint8_t broadcastMac[6] = {255,255,255,255,255,255};
+    static const uint8_t broadcastIp[4] = {255,255,255,255};
+    if ((!EqualBytes(frame, mac, 6) && !(bootstrap && EqualBytes(frame, broadcastMac, 6))) ||
+        frame[12] != 8 || frame[13])
+    {
+        return false;
+    }
     const uint8_t* header = frame + 14;
     unsigned total = Read16(header + 2);
-    if (header[0] != 0x45 || total < 28 || total > 28 + UdpDataMax || total > length - 14 ||
+    if (header[0] != 0x45 || total < 28 || total > 28 + (bootstrap ? 548 : UdpDataMax) || total > length - 14 ||
         (Read16(header + 6) & 0xbfff) || !header[8] || header[9] != 17 ||
-        InternetChecksum(header, 20) || !EqualBytes(header + 16, ip, 4))
+        InternetChecksum(header, 20) || (!EqualBytes(header + 16, ip, 4) && !(bootstrap && EqualBytes(header + 16, broadcastIp, 4))))
     {
         return false;
     }

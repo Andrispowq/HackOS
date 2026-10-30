@@ -179,3 +179,18 @@ void PollEcho(bool ready, bool link, const uint8_t* mac, const uint8_t* ip)
     }
 }
 }
+
+namespace Net
+{
+void InvalidateEcho()
+{
+    for (auto& request : requests)
+    {
+        if (request.owner && request.result.state == HACKOS_ECHO_PENDING)
+        {
+            request.result.state = HACKOS_ECHO_UNAVAILABLE;
+            request.finished = tick;
+        }
+    }
+}
+}

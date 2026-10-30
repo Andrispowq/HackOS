@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """Process-owned UDP endpoints: real guest ABI, datagram queues and a host echo demo."""
 import argparse
+from dhcp_peer import wait_serial
 from pathlib import Path
 import shutil
 import socket
@@ -27,6 +28,8 @@ class UdpRouter(DnsRouter):
         self.send((GUEST_MAC + frame[:6] + b'\x08\0' + ip + udp).ljust(60, b'\0'))
 
     def handle(self, frame):
+        if len(frame) >= 42 and frame[12:14] == b'\x08\0' and frame[23] == 17 and frame[34:38] == b'\0\x44\0\x43':
+            return super().handle(frame)
         if frame[12:14] != b'\x08\0' or frame[23] != 17 or frame[36:38] == b'\0\x35':
             return super().handle(frame)
         target = frame[30:34]
@@ -118,7 +121,9 @@ def test(firmware, image, timeout, host_echo):
                 guest.shell('cat /tmp/udp.txt', 'Received 10 bytes: redirected')
                 guest.qmp.call('set_link', {'name': 'net0', 'up': False})
                 guest.shell('udp 10.0.2.2 7777 offline', 'network unavailable')
+                offset = len(guest.serial.read_text(errors="replace"))
                 guest.qmp.call('set_link', {'name': 'net0', 'up': True})
+                wait_serial(guest, 'NET: DHCP lease bound', offset)
                 guest.shell('udp 10.0.2.2 7777 restored', 'Received 8 bytes: restored')
         if not host_echo:
             assert router.failure is None, repr(router.failure)

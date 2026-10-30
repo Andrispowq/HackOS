@@ -1,12 +1,14 @@
 #!/usr/bin/env python3
 """Deterministic on-link and routed ICMP against a loopback-only virtual peer."""
 import argparse
+from dhcp_peer import wait_serial
 from pathlib import Path
 import shutil
 import socket
 import struct
 import threading
 from common import OUT
+from dhcp_peer import DhcpPeer
 from qemu_accounts import boot, ADMIN_PASSWORD
 
 LOCAL = bytes([10, 0, 2, 15])
@@ -37,6 +39,7 @@ def ipv4(source, destination, data):
 
 class Router:
     def __init__(self):
+        self.dhcp = DhcpPeer()
         self.listener = socket.socket()
         self.listener.bind(('127.0.0.1', 0))
         self.listener.listen(1)
@@ -54,6 +57,8 @@ class Router:
         self.connection.sendall(struct.pack('!I', len(frame)) + frame)
 
     def handle(self, frame):
+        if self.dhcp.handle(self.send, frame):
+            return
         assert len(frame) >= 14
         if frame[12:14] == b'\x08\x06':
             assert len(frame) >= 42
@@ -168,7 +173,9 @@ def test(firmware, image, timeout):
             before = len(router.arp)
             guest.qmp.call('set_link', {'name': 'net0', 'up': False})
             guest.shell('ping -c 1 10.0.2.99', 'network unavailable')
+            offset = len(guest.serial.read_text(errors="replace"))
             guest.qmp.call('set_link', {'name': 'net0', 'up': True})
+            wait_serial(guest, 'NET: DHCP lease bound', offset)
             guest.shell('ping -c 1 10.0.2.99', '1 probes, 1 received, 0% loss')
             assert NEIGHBOR in router.arp[before:]
         assert router.failure is None, repr(router.failure)

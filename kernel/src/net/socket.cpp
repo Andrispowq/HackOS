@@ -243,3 +243,24 @@ void ReceiveUdpSockets(const uint8_t* frame, unsigned length, const uint8_t* mac
     }
 }
 }
+
+namespace Net
+{
+void InvalidateUdpSockets()
+{
+    for (auto& socket : sockets)
+    {
+        if (!socket.owner) continue;
+        socket.head = socket.count = 0;
+        for (auto& message : socket.receive)
+        {
+            message = {};
+        }
+        if (socket.state == HACKOS_UDP_PENDING)
+        {
+            socket.state = HACKOS_UDP_UNAVAILABLE;
+            socket.transmit = {};
+        }
+    }
+}
+}

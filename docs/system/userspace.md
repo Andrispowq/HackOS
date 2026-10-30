@@ -852,7 +852,7 @@ PID, never retains user pointers and does not grant raw packet access. Start,
 query and cancel operations support one request per process, eight globally,
 with three-second deadlines and ten-second completed-result retention. Process
 reclamation cancels outstanding requests. See [networking](networking.md) for
-status values, validation, rate limits, static routing and the TTL/error-code union.
+status values, validation, rate limits, configured routing and the TTL/error-code union.
 
 
 ## Bounded DNS lookup
@@ -878,3 +878,11 @@ pending send and four received datagrams of up to 512 bytes. Calls are nonblocki
 userspace can sleep between retries. These handles are separate from file/pipe
 descriptors and do not yet participate in `poll`. See
 [networking](networking.md#connected-udp-endpoints) for ports, states and limitations.
+
+
+DHCP changes require no new syscall. The hardware network member is now 120 bytes
+inside the existing 128-byte record, with DNS/DHCP server addresses, state,
+lease/remaining seconds, T1/T2 and attempt count appended after the old fields.
+Configuration loss/change fails pending network work and clears UDP receive
+queues; socket handles remain owned and valid. Identical-configuration renewals
+preserve active traffic. See [DHCP](networking.md#dhcp-configuration-and-leases).

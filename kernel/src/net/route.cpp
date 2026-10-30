@@ -5,9 +5,11 @@
 
 namespace Net
 {
-const uint8_t LocalAddress[4] = {10, 0, 2, 15};
-const uint8_t SubnetMask[4] = {255, 255, 255, 0};
-const uint8_t GatewayAddress[4] = {10, 0, 2, 2};
+uint8_t LocalAddress[4] = {10, 0, 2, 15};
+uint8_t SubnetMask[4] = {255, 255, 255, 0};
+uint8_t GatewayAddress[4] = {10, 0, 2, 2};
+uint8_t DnsAddress[4] = {10, 0, 2, 3};
+uint64_t ConfigurationGeneration;
 namespace
 {
 struct Neighbor
@@ -66,11 +68,18 @@ bool NextHop(const uint8_t* destination, uint8_t* hop)
     {
         return false;
     }
-    bool local = OnLink(destination);
-    if (local && (destination[3] == 0 || destination[3] == 255)) return false;
+    bool local = NetworkConfigured() && OnLink(destination);
+    bool network = true, broadcast = true;
     for (unsigned i = 0; i < 4; ++i)
     {
-        hop[i] = local ? destination[i] : GatewayAddress[i];
+        uint8_t host = destination[i] & (uint8_t)~SubnetMask[i];
+        network = network && !host;
+        broadcast = broadcast && host == (uint8_t)~SubnetMask[i];
+    }
+    if (local && (network || broadcast)) return false;
+    for (unsigned i = 0; i < 4; ++i)
+    {
+        hop[i] = local || !NetworkConfigured() ? destination[i] : GatewayAddress[i];
     }
     return true;
 }
@@ -93,7 +102,7 @@ NeighborInfo InspectNeighbor(const uint8_t* address)
 NeighborState ResolveNeighbor(const uint8_t* address, uint8_t* mac)
 {
     uint8_t hop[4];
-    if (!NextHop(address, hop) || !EqualBytes(address, hop, 4)) return NeighborState::Failed;
+    if (!NetworkConfigured() || !NextHop(address, hop) || !EqualBytes(address, hop, 4)) return NeighborState::Failed;
     auto* neighbor = Find(address);
     if (!neighbor)
     {
@@ -181,7 +190,12 @@ void PollNeighbors(const uint8_t* localMac)
         {
             ++neighbor.attempts;
             neighbor.lastAttempt = tick;
-            if (EqualBytes(neighbor.address, GatewayAddress, 4)) SerialText("NET: ARP probe 10.0.2.2\n");
+            if (EqualBytes(neighbor.address, GatewayAddress, 4))
+            {
+                SerialText("NET: ARP probe ");
+                PrintNetworkAddress(GatewayAddress);
+                SerialText("\n");
+            }
         }
         break;
     }
@@ -205,5 +219,50 @@ unsigned NeighborCount()
         if (neighbor.state == NeighborState::Resolved) ++count;
     }
     return count;
+}
+}
+
+namespace Net
+{
+bool NetworkConfigured()
+{
+    return LocalAddress[0] != 0;
+}
+
+void ConfigureNetwork(const uint8_t* address, const uint8_t* mask, const uint8_t* gateway, const uint8_t* dns)
+{
+    if (EqualBytes(address, LocalAddress, 4) && EqualBytes(mask, SubnetMask, 4) &&
+        EqualBytes(gateway, GatewayAddress, 4) && EqualBytes(dns, DnsAddress, 4))
+    {
+        return;
+    }
+    for (unsigned i = 0; i < 4; ++i)
+    {
+        LocalAddress[i] = address[i];
+        SubnetMask[i] = mask[i];
+        GatewayAddress[i] = gateway[i];
+        DnsAddress[i] = dns[i];
+    }
+    ++ConfigurationGeneration;
+    ResetNeighbors();
+}
+}
+
+namespace Net
+{
+void PrintNetworkAddress(const uint8_t* address)
+{
+    char text[16];
+    unsigned at = 0;
+    for (unsigned i = 0; i < 4; ++i)
+    {
+        unsigned value = address[i];
+        if (value >= 100) text[at++] = '0' + value / 100;
+        if (value >= 10) text[at++] = '0' + (value / 10) % 10;
+        text[at++] = '0' + value % 10;
+        if (i < 3) text[at++] = '.';
+    }
+    text[at] = 0;
+    SerialText(text);
 }
 }

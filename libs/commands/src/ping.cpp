@@ -4,7 +4,7 @@
 int main(int argc, char** argv)
 {
     const char* usage = "Usage: ping [-c 1..10] <IPv4-address|hostname>\n"
-                        "IPv4/ICMP with static 10.0.2.0/24 and default gateway 10.0.2.2.\n"
+                        "IPv4/ICMP using the current network configuration.\n"
                         "Default: 4 probes, 32 data bytes, 3-second timeout.\n";
     unsigned count = 4;
     const char* target = argc == 2 ? argv[1] : nullptr;

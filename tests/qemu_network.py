@@ -56,6 +56,8 @@ def exercise_peer(connection, serial):
     def send(data):
         connection.sendall(struct.pack('!I', len(data)) + data)
     request = read_frame(connection)
+    while request[12:14] != b'\x08\x06':
+        request = read_frame(connection)
     assert request[12:22] == bytes.fromhex('08060001080006040001')
     # Keep a small window outstanding so slow TCG idle polling does not turn
     # this into forty separate boot-scale waits. Retry dropped frames, while

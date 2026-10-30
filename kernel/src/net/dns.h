@@ -3,6 +3,7 @@
 
 namespace Net
 {
+void InvalidateResolve();
 unsigned BuildDns(uint8_t* data, const char* name, uint16_t id);
 // False means malformed/unrelated. A true result carries a terminal resolver state.
 bool ParseDns(const uint8_t* data, unsigned size, uint16_t id, const char* name, HackosResolve& result);

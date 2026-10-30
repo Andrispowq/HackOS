@@ -165,3 +165,7 @@ test-dns:
 .PHONY: test-udp
 test-udp:
 	$(PYTHON) qemu_udp.py --firmware $(FIRMWARE) --image $(IMAGE)
+
+.PHONY: test-dhcp
+test-dhcp:
+	$(PYTHON) qemu_dhcp.py --firmware $(FIRMWARE) --image $(IMAGE)

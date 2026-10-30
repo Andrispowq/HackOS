@@ -3,6 +3,7 @@
 
 namespace Net
 {
+void InvalidateEcho();
 uint64_t EchoControl(uint64_t pid, uint64_t operation, HackosEcho& record);
 void CancelEcho(uint64_t pid);
 // Driver calls these under its preemption guard; no allocation or blocking.

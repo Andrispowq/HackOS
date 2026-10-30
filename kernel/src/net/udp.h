@@ -15,5 +15,5 @@ struct UdpPacket
 unsigned BuildUdp(uint8_t* frame, const uint8_t* mac, const uint8_t* peerMac,
                   const uint8_t* ip, const uint8_t* peerIp, uint16_t sourcePort,
                   uint16_t destinationPort, const uint8_t* data, unsigned size);
-bool ParseUdp(const uint8_t* frame, unsigned length, const uint8_t* mac, const uint8_t* ip, UdpPacket& packet);
+bool ParseUdp(const uint8_t* frame, unsigned length, const uint8_t* mac, const uint8_t* ip, UdpPacket& packet, bool bootstrap = false);
 }

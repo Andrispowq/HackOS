@@ -114,12 +114,15 @@ Experimental networking supports one QEMU E1000 (`8086:100e`) with bounded
 idle polling, Ethernet/ARP and a bounded IPv4/ICMP Echo client. Compose/noVNC enables it by default; the direct
 runner enables it with `--network`. Root-only `sysinfo network` exposes copied
 link/ARP state and packet counters through the existing hardware query;
-static test addresses are `10.0.2.15` and gateway `10.0.2.2`. Normal-user `ping [-c 1..10] <IPv4-address|hostname>` uses process-owned syscall 97 records,
-with eight global slots, three-second deadlines and cleanup on exit. Static /24 routing and a default gateway use a 16-entry ARP cache; ICMP errors
-are correlated to pending requests. Bounded internal UDP supports DNS through 10.0.2.3 via process-owned syscall 98
+DHCP normally leases `10.0.2.15/24`, gateway `10.0.2.2` and DNS `10.0.2.3`. Normal-user `ping [-c 1..10] <IPv4-address|hostname>` uses process-owned syscall 97 records,
+with eight global slots, three-second deadlines and cleanup on exit. Leased-prefix routing and a default gateway use a 16-entry ARP cache; ICMP errors
+are correlated to pending requests. Bounded internal UDP supports the configured DNS server via process-owned syscall 98
 (272-byte records, eight slots, five-second deadlines). `nslookup` and hostname
-`ping` support A answers and bounded same-response CNAME chains. No DHCP, TCP,
-configurable routes or stream sockets exist yet. Connected UDP syscall 99 uses
+`ping` support A answers and bounded same-response CNAME chains. DHCP supports acquisition, renewal/rebinding and expiry/NAK/link recovery; root
+`sysinfo network` reports the lease in a 120-byte member of the unchanged 128-byte
+hardware record. Startup-only static QEMU fallback is explicitly labelled.
+Configuration changes invalidate pending traffic and clear UDP receive queues.
+No TCP, manual configuration or stream sockets exist yet. Connected UDP syscall 99 uses
 544-byte records, sixteen endpoints (four per PID), 512-byte payloads and four
 receive slots per endpoint. Handles are private and reclaimed on exit; failed
 receive copies do not consume packets. `udp` demonstrates a send/reply exchange;

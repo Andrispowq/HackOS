@@ -3,6 +3,7 @@
 
 namespace Net
 {
+void InvalidateUdpSockets();
 uint64_t UdpControl(uint64_t pid, uint64_t operation, uint64_t handle, HackosDatagram& record);
 // RECEIVE peeks; dispatcher commits only after a successful user copy, under its guard.
 void ConsumeUdp(uint64_t pid, uint64_t handle);

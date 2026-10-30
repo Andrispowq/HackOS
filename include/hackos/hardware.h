@@ -82,6 +82,8 @@ union HackosHardwareInfo
         uint64_t txFrames, rxFrames, txDropped, rxDropped, arpReplies;
         uint8_t netmask[4];
         uint32_t neighbors;
+        uint8_t dns[4], dhcpServer[4];
+        uint32_t dhcpState, leaseSeconds, remainingSeconds, renewSeconds, rebindSeconds, dhcpAttempts;
     } network;
 
     uint8_t bytes[128];
@@ -98,4 +100,15 @@ enum HackosArpState : uint32_t
 };
 
 static_assert(__builtin_offsetof(HackosHardwareInfo, network.txFrames) == 40, "network counters ABI");
-static_assert(sizeof(((HackosHardwareInfo*)0)->network) == 88, "network snapshot ABI");
+static_assert(sizeof(((HackosHardwareInfo*)0)->network) == 120, "network snapshot ABI");
+
+enum HackosDhcpState : uint32_t
+{
+    HACKOS_DHCP_DOWN,
+    HACKOS_DHCP_SELECTING,
+    HACKOS_DHCP_REQUESTING,
+    HACKOS_DHCP_BOUND,
+    HACKOS_DHCP_RENEWING,
+    HACKOS_DHCP_REBINDING,
+    HACKOS_DHCP_FALLBACK
+};

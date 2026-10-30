@@ -48,7 +48,9 @@ for larger text, and `terminal reset` to restore the default size and colours.
 Settings clear the visible console and require foreground ownership.
 Tab completes commands and paths. Ctrl+Z stops a foreground job; `jobs`, `fg`,
 `bg`, `wait` and `kill %job` manage its process group.
-Compose also starts a container-loopback UDP echo helper. Try
+Networking obtains its IPv4 address, gateway and DNS through DHCP.
+`sysinfo network` shows lease state; startup failure uses a labelled static QEMU
+fallback after 28 seconds. Compose also starts a container-loopback UDP echo helper. Try
 `udp 10.0.2.2 7777 "hello from HackOS"` for a complete datagram exchange.
 No additional host port is exposed. Direct runs can opt in with
 `--network --udp-demo` on `tools/run_qemu.py`.

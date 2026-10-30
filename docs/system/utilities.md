@@ -237,7 +237,7 @@ on the executable's filename or file permissions.
 | `usb` | USB-class PCI controllers with interface and driver status |
 | `ps2` | Keyboard IRQ registration/layout, mouse enable result and negotiated packet/wheel protocol; aliases `ps/2`, `pc/2` |
 | `display` | Boot framebuffer dimensions, bit depth and scanline pitch |
-| `network` | E1000 availability/link, static ARP addresses, resolved gateway MAC and bounded packet counters |
+| `network` | E1000 availability/link, leased/fallback addresses, DHCP state, resolved gateway MAC and bounded packet counters |
 | `acpi` | Root table entries with signatures, revisions, sizes and OEM identifiers |
 
 Reports use aligned ASCII headings/columns without terminal escape sequences.
@@ -272,7 +272,8 @@ are left aligned, numeric IDs/sizes right aligned, and hardware identifiers use
 zero-padded hexadecimal. `ps` prints PID, PPID, PGID, UID, GID, state and name.
 
 `sysinfo network` shows the experimental Ethernet/ARP state and is also included
-in `sysinfo full`. It retains root-only authorization and supports redirection.
+in `sysinfo full`. It retains root-only authorization and supports redirection. It also reports
+DHCP state, server, DNS address, lease duration/remaining time and T1/T2 intervals.
 See [networking](networking.md) for a noVNC demo and counter definitions.
 
 ### ping
@@ -282,16 +283,14 @@ is four probes with 32 data bytes and a three-second deadline each. Replies show
 TTL and elapsed milliseconds at PIT resolution; the summary shows received
 probes and loss. Exit status is 0 when every probe succeeds, 1 for loss,
 unavailable networking, busy request slots or output errors, and 2 for invalid
-arguments. Supports stdout redirection. Numeric targets use static 10.0.2.15/24
-and gateway 10.0.2.2; hostnames first use a five-second DNS lookup. ARP failure, destination unreachable
+arguments. Supports stdout redirection. Numeric targets use the current leased or fallback address and gateway; hostnames first use a five-second DNS lookup. ARP failure, destination unreachable
 and time exceeded are reported separately from timeout. External ICMP depends
 on the QEMU backend and host. See
 [networking](networking.md) for the API and limits.
 
 ### nslookup
 
-`nslookup <hostname>` resolves an ASCII hostname through QEMU's DNS server at
-10.0.2.3. It prints the normalized name, first IPv4 address and TTL, and supports
+`nslookup <hostname>` resolves an ASCII hostname through the configured DNS server. It prints the normalized name, first IPv4 address and TTL, and supports
 stdout redirection. Any user may run it. Exit status is 0 on success, 1 for an
 invalid name, lookup/output failure, and 2 for an invalid argument count. DNS
 errors, truncation and timeouts are reported separately. See
