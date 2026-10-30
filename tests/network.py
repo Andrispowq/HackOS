@@ -18,7 +18,8 @@ with tempfile.TemporaryDirectory(prefix='hackos-net-host-') as directory:
                     str(ROOT / 'tests/host/network.cpp'), str(ROOT / 'tests/host/icmp.cpp'), str(ROOT / 'tests/host/route.cpp'),
                     str(ROOT / 'kernel/src/net/route.cpp'),
                     str(ROOT / 'tests/host/dns.cpp'), str(ROOT / 'kernel/src/net/dns.cpp'),
-                    str(ROOT / 'kernel/src/net/udp.cpp'), str(ROOT / 'kernel/src/net/resolve.cpp'),
+                    str(ROOT / 'kernel/src/net/udp.cpp'), str(ROOT / 'kernel/src/net/socket.cpp'),
+                    str(ROOT / 'tests/host/udp_socket.cpp'), str(ROOT / 'kernel/src/net/resolve.cpp'),
                     str(ROOT / 'kernel/src/net/icmp.cpp'), str(ROOT / 'kernel/src/net/ping.cpp'), str(ROOT / 'kernel/src/net/arp.cpp'),
                     '-o', str(binary)], check=True, timeout=120)
     subprocess.run([str(binary)], check=True, timeout=30)

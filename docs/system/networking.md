@@ -19,9 +19,9 @@ Use `--firmware uefi` and the corresponding UEFI image for the other boot path.
 QEMU user networking supplies the test gateway. The guest uses static address
 `10.0.2.15/24` and default gateway `10.0.2.2`. Numeric IPv4 targets on that subnet
 are resolved directly with ARP; other supported targets use the gateway's MAC
-while retaining the destination IP. Bounded UDP carries DNS queries to QEMU's resolver at `10.0.2.3`. DHCP, TCP, configurable routes and general-purpose
-sockets are not implemented. Diagnostics use the root-only hardware query;
-process-owned Echo requests use syscall 97 and DNS lookups use syscall 98.
+while retaining the destination IP. Bounded UDP carries DNS queries to QEMU's resolver at `10.0.2.3`. Connected UDP endpoints are available to userspace. DHCP, TCP, configurable
+routes and stream sockets are not implemented. Diagnostics use the root-only hardware query;
+process-owned Echo requests use syscall 97 and DNS lookups use syscall 98. Connected UDP uses syscall 99.
 
 ## Browser demo
 
@@ -35,6 +35,7 @@ ping 10.0.2.2
 ping -c 2 10.0.2.2
 nslookup example.com
 ping -c 2 example.com
+udp 10.0.2.2 7777 "hello from HackOS"
 sysinfo network
 sysinfo network > /tmp/network.txt
 cat /tmp/network.txt
@@ -165,7 +166,8 @@ existing Echo path. A successful DNS lookup does not imply the target answers
 ICMP. Both commands support normal users and stdout redirection.
 
 The internal UDP codec supports up to 512 payload bytes, with a 20-byte IPv4
-header, no fragments/options and no raw userspace packet interface. It emits
+header and no fragments/options. Userspace endpoints carry UDP payloads only;
+there is no raw Ethernet/IP interface. It emits
 UDP pseudo-header checksums and checks incoming nonzero checksums; IPv4's
 permitted zero UDP checksum is accepted. Ethernet padding is excluded using the
 IP/UDP lengths. DNS accepts only the configured server `10.0.2.3:53`, matching
@@ -206,6 +208,72 @@ responses produce an explicit error instead of accepting partial data.
 The wire formats follow [RFC 768](https://www.rfc-editor.org/rfc/rfc768) and
 [RFC 1035](https://www.rfc-editor.org/rfc/rfc1035).
 
+## Connected UDP endpoints
+
+`udp <IPv4-address|hostname> <port> <message>` sends one datagram and displays
+one reply, escaping binary/control bytes as `\xNN`. Quote messages containing
+spaces. Empty messages and payloads up to 512 bytes are supported. Name lookup
+uses the existing resolver. Exit status is 0 for a received reply and successful
+output, 1 for a network/lookup/output failure, and 2 for invalid command arguments.
+The command polls with scheduler sleeps: up to 200 send-status polls and 150
+receive polls at 20 ms intervals. The kernel enforces a separate three-second
+send deadline. A receive timeout does not imply that the peer failed to receive
+or act on the sent message. UDP provides no delivery, ordering or duplicate
+suppression guarantees.
+
+Compose starts a development-only echo helper bound to `127.0.0.1:7777` inside
+the container, reachable from the guest as `10.0.2.2:7777`. It returns exactly the
+received bytes, including empty datagrams; oversized messages are discarded.
+No Docker UDP port is published. For a direct run, add `--network --udp-demo`
+to `tools/run_qemu.py`; the helper runs on the host loopback interface instead.
+It is stopped with QEMU. Omit `--udp-demo` when supplying your own peer.
+
+Syscall 99 `udp(operation, handle, HackosDatagram*)` is available to normal users:
+
+- OPEN copies the peer IPv4 address, nonzero peer port and optional local port.
+  The handle argument must be zero. Success returns a new positive handle;
+  existing handles are never reused. Local ports 1024–49151 can be requested;
+  zero selects a free port in 32768–49151. Bindings are exclusive, including
+  across processes. Ports 49152–65535 remain reserved for the internal resolver.
+- SEND copies `size` and up to 512 payload bytes to the endpoint's single pending
+  transmit slot. It returns zero when queued, RETRY while that slot is pending,
+  or ERROR for an invalid size/pointer. Peer fields in this record cannot retarget
+  the endpoint. A zero-byte datagram is valid.
+- STATUS copies peer/local ports, last send state, queued receive count, dropped
+  receive count and successfully queued NIC transmission count. Its payload is
+  zero. Send states are idle, pending, sent, timeout, unavailable and ARP failure.
+  SENT means queued to the NIC, not acknowledged by the peer.
+- RECEIVE copies one complete datagram from the oldest receive slot. An empty
+  queue returns RETRY. A bad output pointer leaves the datagram queued: dequeue
+  occurs only after successful copying, under the same dispatcher guard. The
+  returned queue count is the count before dequeue. Unused payload bytes are zero.
+- CLOSE ignores the pointer and releases the endpoint and all queued data.
+
+The fixed record is 544 bytes: address[4], two 16-bit ports, four 32-bit fields
+(size/state/queued/dropped), 64-bit sent count, and data[512] at offset 32.
+Input/output buffers are copied in full; no user pointers are retained. A foreign,
+closed or unknown handle returns NOT_FOUND. Invalid operations on a valid handle
+return ERROR. OPEN returns RETRY for per-process/global exhaustion or an occupied
+port. Reserved/invalid local ports and unsupported destination addresses return
+ERROR. Sockets belong to PIDs, are not inherited and are reclaimed on exit.
+
+There are sixteen endpoints globally, at most four per process. Each owns one
+512-byte send slot and a four-datagram receive FIFO in permanent bounded kernel
+storage. A full receive FIFO drops the newest datagram and increments a saturating
+counter. Only packets from the configured peer address and port, sent to that
+endpoint's local port, enter its FIFO. DNS ports cannot collide with endpoints.
+UDP has no generation field on the wire: reopening a local port can receive a
+late datagram from the same peer, even though stale handles remain invalid.
+
+Idle services sends round-robin at up to twenty socket datagrams per second,
+independently of the existing DNS/ARP/Echo ceilings. Closing/reopening cannot
+reset the global limiter. Sends wait for static routing/ARP within their deadline;
+there is no retransmission after NIC submission. Link-down fails pending sends,
+while received data and open bindings remain until consumed/closed. There is no
+wildcard listening, socket inheritance, stream-descriptor/poll integration,
+broadcast/multicast/loopback, fragmentation, or ICMP error delivery to UDP sockets
+yet. These are connected datagram endpoints, not POSIX sockets.
+
 ## Validation
 
 ```sh
@@ -220,6 +288,8 @@ python3 tests/qemu_routing.py --firmware bios --image out/network/bios/HackOS.im
 python3 tests/qemu_routing.py --firmware uefi --image out/network/uefi/HackOS.img
 python3 tests/qemu_dns.py --firmware bios --image out/network/bios/HackOS.img
 python3 tests/qemu_dns.py --firmware uefi --image out/network/uefi/HackOS.img
+python3 tests/qemu_udp.py --firmware bios --image out/network/bios/HackOS.img
+python3 tests/qemu_udp.py --firmware uefi --image out/network/uefi/HackOS.img
 ```
 
 The host test compiles the real codec and checks truncated/malformed frames under
@@ -258,3 +328,10 @@ normal-user hostname ping, copied ABI bounds, child ownership/exit cleanup and
 link recovery. `--internet` explicitly opts into an `example.com` lookup through
 QEMU user networking; CI does not depend on external DNS. Artifacts are under
 `tests/out/dns-<firmware>/` (or `dns-<firmware>-internet/`).
+
+`qemu_udp.py` validates endpoint ownership/exit cleanup, invalid pointers and
+non-consuming failed receives, 0/512-byte payloads, FIFO order/overflow, peer
+filtering, direct/routed/DNS destinations, redirection, ARP failure and no-NIC/link
+recovery. `--host-echo` uses a real loopback UDP server through QEMU user networking.
+Both modes need no external Internet access. Artifacts are in
+`tests/out/udp-<firmware>/` and `tests/out/udp-<firmware>-host/`.

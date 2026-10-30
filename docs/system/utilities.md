@@ -296,3 +296,13 @@ stdout redirection. Any user may run it. Exit status is 0 on success, 1 for an
 invalid name, lookup/output failure, and 2 for an invalid argument count. DNS
 errors, truncation and timeouts are reported separately. See
 [networking](networking.md#udp-and-dns) for syntax and fixed limits.
+
+### udp
+
+`udp <IPv4-address|hostname> <port> <message>` sends a single UDP datagram and
+waits for one reply. Messages may contain up to 512 bytes; quote spaces or an
+empty message. Normal users can run it and redirect output. Received control or
+binary bytes are displayed as `\xNN`. Exit status is 0 after a reply, 1 for
+network/lookup/output failure, and 2 for invalid command arguments. Compose's
+local echo demo is `udp 10.0.2.2 7777 "hello from HackOS"`. See
+[networking](networking.md#connected-udp-endpoints) for bounded waits and semantics.

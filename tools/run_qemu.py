@@ -6,12 +6,14 @@ from pathlib import Path
 import shutil
 import signal
 import subprocess
+import sys
 import tempfile
 import time
 
 ROOT = Path(__file__).resolve().parents[1]
 
-def run(firmware, image, web=False, debug=False, snapshot=False, serial_log=None, network=False):
+def run(firmware, image, web=False, debug=False, snapshot=False, serial_log=None, network=False, udp_demo=False):
+    if udp_demo and not network: raise ValueError('--udp-demo requires --network')
     if not image.is_file(): raise FileNotFoundError(f'Build the {firmware} image first: {image}')
     with tempfile.TemporaryDirectory(prefix='hackos-run-') as temporary:
         args = ['qemu-system-x86_64', '-machine', 'q35', '-accel', 'tcg', '-cpu', 'qemu64,+rdrand',
@@ -38,6 +40,10 @@ def run(firmware, image, web=False, debug=False, snapshot=False, serial_log=None
         try:
             env = os.environ.copy()
             env['TMPDIR'] = temporary
+            echo = None
+            if udp_demo:
+                echo = subprocess.Popen([sys.executable, str(ROOT / 'tools/udp_echo.py')])
+                processes.append(echo)
             qemu = subprocess.Popen(args, env=env)
             processes.append(qemu)
             if web:
@@ -45,6 +51,7 @@ def run(firmware, image, web=False, debug=False, snapshot=False, serial_log=None
                 processes.append(proxy)
                 print('Console: http://localhost:6080/vnc.html?autoconnect=true&resize=scale', flush=True)
             while qemu.poll() is None:
+                if echo and echo.poll() is not None: raise RuntimeError('UDP demo echo service exited unexpectedly')
                 if web and proxy.poll() is not None: raise RuntimeError('Browser console exited unexpectedly')
                 time.sleep(0.2)
             if qemu.returncode: raise RuntimeError(f'QEMU exited with status {qemu.returncode}')
@@ -67,5 +74,6 @@ if __name__ == '__main__':
     parser.add_argument('--serial-log', type=Path, help='Capture COM1 boot, fault and terminal diagnostics')
     parser.add_argument('--snapshot', action='store_true', help='Discard guest writes when QEMU stops')
     parser.add_argument('--network', action='store_true', help='Enable experimental E1000 Ethernet/ARP')
+    parser.add_argument('--udp-demo', action='store_true', help='Start local-only UDP echo on port 7777 (requires --network)')
     args = parser.parse_args()
-    run(args.firmware, args.image, args.web, args.debug, args.snapshot, args.serial_log, args.network)
+    run(args.firmware, args.image, args.web, args.debug, args.snapshot, args.serial_log, args.network, args.udp_demo)

@@ -1287,3 +1287,13 @@ error states, hostname ping, permissions, ABI buffers, child ownership and clean
 The optional `--internet` flag checks `example.com` through QEMU user networking;
 this external dependency is excluded from CI. `tests/network.py` sanitizes the
 real UDP/DNS codecs and resolver lifecycle alongside the existing networking code.
+
+### Connected UDP endpoints
+
+`make -C tests test-udp FIRMWARE=bios IMAGE=../out/udp/bios/HackOS.img`
+(and the UEFI equivalent) exercises whole datagrams, copied ABI bounds, invalid
+receive pointers preserving queued data, PID ownership, per-process limits,
+child exit cleanup, FIFO overflow, stale handles and network failure paths.
+`qemu_udp.py --host-echo` additionally checks a real loopback echo peer through
+QEMU user networking, without Internet access. The host networking sanitizer
+suite covers global pool exhaustion, send deadlines and rate limiting.

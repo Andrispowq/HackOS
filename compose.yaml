@@ -23,11 +23,11 @@ x-development: &development
 services:
   bios:
     <<: *development
-    command: [python3, tools/container.py, --firmware, bios, --network]
+    command: [python3, tools/container.py, --firmware, bios, --network, --udp-demo]
   uefi:
     <<: *development
     profiles: [uefi]
-    command: [python3, tools/container.py, --firmware, uefi, --network]
+    command: [python3, tools/container.py, --firmware, uefi, --network, --udp-demo]
 
 volumes:
   build-output:

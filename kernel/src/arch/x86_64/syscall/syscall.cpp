@@ -12,6 +12,7 @@
 #include "proc/user/hardware.h"
 #include "net/ping.h"
 #include "net/dns.h"
+#include "net/socket.h"
 #include "proc/user/accounts.h"
 #include "proc/user/account_store.h"
 #include "security/crypto.h"
@@ -1514,6 +1515,29 @@ static void syscall_handler(Registers* r)
         if (!r->rax && r->rdi == HACKOS_RESOLVE_QUERY && !Output((void*)r->rsi, &record, sizeof(record)))
         {
             r->rax = HACKOS_ERROR;
+        }
+        break;
+    }
+    case HACKOS_SYS_udp:
+    {
+        HackosDatagram record = {};
+        if ((r->rdi == HACKOS_UDP_OPEN || r->rdi == HACKOS_UDP_SEND) &&
+            !Caller()->userSpace->CopyFromUser(&record, r->rdx, sizeof(record)))
+        {
+            r->rax = HACKOS_ERROR;
+            break;
+        }
+        r->rax = Net::UdpControl(Caller()->pid, r->rdi, r->rsi, record);
+        if (!r->rax && (r->rdi == HACKOS_UDP_RECEIVE || r->rdi == HACKOS_UDP_STATUS))
+        {
+            if (!Output((void*)r->rdx, &record, sizeof(record)))
+            {
+                r->rax = HACKOS_ERROR;
+            }
+            else if (r->rdi == HACKOS_UDP_RECEIVE)
+            {
+                Net::ConsumeUdp(Caller()->pid, r->rsi);
+            }
         }
         break;
     }

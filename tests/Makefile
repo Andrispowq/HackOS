@@ -161,3 +161,7 @@ test-routing:
 .PHONY: test-dns
 test-dns:
 	$(PYTHON) qemu_dns.py --firmware $(FIRMWARE) --image $(IMAGE)
+
+.PHONY: test-udp
+test-udp:
+	$(PYTHON) qemu_udp.py --firmware $(FIRMWARE) --image $(IMAGE)

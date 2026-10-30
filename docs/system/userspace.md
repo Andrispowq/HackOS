@@ -861,6 +861,20 @@ Syscall 98 exposes `resolve(operation, HackosResolve*)`, a copied 272-byte
 record in `include/hackos/network.h`. START, QUERY and CANCEL follow the Echo
 ownership pattern, with one lookup per PID, eight globally, five-second deadlines
 and ten-second completed-result retention. Invalid QUERY output pointers retain
-the result. Process reclamation releases entries. Only DNS through the configured
-QEMU resolver is exposed; this does not grant raw UDP access. See
+the result. Process reclamation releases entries. The resolver API exposes only DNS through the configured QEMU resolver;
+separate connected UDP endpoints are described below. See
 [networking](networking.md#udp-and-dns) for states and wire validation.
+
+
+## Connected UDP endpoints
+
+Syscall 99 `udp(operation, handle, HackosDatagram*)` uses a 544-byte copied record.
+OPEN returns an exclusive, process-owned handle; SEND queues one complete payload,
+STATUS reports transmission and queue state, RECEIVE copies then consumes one
+whole datagram, and CLOSE releases it. Handles are never inherited or reused;
+exit reclamation closes all owned endpoints. A failed receive copy preserves the
+queued datagram. Sixteen endpoints globally, four per process, each have one
+pending send and four received datagrams of up to 512 bytes. Calls are nonblocking;
+userspace can sleep between retries. These handles are separate from file/pipe
+descriptors and do not yet participate in `poll`. See
+[networking](networking.md#connected-udp-endpoints) for ports, states and limitations.

@@ -119,7 +119,11 @@ with eight global slots, three-second deadlines and cleanup on exit. Static /24 
 are correlated to pending requests. Bounded internal UDP supports DNS through 10.0.2.3 via process-owned syscall 98
 (272-byte records, eight slots, five-second deadlines). `nslookup` and hostname
 `ping` support A answers and bounded same-response CNAME chains. No DHCP, TCP,
-configurable routes or general sockets exist yet. See `docs/system/networking.md` and
+configurable routes or stream sockets exist yet. Connected UDP syscall 99 uses
+544-byte records, sixteen endpoints (four per PID), 512-byte payloads and four
+receive slots per endpoint. Handles are private and reclaimed on exit; failed
+receive copies do not consume packets. `udp` demonstrates a send/reply exchange;
+Compose supplies a container-loopback echo peer at guest 10.0.2.2:7777. See `docs/system/networking.md` and
 `tests/qemu_network.py` for packet capture, ring reuse and failure checks.
 
 ## Where to look

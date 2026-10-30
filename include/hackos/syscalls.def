@@ -87,3 +87,4 @@ HACKOS_SYSCALL(95, account_edit, UserAccountEdit, 4, uint64_t, uint64_t, uint64_
 HACKOS_SYSCALL(96, password_change, UserPasswordChange, 2, const char*, const char*)
 HACKOS_SYSCALL(97, echo, UserEcho, 2, uint64_t, HackosEcho*)
 HACKOS_SYSCALL(98, resolve, UserResolve, 2, uint64_t, HackosResolve*)
+HACKOS_SYSCALL(99, udp, UserUdp, 3, uint64_t, uint64_t, HackosDatagram*)

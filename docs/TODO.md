@@ -343,7 +343,9 @@ Milestones 1–4 are implemented; later milestones need a separate request.
 - [x] Add bounded IPv4/ICMP gateway ping and a process-owned Echo API.
 - [x] Add static IPv4 routing, bounded ARP neighbor discovery and ICMP error reporting.
 - [x] Add bounded UDP DNS transport, process-owned lookup API, nslookup and hostname ping.
-- [ ] Add process-owned UDP sockets and DHCP configuration.
+- [x] Add bounded process-owned connected UDP endpoints and an echo demo.
+- [ ] Add wildcard UDP binding, readiness/poll integration and ICMP socket errors.
+- [ ] Add DHCP configuration.
 - [ ] Add TCP, DNS TCP fallback and stream sockets.
 - [ ] Add network configuration and useful network user programs.
 

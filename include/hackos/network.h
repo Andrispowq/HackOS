@@ -64,3 +64,32 @@ struct HackosResolve
 };
 static_assert(sizeof(HackosResolve) == 272, "resolver ABI");
 static_assert(__builtin_offsetof(HackosResolve, state) == 256, "resolver state ABI");
+
+// Connected IPv4 UDP endpoints, independent of stream descriptors.
+enum HackosUdpOperation : uint64_t
+{
+    HACKOS_UDP_OPEN,
+    HACKOS_UDP_SEND,
+    HACKOS_UDP_RECEIVE,
+    HACKOS_UDP_STATUS,
+    HACKOS_UDP_CLOSE
+};
+enum HackosUdpState : uint32_t
+{
+    HACKOS_UDP_IDLE,
+    HACKOS_UDP_PENDING,
+    HACKOS_UDP_SENT,
+    HACKOS_UDP_TIMEOUT,
+    HACKOS_UDP_UNAVAILABLE,
+    HACKOS_UDP_NEIGHBOR_FAILED
+};
+struct HackosDatagram
+{
+    uint8_t address[4];
+    uint16_t peerPort, localPort;
+    uint32_t size, state, queued, dropped;
+    uint64_t sent;
+    uint8_t data[512];
+};
+static_assert(sizeof(HackosDatagram) == 544, "UDP ABI");
+static_assert(__builtin_offsetof(HackosDatagram, data) == 32, "UDP payload ABI");

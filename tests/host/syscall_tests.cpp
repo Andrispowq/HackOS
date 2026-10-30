@@ -22,7 +22,7 @@ static_assert(HACKOS_SYS_exit == 0 && HACKOS_SYS_user_write == 14 && HACKOS_SYS_
                   HACKOS_SYS_window_close_reply == 90 && HACKOS_SYS_auth_desktop == 91 && HACKOS_SYS_desktop == 92 &&
                   HACKOS_SYS_terminal_session == 93 && HACKOS_SYS_session_logout == 94 &&
                   HACKOS_SYS_account_edit == 95 && HACKOS_SYS_password_change == 96 && HACKOS_SYS_echo == 97 &&
-                  HACKOS_SYS_resolve == 98 && HACKOS_SYSCALL_COUNT == 99,
+                  HACKOS_SYS_resolve == 98 && HACKOS_SYS_udp == 99 && HACKOS_SYSCALL_COUNT == 100,
               "User syscall ABI changed");
 
 TEST(syscall_record_layout)
