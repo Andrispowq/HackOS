@@ -843,3 +843,13 @@ operation 5 or the existing text-cell records. See [ANSI output and ABI](desktop
 for supported sequences, attribute encoding and parser bounds. Redirected files
 and pipes retain original bytes; parsing occurs only at a window-terminal output
 endpoint. Recovery-console rendering remains unchanged.
+
+## Bounded ICMP Echo
+
+Syscall 97 exposes `echo(operation, HackosEcho*)` using the 24-byte record in
+`include/hackos/network.h`. It is available to ordinary users, owns requests by
+PID, never retains user pointers and does not grant raw packet access. Start,
+query and cancel operations support one request per process, eight globally,
+with three-second deadlines and ten-second completed-result retention. Process
+reclamation cancels outstanding requests. See [networking](networking.md) for
+status values, validation, rate limits and the current gateway-only target.

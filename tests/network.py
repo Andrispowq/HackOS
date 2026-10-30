@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Sanitize the real Ethernet/ARP codec with malformed and truncated frames."""
+"""Sanitize the real Ethernet/ARP/IPv4/ICMP and Echo lifecycle with malformed and truncated frames."""
 import argparse
 import os
 from pathlib import Path
@@ -14,8 +14,9 @@ with tempfile.TemporaryDirectory(prefix='hackos-net-host-') as directory:
     binary = Path(directory) / 'network'
     subprocess.run([os.environ.get('CXX', 'clang++'), '-std=c++17', '-g',
                     '-fsanitize=' + args.sanitizers, '-fno-sanitize-recover=all', '-fno-omit-frame-pointer',
-                    '-I', str(ROOT / 'kernel/src'), '-I', str(ROOT / 'include'),
-                    str(ROOT / 'tests/host/network.cpp'), str(ROOT / 'kernel/src/net/arp.cpp'),
+                    '-I', str(ROOT / 'kernel/src'), '-I', str(ROOT / 'common/include'), '-I', str(ROOT / 'include'),
+                    str(ROOT / 'tests/host/network.cpp'), str(ROOT / 'tests/host/icmp.cpp'),
+                    str(ROOT / 'kernel/src/net/icmp.cpp'), str(ROOT / 'kernel/src/net/ping.cpp'), str(ROOT / 'kernel/src/net/arp.cpp'),
                     '-o', str(binary)], check=True, timeout=120)
     subprocess.run([str(binary)], check=True, timeout=30)
-print(f'PASS Ethernet/ARP codec ({args.sanitizers})')
+print(f'PASS Ethernet/ARP/IPv4/ICMP and Echo lifecycle ({args.sanitizers})')

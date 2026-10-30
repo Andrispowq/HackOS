@@ -76,7 +76,7 @@ class Guest:
 
 @contextmanager
 def boot(directory, image, firmware, name, timeout, *, write_error=False, entropy=True, reboot=False, serial=True, paused=False,
-         qmp_stdio=False, graphical=False, vnc=False, network=False):
+         qmp_stdio=False, graphical=False, vnc=False, network=False, capture=None):
     with tempfile.TemporaryDirectory(prefix='hackos-accounts-') as temporary:
         temporary = Path(temporary)
         g = Guest()
@@ -102,6 +102,8 @@ def boot(directory, image, firmware, name, timeout, *, write_error=False, entrop
             index = args.index('-net')
             args[index:index + 2] = ['-netdev', 'user,id=net0,ipv6=off',
                                      '-device', 'e1000,netdev=net0,mac=52:54:00:12:34:56']
+        if network and capture:
+            args += ['-object', f'filter-dump,id=capture,netdev=net0,file={capture}']
         if vnc:
             args += ['-vnc', '127.0.0.1:2']
         if not qmp_stdio:

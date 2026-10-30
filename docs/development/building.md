@@ -275,5 +275,6 @@ Image packaging uses UTC for FAT timestamps to match the default QEMU RTC.
 For experimental Ethernet/ARP bring-up, add `--network` to `tools/run_qemu.py`.
 It enables one E1000 with QEMU user networking; the direct runner defaults to no NIC.
 Both Docker Compose/noVNC services now pass `--network` automatically. Log in as
-an administrator and run `sysinfo network` to see the gateway exchange. See
+an administrator and run `sysinfo network` to see the gateway exchange.
+Run `ping 10.0.2.2` as any user for four real IPv4/ICMP Echo probes. See
 [networking](../system/networking.md) for static test addresses and diagnostics.

@@ -3,6 +3,7 @@
 #include "hackos/syscall_numbers.h"
 #include "hackos/abi.h"
 #include "hackos/hardware.h"
+#include "hackos/network.h"
 
 // int 0x80: RAX=number; RDI, RSI, RDX, RCX, R8=arguments; RAX=result.
 // Pointer arguments are user virtual addresses validated and copied by the kernel.

@@ -3,6 +3,7 @@
 #include "arch/x86_64/timer/pit.h"
 #include "drivers/serial/serial.h"
 #include "net/arp.h"
+#include "net/ping.h"
 #include "arch/x86_64/interrupts/guard.h"
 
 extern PageTableManager KernelDirectory;
@@ -109,6 +110,7 @@ bool Send(const uint8_t* frame, uint32_t length)
 
 void Receive(const uint8_t* frame, uint32_t length)
 {
+    ReceiveEcho(frame, length, mac, localIp);
     ArpPacket packet;
     if (!ParseArp(frame, length, mac, packet) || !EqualBytes(packet.targetIp, localIp, 4)) return;
     if (packet.operation == 1)
@@ -132,6 +134,11 @@ void Receive(const uint8_t* frame, uint32_t length)
         PrintMac(packet.senderMac);
     }
 }
+}
+
+bool Transmit(const uint8_t* frame, uint32_t length)
+{
+    return ready && Send(frame, length);
 }
 
 void InitialiseE1000(PCI::PCIDeviceHeader* device)
@@ -196,8 +203,12 @@ void InitialiseE1000(PCI::PCIDeviceHeader* device)
     }
     for (unsigned i = 0; i < Count; ++i)
     {
-        rx[i].address = KernelDirectory.PhysicalAddress((uint64_t)receiveBuffers[i]);
-        tx[i].address = KernelDirectory.PhysicalAddress((uint64_t)transmitBuffers[i]);
+        // PhysicalAddress returns the containing frame base, not a byte address.
+        // Two 2048-byte buffers share a page; preserve the second buffer's offset.
+        uint64_t receiveAddress = (uint64_t)receiveBuffers[i];
+        uint64_t transmitAddress = (uint64_t)transmitBuffers[i];
+        rx[i].address = KernelDirectory.PhysicalAddress(receiveAddress) + (receiveAddress & 4095);
+        tx[i].address = KernelDirectory.PhysicalAddress(transmitAddress) + (transmitAddress & 4095);
         tx[i].status = 1;
     }
     uint64_t receiveBase = KernelDirectory.PhysicalAddress((uint64_t)rx);
@@ -232,6 +243,7 @@ void Poll()
     {
         if (!announced) SerialText("NET: no supported NIC\n");
         announced = true;
+        PollEcho(false, false, false, mac, gatewayMac, localIp, gatewayIp);
         return;
     }
     bool currentLink = (Read(STATUS) & 2) != 0;
@@ -264,6 +276,7 @@ void Poll()
         Write(RDT, nextRx);
         nextRx = (nextRx + 1) % Count;
     }
+    PollEcho(ready, linkUp, resolved, mac, gatewayMac, localIp, gatewayIp);
     uint64_t now = tick;
     if (linkUp && !resolved && (!attempts || now - lastAttempt >= TimerTicksForMilliseconds(1000)))
     {
