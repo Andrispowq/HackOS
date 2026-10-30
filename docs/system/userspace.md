@@ -853,3 +853,14 @@ query and cancel operations support one request per process, eight globally,
 with three-second deadlines and ten-second completed-result retention. Process
 reclamation cancels outstanding requests. See [networking](networking.md) for
 status values, validation, rate limits, static routing and the TTL/error-code union.
+
+
+## Bounded DNS lookup
+
+Syscall 98 exposes `resolve(operation, HackosResolve*)`, a copied 272-byte
+record in `include/hackos/network.h`. START, QUERY and CANCEL follow the Echo
+ownership pattern, with one lookup per PID, eight globally, five-second deadlines
+and ten-second completed-result retention. Invalid QUERY output pointers retain
+the result. Process reclamation releases entries. Only DNS through the configured
+QEMU resolver is exposed; this does not grant raw UDP access. See
+[networking](networking.md#udp-and-dns) for states and wire validation.

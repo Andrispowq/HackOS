@@ -1277,3 +1277,13 @@ IP targets, normal-user ping, correlated ICMP errors, ARP/silent-peer failures,
 address validation and cache reset on link recovery. `make -C tests test-routing`
 is the equivalent target with `FIRMWARE` and `IMAGE`. See
 [networking](../system/networking.md) for the fixed bounds and backend limitations.
+
+### DNS and hostname ping
+
+`make -C tests test-dns FIRMWARE=bios IMAGE=../out/dns/bios/HackOS.img`
+(or the UEFI equivalents) runs `qemu_dns.py` against a deterministic virtual DNS
+server. It checks packet checksums, CNAMEs, retries, malformed/unrelated replies,
+error states, hostname ping, permissions, ABI buffers, child ownership and cleanup.
+The optional `--internet` flag checks `example.com` through QEMU user networking;
+this external dependency is excluded from CI. `tests/network.py` sanitizes the
+real UDP/DNS codecs and resolver lifecycle alongside the existing networking code.

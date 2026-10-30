@@ -1,4 +1,4 @@
-# Experimental networking: Ethernet, ARP and ping
+# Experimental networking: Ethernet, routing, ping and DNS
 
 [System index](index.md) · [Devices](devices.md) · [Testing](../development/testing.md)
 
@@ -19,9 +19,9 @@ Use `--firmware uefi` and the corresponding UEFI image for the other boot path.
 QEMU user networking supplies the test gateway. The guest uses static address
 `10.0.2.15/24` and default gateway `10.0.2.2`. Numeric IPv4 targets on that subnet
 are resolved directly with ARP; other supported targets use the gateway's MAC
-while retaining the destination IP. DHCP, UDP, TCP, DNS, configurable routes and
+while retaining the destination IP. Bounded UDP carries DNS queries to QEMU's resolver at `10.0.2.3`. DHCP, TCP, configurable routes and general-purpose
 sockets are not implemented. Diagnostics use the root-only hardware query;
-process-owned Echo requests use syscall 97.
+process-owned Echo requests use syscall 97 and DNS lookups use syscall 98.
 
 ## Browser demo
 
@@ -33,6 +33,8 @@ then run this in a desktop terminal (the recovery shell works too):
 ```text
 ping 10.0.2.2
 ping -c 2 10.0.2.2
+nslookup example.com
+ping -c 2 example.com
 sysinfo network
 sysinfo network > /tmp/network.txt
 cat /tmp/network.txt
@@ -103,12 +105,13 @@ resolved-neighbor count without initiating traffic.
 
 ## IPv4/ICMP and process ownership
 
-`ping [-c 1..10] <IPv4-address>` defaults to four requests. Each carries 32 data bytes
+`ping [-c 1..10] <IPv4-address|hostname>` defaults to four requests. Each carries 32 data bytes
 and has a three-second deadline from submission, including any wait for ARP or
 a TX slot. Requests are spaced by one second after each result. Timing uses PIT
 ticks, so displayed milliseconds have timer resolution and include idle polling
-latency; they are not a high-precision network benchmark. Addresses must be four decimal octets, without leading zeros, whitespace or
-DNS names. Unsupported destinations include 0/8, loopback, link-local,
+latency; they are not a high-precision network benchmark. Numeric addresses must be four decimal octets, without leading zeros or
+whitespace. Hostnames are resolved first through the DNS API below; the DNS
+deadline is separate from each Echo deadline. Unsupported destinations include 0/8, loopback, link-local,
 multicast/reserved space, our own address and the local subnet's network and
 broadcast addresses. This is an Echo client, not an Echo responder.
 
@@ -154,6 +157,55 @@ is capped at ten Echo requests per second, including cancel/restart loops.
 No syscall blocks inside a preemption guard: the command sleeps between copied
 status queries while idle performs bounded packet work.
 
+## UDP and DNS
+
+`nslookup <hostname>` prints the resolver, normalized name, first IPv4 answer and
+TTL. `ping <hostname>` resolves once, prints the selected address, then uses the
+existing Echo path. A successful DNS lookup does not imply the target answers
+ICMP. Both commands support normal users and stdout redirection.
+
+The internal UDP codec supports up to 512 payload bytes, with a 20-byte IPv4
+header, no fragments/options and no raw userspace packet interface. It emits
+UDP pseudo-header checksums and checks incoming nonzero checksums; IPv4's
+permitted zero UDP checksum is accepted. Ethernet padding is excluded using the
+IP/UDP lengths. DNS accepts only the configured server `10.0.2.3:53`, matching
+local port, transaction ID and question. IDs and ephemeral ports (49152–65535)
+come from the existing bounded RDRAND source. Failure to obtain entropy rejects
+START; live-port collisions return RETRY. Correlation is not DNS authentication.
+
+Syscall 98 `resolve(operation, HackosResolve*)` uses a copied 272-byte record:
+256-byte NUL-terminated name, 32-bit state, four address bytes, 32-bit TTL and
+32-bit DNS error code. START reads only the name; QUERY copies the complete
+record; CANCEL ignores the pointer. One lookup belongs to each PID, eight
+lookups globally, with no inherited requests or retained user pointers. Exit
+reclamation cancels entries. Completed results expire after ten seconds and a
+new START replaces the caller's completed result. Invalid pointers/names/operations
+return ERROR, a pending lookup or full pool returns RETRY, and a query without
+an entry returns NOT_FOUND. Invalid output buffers do not consume results.
+
+Each lookup has a five-second deadline including ARP, up to three transmissions
+spaced at least one second apart, and a global ten-DNS-packet/second ceiling
+preserved across cancellation. Idle services requests round-robin without
+allocating, waiting or yielding under its preemption guard. Terminal states are
+reply, timeout, unavailable, ARP failure, NXDOMAIN, server error, truncated and
+no supported IPv4 answer. Link-down cancels pending lookups with unavailable.
+
+Hostnames use ASCII letters, digits and hyphens with nonempty labels of at most
+63 bytes, at most 253 bytes overall, no leading/trailing label hyphens, and at
+least one letter. Case is normalized; one final dot is accepted. Numeric-looking
+invalid addresses cannot silently become DNS queries. Queries request IN/A with
+recursion desired. The decoder bounds names, backwards compression pointers
+(16 jumps), records (32 total) and CNAME chains (eight aliases). It validates the
+complete successful response before accepting an A record whose owner matches
+the question or its CNAME chain; unrelated answers are ignored. The returned TTL
+is the minimum along that chain. This is an uncached stub resolver: CNAME targets
+must have an A answer in the same response. There is no IPv6/AAAA, EDNS, DNSSEC,
+search suffix expansion, separate CNAME follow-up or TCP fallback. Truncated
+responses produce an explicit error instead of accepting partial data.
+
+The wire formats follow [RFC 768](https://www.rfc-editor.org/rfc/rfc768) and
+[RFC 1035](https://www.rfc-editor.org/rfc/rfc1035).
+
 ## Validation
 
 ```sh
@@ -166,6 +218,8 @@ python3 tests/qemu_network_demo.py --firmware bios --image out/network/bios/Hack
 python3 tests/qemu_network_demo.py --firmware uefi --image out/network/uefi/HackOS.img
 python3 tests/qemu_routing.py --firmware bios --image out/network/bios/HackOS.img
 python3 tests/qemu_routing.py --firmware uefi --image out/network/uefi/HackOS.img
+python3 tests/qemu_dns.py --firmware bios --image out/network/bios/HackOS.img
+python3 tests/qemu_dns.py --firmware uefi --image out/network/uefi/HackOS.img
 ```
 
 The host test compiles the real codec and checks truncated/malformed frames under
@@ -197,3 +251,10 @@ The emulator configuration follows [QEMU network options](https://www.qemu.org/d
 
 IPv4 and ICMP wire formats follow [RFC 791](https://www.rfc-editor.org/rfc/rfc791.html)
 and [RFC 792](https://www.rfc-editor.org/rfc/rfc792.html).
+
+`qemu_dns.py` uses a loopback-only resolver to validate UDP checksums, compressed
+answers/CNAMEs, wrong-source/port/ID rejection, retries, DNS errors, timeouts,
+normal-user hostname ping, copied ABI bounds, child ownership/exit cleanup and
+link recovery. `--internet` explicitly opts into an `example.com` lookup through
+QEMU user networking; CI does not depend on external DNS. Artifacts are under
+`tests/out/dns-<firmware>/` (or `dns-<firmware>-internet/`).

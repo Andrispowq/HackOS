@@ -1,4 +1,5 @@
 #include "net/ping.h"
+#include "net/dns.h"
 #include "process.h"
 #include "proc/user/terminals.h"
 #include "deadline.h"
@@ -315,6 +316,7 @@ Process::Process(const char* label, void* entry, void* parameter)
 Process::~Process()
 {
     Net::CancelEcho(pid);
+    Net::CancelResolve(pid);
     ReleaseUserWindows(this);
     ReleaseStreams(this);
     for (auto file : files)

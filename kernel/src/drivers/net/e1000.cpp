@@ -4,6 +4,7 @@
 #include "drivers/serial/serial.h"
 #include "net/arp.h"
 #include "net/ping.h"
+#include "net/dns.h"
 #include "net/route.h"
 #include "arch/x86_64/interrupts/guard.h"
 
@@ -111,6 +112,7 @@ bool Send(const uint8_t* frame, uint32_t length)
 void Receive(const uint8_t* frame, uint32_t length)
 {
     ReceiveEcho(frame, length, mac, localIp);
+    ReceiveResolve(frame, length, mac, localIp);
     ArpPacket packet;
     if (!ParseArp(frame, length, mac, packet) || !EqualBytes(packet.targetIp, localIp, 4)) return;
     if (packet.operation == 1)
@@ -244,6 +246,7 @@ void Poll()
         if (!announced) SerialText("NET: no supported NIC\n");
         announced = true;
         PollEcho(false, false, mac, localIp);
+        PollResolve(false, false, mac, localIp);
         return;
     }
     bool currentLink = (Read(STATUS) & 2) != 0;
@@ -285,6 +288,7 @@ void Poll()
         gatewayPrimed = true;
     }
     PollEcho(ready, linkUp, mac, localIp);
+    PollResolve(ready, linkUp, mac, localIp);
     if (linkUp) PollNeighbors(mac);
 }
 

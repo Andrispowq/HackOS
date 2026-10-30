@@ -161,7 +161,7 @@ def test(firmware, image, timeout):
             guest.shell('ping -c 1 10.0.2.200', 'Next-hop ARP resolution failed: seq=1')
             for value in ('127.0.0.1', '224.0.0.1', '10.0.2.255', '10.0.2.0', '10.0.2.15'):
                 guest.shell('ping -c 1 ' + value, 'unsupported address')
-            for value in ('1.2.3', '01.2.3.4', '1.2.3.256', 'example.com'):
+            for value in ('1.2.3', '01.2.3.4', '1.2.3.256', 'example..com'):
                 guest.shell('ping -c 1 ' + value, 'Usage: ping')
             guest.shell('sysinfo network', '255.255.255.0')
             # Link transitions invalidate neighbor MACs. A fresh request must resolve again.

@@ -276,5 +276,7 @@ For experimental Ethernet/ARP bring-up, add `--network` to `tools/run_qemu.py`.
 It enables one E1000 with QEMU user networking; the direct runner defaults to no NIC.
 Both Docker Compose/noVNC services now pass `--network` automatically. Log in as
 an administrator and run `sysinfo network` to see the gateway exchange.
-Run `ping 10.0.2.2` as any user for four real IPv4/ICMP Echo probes. See
+Run `ping 10.0.2.2` as any user for four real IPv4/ICMP Echo probes.
+`nslookup example.com` tests DNS through QEMU's resolver, and `ping example.com`
+resolves a hostname before sending Echo probes. See
 [networking](../system/networking.md) for static test addresses and diagnostics.

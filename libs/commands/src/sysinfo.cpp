@@ -358,7 +358,7 @@ static void Network()
     Value("TX drops", network.txDropped);
     Value("RX descriptor drops", network.rxDropped);
     Value("ARP replies queued", network.arpReplies);
-    out.Text("  Ethernet + ARP + IPv4/ICMP. Try ping 10.0.2.2. TCP/DNS are not implemented.\n");
+    out.Text("  Ethernet + ARP + IPv4/ICMP. UDP/DNS: try nslookup example.com. TCP is not implemented.\n");
 }
 
 int main(int argc, char** argv)

@@ -9,7 +9,8 @@
 volatile uint64_t tick;
 unsigned sends;
 unsigned arpSends;
-uint8_t transmitted[Net::EchoFrameSize];
+uint8_t transmitted[1514];
+unsigned transmittedLength;
 void SerialText(const char*)
 {
 }
@@ -32,12 +33,13 @@ namespace Net
 {
 bool Transmit(const uint8_t* frame, uint32_t length)
 {
-    if (length == ArpFrameSize)
+    if (length == ArpFrameSize && frame[13] == 6)
     {
         ++arpSends;
         return true;
     }
-    assert(length == EchoFrameSize);
+    assert(length <= sizeof(transmitted));
+    transmittedLength = length;
     for (unsigned i = 0; i < length; ++i)
     {
         transmitted[i] = frame[i];

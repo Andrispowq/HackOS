@@ -35,3 +35,32 @@ struct HackosEcho
 };
 static_assert(sizeof(HackosEcho) == 24, "echo ABI");
 static_assert(__builtin_offsetof(HackosEcho, elapsedMs) == 8, "echo timing ABI");
+
+enum HackosResolveOperation : uint64_t
+{
+    HACKOS_RESOLVE_START,
+    HACKOS_RESOLVE_QUERY,
+    HACKOS_RESOLVE_CANCEL
+};
+enum HackosResolveState : uint32_t
+{
+    HACKOS_RESOLVE_PENDING,
+    HACKOS_RESOLVE_REPLY,
+    HACKOS_RESOLVE_TIMEOUT,
+    HACKOS_RESOLVE_UNAVAILABLE,
+    HACKOS_RESOLVE_NEIGHBOR_FAILED,
+    HACKOS_RESOLVE_NOT_FOUND,
+    HACKOS_RESOLVE_SERVER_ERROR,
+    HACKOS_RESOLVE_TRUNCATED,
+    HACKOS_RESOLVE_NO_ADDRESS
+};
+struct HackosResolve
+{
+    char name[256];
+    uint32_t state;
+    uint8_t address[4];
+    uint32_t ttl;
+    uint32_t errorCode;
+};
+static_assert(sizeof(HackosResolve) == 272, "resolver ABI");
+static_assert(__builtin_offsetof(HackosResolve, state) == 256, "resolver state ABI");

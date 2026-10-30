@@ -114,9 +114,12 @@ Experimental networking supports one QEMU E1000 (`8086:100e`) with bounded
 idle polling, Ethernet/ARP and a bounded IPv4/ICMP Echo client. Compose/noVNC enables it by default; the direct
 runner enables it with `--network`. Root-only `sysinfo network` exposes copied
 link/ARP state and packet counters through the existing hardware query;
-static test addresses are `10.0.2.15` and gateway `10.0.2.2`. Normal-user `ping [-c 1..10] <IPv4-address>` uses process-owned syscall 97 records,
+static test addresses are `10.0.2.15` and gateway `10.0.2.2`. Normal-user `ping [-c 1..10] <IPv4-address|hostname>` uses process-owned syscall 97 records,
 with eight global slots, three-second deadlines and cleanup on exit. Static /24 routing and a default gateway use a 16-entry ARP cache; ICMP errors
-are correlated to pending requests. No configurable routes, UDP/TCP, DNS or sockets exist yet. See `docs/system/networking.md` and
+are correlated to pending requests. Bounded internal UDP supports DNS through 10.0.2.3 via process-owned syscall 98
+(272-byte records, eight slots, five-second deadlines). `nslookup` and hostname
+`ping` support A answers and bounded same-response CNAME chains. No DHCP, TCP,
+configurable routes or general sockets exist yet. See `docs/system/networking.md` and
 `tests/qemu_network.py` for packet capture, ring reuse and failure checks.
 
 ## Where to look

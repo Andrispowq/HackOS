@@ -212,6 +212,16 @@ jobs:
             --mount "type=bind,source=$PWD/tests/out,target=/work/tests/out" \
             hackos-tests:toolchain python3 tests/qemu_routing.py --firmware "$FIRMWARE" \
               --image "tests/out/build-$FIRMWARE/HackOS.img"
+      - name: Exercise DNS and hostname ping
+        if: ${{ !cancelled() && steps.build.outcome == 'success' }}
+        env:
+          FIRMWARE: ${{ matrix.firmware }}
+        run: |
+          docker run --rm --network none --user "$(id -u):$(id -g)" \
+            --mount "type=bind,source=$PWD,target=/work,readonly" \
+            --mount "type=bind,source=$PWD/tests/out,target=/work/tests/out" \
+            hackos-tests:toolchain python3 tests/qemu_dns.py --firmware "$FIRMWARE" \
+              --image "tests/out/build-$FIRMWARE/HackOS.img"
       - name: Exercise persistent accounts, setup and login
         if: ${{ !cancelled() && steps.build.outcome == 'success' }}
         env:

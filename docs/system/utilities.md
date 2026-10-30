@@ -277,13 +277,22 @@ See [networking](networking.md) for a noVNC demo and counter definitions.
 
 ### ping
 
-`ping [-c 1..10] <IPv4-address>` sends IPv4/ICMP Echo requests as any user. The default
+`ping [-c 1..10] <IPv4-address|hostname>` sends IPv4/ICMP Echo requests as any user. The default
 is four probes with 32 data bytes and a three-second deadline each. Replies show
 TTL and elapsed milliseconds at PIT resolution; the summary shows received
 probes and loss. Exit status is 0 when every probe succeeds, 1 for loss,
 unavailable networking, busy request slots or output errors, and 2 for invalid
 arguments. Supports stdout redirection. Numeric targets use static 10.0.2.15/24
-and gateway 10.0.2.2; DNS is unsupported. ARP failure, destination unreachable
+and gateway 10.0.2.2; hostnames first use a five-second DNS lookup. ARP failure, destination unreachable
 and time exceeded are reported separately from timeout. External ICMP depends
 on the QEMU backend and host. See
 [networking](networking.md) for the API and limits.
+
+### nslookup
+
+`nslookup <hostname>` resolves an ASCII hostname through QEMU's DNS server at
+10.0.2.3. It prints the normalized name, first IPv4 address and TTL, and supports
+stdout redirection. Any user may run it. Exit status is 0 on success, 1 for an
+invalid name, lookup/output failure, and 2 for an invalid argument count. DNS
+errors, truncation and timeouts are reported separately. See
+[networking](networking.md#udp-and-dns) for syntax and fixed limits.

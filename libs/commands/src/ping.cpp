@@ -1,9 +1,9 @@
-#include "output.h"
+#include "resolve.h"
 #include "hackos/runtime/ipv4.h"
 
 int main(int argc, char** argv)
 {
-    const char* usage = "Usage: ping [-c 1..10] <IPv4-address>\n"
+    const char* usage = "Usage: ping [-c 1..10] <IPv4-address|hostname>\n"
                         "IPv4/ICMP with static 10.0.2.0/24 and default gateway 10.0.2.2.\n"
                         "Default: 4 probes, 32 data bytes, 3-second timeout.\n";
     unsigned count = 4;
@@ -30,10 +30,27 @@ int main(int argc, char** argv)
         return 0;
     }
     uint8_t address[4];
-    if (!target || !Hackos::ParseIPv4(target, address) || !count || count > 10)
+    char hostname[256];
+    bool numeric = target && Hackos::ParseIPv4(target, address);
+    if (!target || (!numeric && !Hackos::NormalizeHostname(target, hostname)) || !count || count > 10)
     {
         Error(usage);
         return 2;
+    }
+    char resolved[16];
+    if (!numeric)
+    {
+        HackosResolve result = {};
+        if (!ResolveHost(hostname, result)) return 1;
+        for (unsigned i = 0; i < 4; ++i)
+        {
+            address[i] = result.address[i];
+        }
+        snprintf(resolved, sizeof(resolved), "%u.%u.%u.%u", address[0], address[1], address[2], address[3]);
+        ReportOutput resolution;
+        resolution.Format("Resolved %s to %s\n", hostname, resolved);
+        if (!resolution.ok) return 1;
+        target = resolved;
     }
     ReportOutput out;
     out.Format("PING %s: 32 data bytes\n", target);

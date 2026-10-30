@@ -11,6 +11,7 @@
 #include "proc/user/streams.h"
 #include "proc/user/hardware.h"
 #include "net/ping.h"
+#include "net/dns.h"
 #include "proc/user/accounts.h"
 #include "proc/user/account_store.h"
 #include "security/crypto.h"
@@ -1495,6 +1496,22 @@ static void syscall_handler(Registers* r)
         }
         r->rax = Net::EchoControl(Caller()->pid, r->rdi, record);
         if (!r->rax && r->rdi == HACKOS_ECHO_QUERY && !Output((void*)r->rsi, &record, sizeof(record)))
+        {
+            r->rax = HACKOS_ERROR;
+        }
+        break;
+    }
+    case HACKOS_SYS_resolve:
+    {
+        HackosResolve record = {};
+        if (r->rdi == HACKOS_RESOLVE_START &&
+            !Caller()->userSpace->CopyFromUser(&record, r->rsi, sizeof(record)))
+        {
+            r->rax = HACKOS_ERROR;
+            break;
+        }
+        r->rax = Net::ResolveControl(Caller()->pid, r->rdi, record);
+        if (!r->rax && r->rdi == HACKOS_RESOLVE_QUERY && !Output((void*)r->rsi, &record, sizeof(record)))
         {
             r->rax = HACKOS_ERROR;
         }
