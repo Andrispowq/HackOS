@@ -38,6 +38,7 @@ flowchart TD
 | [include/hackos](../../include/hackos/) | Shared types and experimental syscall ABI catalogue |
 | [kernel/src/lib](../../kernel/src/lib/) | Kernel allocation/output adapters and compatibility includes |
 | [libs](../../libs/) | Userspace runtime, shell, and example programs |
+| [libs/browser](../../libs/browser/) | [Minimal HTML browser](browser.md) |
 | [libs/editor](../../libs/editor/) | [Graphical text editor](editor.md) |
 | [libs/files](../../libs/files/) | [Graphical file manager](files.md) |
 | [libs/gui](../../libs/gui/) | [Userspace GUI library](gui.md): drawing, layout, widgets and dialogs |

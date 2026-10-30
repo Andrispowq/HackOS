@@ -17,6 +17,7 @@ and credential checks. A second copy of DESKTOP does not acquire desktop authori
   not taskbar entries. The desktop owns this background surface; it cannot be
   dragged, resized, minimized or raised above applications.
 - **Editor** opens the [graphical text editor](editor.md).
+- **Browser** in the launcher opens the [minimal HTML browser](browser.md).
 - **Files** opens the [file manager](files.md).
 - **Widgets** launches the GUI library demonstration.
 - Taskbar buttons list the session's windows, including minimized windows. `>`

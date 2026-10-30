@@ -8,6 +8,39 @@ LARGE = b'0123456789abcdef' * 512
 BINARY = bytes(range(256))
 
 
+HOME_HTML = b"""<!doctype html><html><head><title>HackOS Web</title>
+<style>hidden style text</style></head><body>
+<h1>Welcome to the HackOS web</h1>
+<p>A small browser, built inside a small operating system.</p>
+<p>This page arrived over <strong>real TCP and HTTP</strong>. Try a link below.</p>
+<h2>Explore</h2><ul>
+<li><a href="guide.html">Read the browser guide</a></li>
+<li><a href="long.html">Open a long page and scroll</a></li>
+<li><a href="../missing">Try a missing page</a></li>
+<li><a href="https://example.com/">Try an unsupported HTTPS link</a></li>
+</ul><h2>Simple HTML, readable text</h2>
+<p>Paragraphs wrap to the window width. <b>Bold text</b>, headings, lists,
+line breaks<br>and entities such as &lt;html&gt; &amp; &quot;quotes&quot; work.</p>
+<pre>GET /browser/ HTTP/1.1
+Host: 10.0.2.2:8080
+
+Hello from HackOS!</pre>
+<p>No scripts, stylesheets, images or tracking requests are loaded.</p>
+<script>THIS SCRIPT MUST NEVER APPEAR</script></body></html>"""
+GUIDE_HTML = b"""<h1>Browser guide</h1><p>You followed a relative link.</p>
+<ol><li>Enter an HTTP URL and press Enter or Go.</li>
+<li>Click links, or focus the page and use Left/Right then Enter.</li>
+<li>Use the wheel, arrow keys, Page Up or Page Down to scroll.</li>
+<li>Use Back to return, Reload to fetch again, or Stop to cancel.</li></ol>
+<p><a href="./">Return to the home page</a></p>
+<p><a href="long.html">Read the long page</a></p>
+<h2>Limits</h2><p>Pages are limited to 32 KiB and addresses to 255 bytes.
+This is a text-only HTML viewer. HTTPS and automatic redirects are not supported.</p>"""
+LONG_HTML = (b'<h1>A longer journey</h1><p><a href="./">Back to home</a></p>' +
+             b''.join(f'<h2>Section {i}</h2><p>Scrolling through a real page in HackOS. '
+                      f'This is paragraph {i}. Resize the window to see the text wrap.</p>'.encode()
+                      for i in range(1, 41)) + b'<p>END OF LONG PAGE</p>')
+
 def response(target, host):
     path = target.split('?', 1)[0]
     if path == '/chunked':
@@ -27,7 +60,10 @@ def response(target, host):
         return b'HTTP/1.1 200 OK\r\nContent-Encoding: gzip\r\nContent-Length: 1\r\n\r\nx'
     if path == '/oversize':
         return b'HTTP/1.1 200 OK\r\nContent-Length: 32769\r\n\r\n'
-    if path == '/controls':
+    html = path in ('/browser/', '/browser/guide.html', '/browser/long.html')
+    if html:
+        body = {'/browser/': HOME_HTML, '/browser/guide.html': GUIDE_HTML, '/browser/long.html': LONG_HTML}[path]
+    elif path == '/controls':
         body = b'safe\x1b[31m\x00\xff\n'
     elif path == '/large':
         body = LARGE
@@ -42,7 +78,7 @@ def response(target, host):
     else:
         return b'HTTP/1.1 404 Not Found\r\nContent-Length: 8\r\n\r\nmissing\n'
     prefix = b'HTTP/1.1 103 Early Hints\r\nLink: </large>\r\n\r\n' if path == '/info' else b''
-    return prefix + b'HTTP/1.1 200 OK\r\nContent-Type: text/plain\r\nConnection: close\r\nContent-Length: ' + str(len(body)).encode() + b'\r\n\r\n' + body
+    return prefix + b'HTTP/1.1 200 OK\r\nContent-Type: ' + (b'text/html' if html else b'text/plain') + b'\r\nConnection: close\r\nContent-Length: ' + str(len(body)).encode() + b'\r\n\r\n' + body
 
 
 class Handler(socketserver.BaseRequestHandler):

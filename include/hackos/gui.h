@@ -53,7 +53,8 @@ enum class Kind
     TextField,
     List,
     TextArea,
-    IconButton
+    IconButton,
+    Custom
 };
 enum class ActionKind
 {
@@ -98,6 +99,14 @@ class TextDocument
     void Draw(Canvas& canvas, const Font& font, Rect bounds, Theme theme, bool focus) const;
 };
 
+// Borrowed application drawing/input callbacks; no kernel ABI changes.
+struct CustomWidget
+{
+    void* context;
+    void (*draw)(void*, Canvas&, const Font&, Rect, bool);
+    Action (*input)(void*, const HackosWindowEvent2&, Rect);
+};
+
 struct Widget
 {
     Kind kind;
@@ -111,6 +120,7 @@ struct Widget
     unsigned itemCount, selected, scroll;
     TextDocument* document;
     unsigned icon;
+    CustomWidget custom;
 };
 
 // Explicit Init is required, including for static storage. No heap, virtual
@@ -150,6 +160,7 @@ class View
     bool SetFocus(unsigned id);
     bool SetText(unsigned id, const char* text);
     bool SetDocument(unsigned id, TextDocument* document);
+    bool SetCustom(unsigned id, CustomWidget custom);
     bool SetIcon(unsigned id, unsigned icon);
     bool SetSecret(unsigned id, bool secret);
     bool SetItems(unsigned id, const char* const* items, unsigned length);

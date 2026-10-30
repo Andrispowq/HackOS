@@ -156,3 +156,17 @@ for subsequent edits, preserving the rest of its maximized background. The share
 renderer skips widgets outside each tile and writes clipped glyph pixels directly.
 The terminal repaints on grid revisions or geometry/reset events, rather than
 on every physical key transition before the shell has echoed the input.
+
+## Application drawing widgets
+
+`Kind::Custom` borrows a `CustomWidget` context with draw/input callbacks installed
+through `SetCustom`. The caller keeps that context alive for the view lifetime.
+Draw receives the clipped tile canvas, font, widget bounds and focus state; it
+must respect the canvas clip and avoid blocking or modifying widget structure.
+Input receives mouse-button transitions, wheel events or focused keyboard events;
+held mouse motion does not reactivate a link. The view assigns the widget ID to
+the returned action. Tab remains view-level focus traversal, and modal dialogs
+intercept input. Input/focus reset clears view button state. Applications should
+keep callback state independent of held keys/buttons. No new kernel ABI is used.
+The Browser is the first consumer. Text-field Enter now emits `Activate` for that
+field (excluding repeat events); consumers may use it to submit a form.

@@ -183,3 +183,9 @@ test-http-codec:
 	$(PYTHON) http.py
 test-http:
 	$(PYTHON) qemu_http.py --firmware $(FIRMWARE) --image $(IMAGE)
+
+.PHONY: test-html test-browser
+test-html:
+	$(PYTHON) html.py
+test-browser:
+	$(PYTHON) qemu_browser.py --firmware $(FIRMWARE) --image $(IMAGE)

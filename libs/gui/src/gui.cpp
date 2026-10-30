@@ -321,7 +321,7 @@ void View::Traverse(bool reverse)
 unsigned View::Add(Kind kind, unsigned parent, const char* text)
 {
     if (count == MaxWidgets || parent >= count || !Container(widgets[parent].kind) ||
-        (unsigned)kind > (unsigned)Kind::IconButton)
+        (unsigned)kind > (unsigned)Kind::Custom)
     {
         return NoWidget;
     }
@@ -411,6 +411,14 @@ bool View::SetDocument(unsigned id, TextDocument* document)
         return false;
     }
     widgets[id].document = document;
+    dirty = true;
+    return true;
+}
+
+bool View::SetCustom(unsigned id, CustomWidget custom)
+{
+    if (id >= count || widgets[id].kind != Kind::Custom || !custom.draw || !custom.input) return false;
+    widgets[id].custom = custom;
     dirty = true;
     return true;
 }
@@ -932,6 +940,22 @@ Action View::Handle(const HackosWindowEvent2& input, Clipboard clipboard, uint64
                 hit = i;
             }
         }
+        if (hit != NoWidget && widgets[hit].kind == Kind::Custom && widgets[hit].custom.input)
+        {
+            if (event.type == HACKOS_WINDOW_MOUSE)
+            {
+                bool changed = (buttons & 1) != (event.buttons & 1);
+                buttons = event.buttons;
+                pressed = NoWidget;
+                if (!changed) return Nothing();
+                if (event.buttons & 1) focused = hit;
+            }
+            auto& custom = widgets[hit];
+            dirty = true;
+            auto action = custom.custom.input(custom.custom.context, input, custom.bounds);
+            action.widget = hit;
+            return action;
+        }
         if (event.type == HACKOS_WINDOW_WHEEL)
         {
             if (hit != NoWidget && widgets[hit].kind == Kind::TextArea && widgets[hit].document)
@@ -1017,6 +1041,13 @@ Action View::Handle(const HackosWindowEvent2& input, Clipboard clipboard, uint64
         return Nothing();
     }
     auto& w = widgets[focused];
+    if (w.kind == Kind::Custom && w.custom.input)
+    {
+        dirty = true;
+        auto action = w.custom.input(w.custom.context, input, w.bounds);
+        action.widget = focused;
+        return action;
+    }
     if (w.kind == Kind::TextArea && w.document)
     {
         bool changed = w.document->Handle(input, clipboard, w.bounds);
@@ -1025,6 +1056,11 @@ Action View::Handle(const HackosWindowEvent2& input, Clipboard clipboard, uint64
     }
     if (w.kind == Kind::TextField)
     {
+        if (event.type == HACKOS_WINDOW_KEY_DOWN && event.key == HACKOS_PHYSICAL_ENTER &&
+            !(input.flags & HACKOS_KEY_REPEAT))
+        {
+            return {ActionKind::Activate, focused, 0};
+        }
         return Edit(focused, input, clipboard);
     }
     if (event.type == HACKOS_WINDOW_KEY_DOWN)
@@ -1110,6 +1146,10 @@ void View::Draw(Canvas& canvas, const Font& font) const
         if (Container(w.kind))
         {
             canvas.Fill(w.bounds, theme.panel);
+        }
+        else if (w.kind == Kind::Custom && w.custom.draw)
+        {
+            w.custom.draw(w.custom.context, canvas, font, w.bounds, focus);
         }
         else if (w.kind == Kind::Label)
         {

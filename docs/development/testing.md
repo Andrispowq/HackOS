@@ -1345,3 +1345,14 @@ Downloaded binary, chunked and 8 KiB files are copied back from disposable image
 and compared exactly. Tests cover malformed/truncated responses, status failures,
 output preservation, pipelines and terminal escaping without public Internet.
 `test-http-codec` and `test-http` are the corresponding Makefile targets.
+
+### Minimal browser
+
+`python3 tests/html.py` sanitizes the HTML parser, relative URL resolver and layout
+(`--sanitizers undefined` is the explicit local fallback). `tests/qemu_browser.py
+--firmware bios --image out/browser/bios/HackOS.img` and the UEFI equivalent use
+GDB and real GUI input with a loopback HTTP server. Run them in separate test
+containers; each binds port 8080 internally. Screenshots and inspections go to
+`tests/out/browser-*`. The suite covers links, history, address entry, scroll,
+resize, errors and cancellation/close during slow loads. The GUI sanitizer suite
+also checks custom-widget routing and text-field Enter activation.

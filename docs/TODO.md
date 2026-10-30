@@ -351,6 +351,7 @@ Milestones 1–4 are implemented; later milestones need a separate request.
 - [x] Add active TCP stream handles, incremental I/O, receive backpressure and readiness/poll.
 - [ ] Add inherited socket descriptors, listen/accept, adaptive RTO/congestion control and DNS TCP fallback.
 - [x] Add bounded userspace HTTP GET, chunked/length/EOF decoding, binary downloads and a local demo.
+- [x] Add a minimal HTML browser with linked local pages, navigation and scrolling.
 - [ ] Add TLS/HTTPS with certificate/hostname validation and trusted roots.
 - [ ] Add bounded redirect handling and broader HTTP features.
 - [ ] Add network configuration and useful network user programs.

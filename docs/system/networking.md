@@ -626,3 +626,6 @@ malformed headers/chunks, metadata limits and mutated responses.
 HTTP peer; `--host` instead uses a real loopback HTTP server through QEMU user
 networking. Tests verify status failures, terminal escaping, pipes and saved
 files byte-for-byte, including preservation of an existing `-o` target.
+
+The [minimal HTML browser](browser.md) reuses this decoder with an asynchronous
+GUI transport. Its linked local demo begins at `http://10.0.2.2:8080/browser/`.

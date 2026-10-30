@@ -80,6 +80,12 @@ jobs:
             --mount "type=bind,source=$PWD,target=/work,readonly" \
             --mount "type=bind,source=$PWD/tests/out,target=/work/tests/out" \
             hackos-tests:host python3 tests/http.py
+      - name: Exercise bounded HTML parsing and layout
+        if: ${{ !cancelled() && matrix.suite == 'host' }}
+        run: |
+          docker run --rm --network none --user "$(id -u):$(id -g)" \
+            --mount "type=bind,source=$PWD,target=/work,readonly" \
+            hackos-tests:host python3 tests/html.py
       - name: Exercise surface allocation with sanitizers
         if: ${{ !cancelled() && matrix.suite == 'host' }}
         run: |
@@ -277,6 +283,16 @@ jobs:
               hackos-tests:toolchain python3 tests/qemu_http.py --firmware "$FIRMWARE" \
                 --image "tests/out/build-$FIRMWARE/HackOS.img" $MODE
           done
+      - name: Exercise minimal browser navigation and rendering
+        if: ${{ !cancelled() && steps.build.outcome == 'success' }}
+        env:
+          FIRMWARE: ${{ matrix.firmware }}
+        run: |
+          docker run --rm --network none --user "$(id -u):$(id -g)" \
+            --mount "type=bind,source=$PWD,target=/work,readonly" \
+            --mount "type=bind,source=$PWD/tests/out,target=/work/tests/out" \
+            hackos-tests:toolchain python3 tests/qemu_browser.py --firmware "$FIRMWARE" \
+              --image "tests/out/build-$FIRMWARE/HackOS.img"
       - name: Exercise DHCP lease lifecycle
         if: ${{ !cancelled() && steps.build.outcome == 'success' }}
         env:

@@ -54,6 +54,8 @@ fallback after 28 seconds. Compose also starts a container-loopback UDP echo hel
 `udp 10.0.2.2 7777 "hello from HackOS"` for a complete datagram exchange.
 The TCP helpers support `tcp 10.0.2.2 7778 "hello over TCP"` and the incremental
 `tcp --stream 10.0.2.2 7779 256 "hello over TCP"` demo.
+Run `browser` or select **Browser** in the desktop launcher for the minimal HTML
+browser and its linked local demo pages. See [browser](../system/browser.md).
 Compose also starts a generated-content HTTP demo: `http http://10.0.2.2:8080/`
 or `http -o /tmp/download.txt http://10.0.2.2:8080/large`. Direct runs can enable it
 with `--network --http-demo`. No additional host port is exposed. Direct runs can select `--network --tcp-demo`, or opt in with
@@ -291,3 +293,5 @@ Run `ping 10.0.2.2` as any user for four real IPv4/ICMP Echo probes.
 `nslookup example.com` tests DNS through QEMU's resolver, and `ping example.com`
 resolves a hostname before sending Echo probes. See
 [networking](../system/networking.md) for static test addresses and diagnostics.
+
+`libs/browser` builds `/usr/bin/browser`, linked with `libgui.a` and `libc.a`.

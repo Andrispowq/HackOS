@@ -35,6 +35,7 @@ def package(firmware):
                              ('libs/desktop/bin/desktop', 'USR/BIN/desktop'),
                              ('libs/files/bin/files', 'USR/BIN/files'),
                              ('libs/editor/bin/editor', 'USR/BIN/editor'),
+                             ('libs/browser/bin/browser', 'USR/BIN/browser'),
                              ('libs/settings/bin/settings', 'USR/BIN/settings'),
                              ('libs/term/bin/term', 'USR/BIN/term'),
                              ('libs/ring3/bin/ring3', 'USR/BIN/ring3'),

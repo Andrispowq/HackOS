@@ -512,12 +512,55 @@ static int Documents()
     return 0;
 }
 
+static unsigned customInputs, customDraws;
+static void CustomDraw(void*, Canvas& canvas, const Font&, Rect bounds, bool)
+{
+    ++customDraws;
+    canvas.Fill(bounds, 0xff123456);
+}
+
+static Action CustomInput(void*, const HackosWindowEvent2&, Rect)
+{
+    ++customInputs;
+    return {ActionKind::Activate, NoWidget, 7};
+}
+
+static int CustomControls()
+{
+    view.Init();
+    unsigned custom = view.Add(Kind::Custom, 0);
+    CHECK(view.SetCustom(custom, {nullptr, CustomDraw, CustomInput}));
+    view.SetLayout(custom, 120, 60);
+    unsigned field = view.Add(Kind::TextField, 0, "address");
+    view.Layout(200, 120);
+    auto bounds = view.Get(custom)->bounds;
+    auto action = view.Handle(Mouse(bounds.x + 4, bounds.y + 4, 1));
+    CHECK(action.widget == custom && action.value == 7 && customInputs == 1);
+    view.Handle(Mouse(bounds.x + 5, bounds.y + 5, 1));
+    CHECK(customInputs == 1); // Held mouse motion must not reactivate a link.
+    view.Handle(Mouse(bounds.x + 4, bounds.y + 4, 0));
+    CHECK(customInputs == 2);
+    CHECK(view.Handle(Key(HACKOS_PHYSICAL_ENTER)).widget == custom);
+    Canvas canvas;
+    canvas.Init(buffer + 1, 32, {0, 0, 32, 32});
+    view.Draw(canvas, font);
+    CHECK(customDraws == 1);
+    view.SetEnabled(custom, false);
+    view.Handle(Mouse(bounds.x + 4, bounds.y + 4, 1));
+    CHECK(customInputs == 3);
+    view.SetFocus(field);
+    action = view.Handle(Key(HACKOS_PHYSICAL_ENTER));
+    CHECK(action.kind == ActionKind::Activate && action.widget == field);
+    ++tests;
+    return 0;
+}
+
 int PlatformTests();
 
 int main()
 {
     if (Drawing() || TiledDrawing() || Layout() || Editing() || Controls() || Secrets() || Documents() || Stress() ||
-        PlatformTests())
+        CustomControls() || PlatformTests())
     {
         return 1;
     }

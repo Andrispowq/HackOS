@@ -36,6 +36,7 @@ userspace:
 	$(MAKE) -C libs/desktop
 	$(MAKE) -C libs/files
 	$(MAKE) -C libs/editor
+	$(MAKE) -C libs/browser
 	$(MAKE) -C libs/settings
 	$(MAKE) -C libs/term
 	$(MAKE) -C libs/ring3
@@ -63,6 +64,7 @@ clean:
 	$(MAKE) -C libs/desktop clean
 	$(MAKE) -C libs/files clean
 	$(MAKE) -C libs/editor clean
+	$(MAKE) -C libs/browser clean
 	$(MAKE) -C libs/settings clean
 	$(MAKE) -C libs/term clean
 	$(MAKE) -C libs/ring3 clean

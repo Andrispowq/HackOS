@@ -60,6 +60,7 @@ int main()
     auto logout = view.Add(Gui::Kind::Button, launcher, "Log out");
     auto files = view.Add(Gui::Kind::Button, launcher, "Files");
     auto editor = view.Add(Gui::Kind::Button, launcher, "Editor");
+    auto browser = view.Add(Gui::Kind::Button, launcher, "Browser");
     auto settings = view.Add(Gui::Kind::Button, launcher, "Settings");
     statusLabel = view.Add(Gui::Kind::Label, launcher, "Ready");
     view.SetLayout(statusLabel, 0, 32, 1, 0, 0);
@@ -176,6 +177,10 @@ int main()
             else if (action.widget == editor)
             {
                 Launch("~/USR/BIN/EDITOR");
+            }
+            else if (action.widget == browser)
+            {
+                Launch("~/USR/BIN/BROWSER");
             }
             else if (action.widget == widgets)
             {

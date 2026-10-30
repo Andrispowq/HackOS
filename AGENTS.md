@@ -149,6 +149,14 @@ escaped. Compose serves generated HTTP fixtures at 10.0.2.2:8080. HTTPS and
 redirect following are unsupported. See `docs/system/networking.md` and
 `tests/http.py` / `tests/qemu_http.py` (both firmware paths, plus `--host`).
 
+`libs/browser` adds a minimal HTTP HTML viewer with a desktop launcher entry,
+address bar, Back/Reload/Stop, clickable relative links and scrolling. The bounded
+parser/layout lives in `common/include/hackos/runtime/html.h`; document storage
+uses the userspace heap. Async DNS/TCP keeps the GUI responsive. No CSS, scripts,
+images, forms or HTTPS. See `docs/system/browser.md` and `tests/html.py` /
+`tests/qemu_browser.py`. `Gui::Kind::Custom` provides borrowed draw/input callbacks;
+text-field Enter emits Activate. Kernel ABI and image-page limits are unchanged.
+
 ## Where to look
 
 | Area | Starting points |
