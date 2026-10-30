@@ -311,15 +311,63 @@ static void Acpi()
     out.Text("  Table presence does not imply an active driver (for example HPET).\n");
 }
 
+static void Address(const char* label, const uint8_t* bytes, unsigned count, unsigned base, const char* separator)
+{
+    out.Field(label);
+    for (unsigned i = 0; i < count; ++i)
+    {
+        if (i) out.Text(separator);
+        out.Number(bytes[i], base, base == 16 ? 2 : 0);
+    }
+    out.Text("\n");
+}
+
+static void Network()
+{
+    HackosHardwareInfo info;
+    if (!Read(HACKOS_HW_NETWORK, 0, info))
+    {
+        return;
+    }
+    auto& network = info.network;
+    out.Heading("Network / Ethernet demo");
+    if (!network.available)
+    {
+        out.Text("  No supported NIC. Enable E1000 with the QEMU runner's --network option.\n");
+        return;
+    }
+    out.Field("Driver");
+    out.Text("Intel E1000 (82540EM)\n");
+    out.Field("Link");
+    out.Text(network.linkUp ? "up\n" : "down\n");
+    Address("MAC address", network.mac, 6, 16, ":");
+    Address("Static IPv4 address", network.address, 4, 10, ".");
+    Address("Gateway", network.gateway, 4, 10, ".");
+    out.Field("Gateway ARP");
+    out.Text(network.arpState == HACKOS_ARP_RESOLVED ? "resolved\n" :
+             network.arpState == HACKOS_ARP_TIMEOUT ? "timed out\n" : "waiting\n");
+    if (network.arpState == HACKOS_ARP_RESOLVED)
+    {
+        Address("Gateway MAC", network.gatewayMac, 6, 16, ":");
+    }
+    Value("ARP attempts", network.attempts);
+    Value("TX frames queued", network.txFrames);
+    Value("RX frames received", network.rxFrames);
+    Value("TX drops", network.txDropped);
+    Value("RX descriptor drops", network.rxDropped);
+    Value("ARP replies queued", network.arpReplies);
+    out.Text("  Ethernet + ARP only. Ping, TCP and internet applications are not implemented.\n");
+}
+
 int main(int argc, char** argv)
 {
     const char* section = argc == 1 ? "full" : argv[1];
     bool help = argc == 2 && (Equal(section, "--help") || Equal(section, "-h"));
-    const char* usage = "Usage: sysinfo [full|system|cpu|memory|memory-map|disk|pci|usb|ps2|display|acpi]\n"
+    const char* usage = "Usage: sysinfo [full|system|cpu|memory|memory-map|disk|pci|usb|ps2|display|acpi|network]\n"
                         "Root only. Default: full. ps/2 and pc/2 are aliases for ps2.\n"
                         "Save a report: sysinfo full > /tmp/hardware.txt\n";
     const char* names[] = {"full", "system", "cpu",     "memory", "memory-map", "disk", "pci",
-                           "usb",  "ps2",    "display", "acpi",   "ps/2",       "pc/2"};
+                           "usb",  "ps2",    "display", "acpi",   "ps/2",       "pc/2", "network"};
     unsigned selected = sizeof(names) / sizeof(*names);
     for (unsigned i = 0; i < sizeof(names) / sizeof(*names); ++i)
     {
@@ -387,6 +435,10 @@ int main(int argc, char** argv)
     if (full || selected == 10)
     {
         Acpi();
+    }
+    if (full || selected == 13)
+    {
+        Network();
     }
     return out.ok && !failed ? 0 : 1;
 }

@@ -19,7 +19,7 @@ int main(int argc, char**)
     Print("Editor: edit <file>; Ctrl+S saves, Ctrl+X exits without saving.\n");
     Print("Programs: <name> [args], ./<path>, /usr/bin/<name>; append & for background.\n");
     Print("Identity: id, whoami, users, groups. Accounts persist across boots.\n");
-    Print("Root: sysinfo [full|cpu|memory|disk|pci|usb|ps2|display|acpi]; sysinfo --help.\n");
+    Print("Root: sysinfo [full|cpu|memory|disk|pci|usb|ps2|display|acpi|network]; sysinfo --help.\n");
     Print("Root: useradd <name> [group], groupadd <name>, usermod <user> <group>.\n");
     Print("Root: runas <user> <command> [args], shutdown, restart. Kill: own tasks or root.\n");
     Print("Jobs: jobs, fg [job], bg [job], wait [job], kill %job. Ctrl+Z stops; Ctrl+C interrupts.\n");

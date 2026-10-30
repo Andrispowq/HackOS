@@ -110,6 +110,14 @@ file-info record. Writes update modification dates; moves preserve file dates.
 The desktop owns a bottom-layer surface with hardcoded Terminal/Files icons.
 Graphical first-start account setup remains in LOGIN. See `docs/system/editor.md`.
 
+Experimental networking supports one QEMU E1000 (`8086:100e`) with bounded
+idle polling and Ethernet/ARP only. Compose/noVNC enables it by default; the direct
+runner enables it with `--network`. Root-only `sysinfo network` exposes copied
+link/ARP state and packet counters through the existing hardware query;
+static test addresses are `10.0.2.15` and gateway `10.0.2.2`. No IP transport
+or sockets exist yet. See `docs/system/networking.md` and
+`tests/qemu_network.py` for packet capture, ring reuse and failure checks.
+
 ## Where to look
 
 | Area | Starting points |

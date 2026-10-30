@@ -11,7 +11,7 @@ import time
 
 ROOT = Path(__file__).resolve().parents[1]
 
-def run(firmware, image, web=False, debug=False, snapshot=False, serial_log=None):
+def run(firmware, image, web=False, debug=False, snapshot=False, serial_log=None, network=False):
     if not image.is_file(): raise FileNotFoundError(f'Build the {firmware} image first: {image}')
     with tempfile.TemporaryDirectory(prefix='hackos-run-') as temporary:
         args = ['qemu-system-x86_64', '-machine', 'q35', '-accel', 'tcg', '-cpu', 'qemu64,+rdrand',
@@ -19,6 +19,10 @@ def run(firmware, image, web=False, debug=False, snapshot=False, serial_log=None
                 '-drive', f'file={image.resolve()},format=raw',
                 '-usb', '-device', 'usb-ehci,id=ehci', '-device', 'qemu-xhci,id=xhci',
                 '-monitor', 'none', '-serial', f'file:{serial_log.resolve()}' if serial_log else 'none']
+        if network:
+            index = args.index('-net')
+            args[index:index + 2] = ['-netdev', 'user,id=net0,ipv6=off',
+                                     '-device', 'e1000,netdev=net0,mac=52:54:00:12:34:56']
         if snapshot: args += ['-snapshot']
         if firmware == 'uefi':
             ovmf = ROOT / 'boot/UEFI/OVMFbin'
@@ -62,5 +66,6 @@ if __name__ == '__main__':
     parser.add_argument('--debug', action='store_true')
     parser.add_argument('--serial-log', type=Path, help='Capture COM1 boot, fault and terminal diagnostics')
     parser.add_argument('--snapshot', action='store_true', help='Discard guest writes when QEMU stops')
+    parser.add_argument('--network', action='store_true', help='Enable experimental E1000 Ethernet/ARP')
     args = parser.parse_args()
-    run(args.firmware, args.image, args.web, args.debug, args.snapshot, args.serial_log)
+    run(args.firmware, args.image, args.web, args.debug, args.snapshot, args.serial_log, args.network)

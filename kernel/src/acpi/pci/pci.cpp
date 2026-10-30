@@ -5,6 +5,7 @@
 #include "lib/stdio.h"
 
 #include "drivers/ahci/ahci_device.h"
+#include "drivers/net/e1000.h"
 
 #include "drivers/usb/uhci/uhci.h"
 
@@ -101,6 +102,13 @@ void EnumerateFunction(uint64_t deviceAddress, uint64_t function, uint16_t segme
             }
         }
 
+        break;
+
+    case 0x02: // network controller
+        if (pciDeviceHeader->Subclass == 0)
+        {
+            Net::InitialiseE1000(pciDeviceHeader);
+        }
         break;
 
     case 0x0C: // serial bus controller

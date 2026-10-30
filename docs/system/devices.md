@@ -16,7 +16,8 @@ this is limited table/AML handling, not a general ACPI interpreter.
 [PCI enumeration](../../kernel/src/acpi/pci/pci.cpp) walks MCFG configuration
 regions, maps configuration pages, and inspects class, subclass, and programming
 interface fields. AHCI controllers create storage devices; UHCI controllers
-enter the experimental USB path. Device-name tables provide human-readable
+enter the experimental USB path. Intel 82540EM devices enter the experimental
+[E1000 Ethernet/ARP path](networking.md). Device-name tables provide human-readable
 descriptions.
 
 [MADT handling](../../kernel/src/acpi/apic/madt.cpp) records enabled local APIC

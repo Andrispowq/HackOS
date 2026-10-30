@@ -237,6 +237,7 @@ on the executable's filename or file permissions.
 | `usb` | USB-class PCI controllers with interface and driver status |
 | `ps2` | Keyboard IRQ registration/layout, mouse enable result and negotiated packet/wheel protocol; aliases `ps/2`, `pc/2` |
 | `display` | Boot framebuffer dimensions, bit depth and scanline pitch |
+| `network` | E1000 availability/link, static ARP addresses, resolved gateway MAC and bounded packet counters |
 | `acpi` | Root table entries with signatures, revisions, sizes and OEM identifiers |
 
 Reports use aligned ASCII headings/columns without terminal escape sequences.
@@ -269,3 +270,7 @@ Process (`ps`), account (`users`, `groups`), directory (`ls -l`), and `sysinfo`
 tables use space-padded columns that remain plain text when redirected. Names
 are left aligned, numeric IDs/sizes right aligned, and hardware identifiers use
 zero-padded hexadecimal. `ps` prints PID, PPID, PGID, UID, GID, state and name.
+
+`sysinfo network` shows the experimental Ethernet/ARP state and is also included
+in `sysinfo full`. It retains root-only authorization and supports redirection.
+See [networking](networking.md) for a noVNC demo and counter definitions.

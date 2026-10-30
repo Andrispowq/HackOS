@@ -271,3 +271,9 @@ listed as **Files** in the desktop launcher. See [file manager](../system/files.
 
 `libs/editor` packages `/usr/bin/editor`, available from the launcher and Files.
 Image packaging uses UTC for FAT timestamps to match the default QEMU RTC.
+
+For experimental Ethernet/ARP bring-up, add `--network` to `tools/run_qemu.py`.
+It enables one E1000 with QEMU user networking; the direct runner defaults to no NIC.
+Both Docker Compose/noVNC services now pass `--network` automatically. Log in as
+an administrator and run `sysinfo network` to see the gateway exchange. See
+[networking](../system/networking.md) for static test addresses and diagnostics.

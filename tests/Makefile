@@ -143,3 +143,13 @@ test-formatting-qemu:
 .PHONY: test-vnc-latency
 test-vnc-latency:
 	$(PYTHON) qemu_vnc_latency.py --firmware $(FIRMWARE)
+
+.PHONY: test-network test-network-host
+test-network-host:
+	$(PYTHON) network.py
+test-network:
+	$(PYTHON) qemu_network.py --firmware $(FIRMWARE) --image $(IMAGE)
+
+.PHONY: test-network-demo
+test-network-demo:
+	$(PYTHON) qemu_network_demo.py --firmware $(FIRMWARE) --image $(IMAGE)

@@ -66,6 +66,13 @@ jobs:
             --mount "type=bind,source=$PWD,target=/work,readonly" \
             --mount "type=bind,source=$PWD/tests/out,target=/work/tests/out" \
             hackos-tests:host python3 tests/boot_loader.py
+      - name: Exercise Ethernet and ARP codec with sanitizers
+        if: ${{ !cancelled() && matrix.suite == 'host' }}
+        run: |
+          docker run --rm --network none --user "$(id -u):$(id -g)" \
+            --mount "type=bind,source=$PWD,target=/work,readonly" \
+            --mount "type=bind,source=$PWD/tests/out,target=/work/tests/out" \
+            hackos-tests:host python3 tests/network.py
       - name: Exercise surface allocation with sanitizers
         if: ${{ !cancelled() && matrix.suite == 'host' }}
         run: |
@@ -175,6 +182,26 @@ jobs:
             --mount "type=bind,source=$PWD,target=/work,readonly" \
             --mount "type=bind,source=$PWD/tests/out,target=/work/tests/out" \
             hackos-tests:toolchain python3 tests/qemu_loader.py --firmware "$FIRMWARE"
+      - name: Exercise Ethernet packet exchange and NIC failure paths
+        if: ${{ !cancelled() && steps.build.outcome == 'success' }}
+        env:
+          FIRMWARE: ${{ matrix.firmware }}
+        run: |
+          docker run --rm --network none --user "$(id -u):$(id -g)" \
+            --mount "type=bind,source=$PWD,target=/work,readonly" \
+            --mount "type=bind,source=$PWD/tests/out,target=/work/tests/out" \
+            hackos-tests:toolchain python3 tests/qemu_network.py --firmware "$FIRMWARE" \
+              --image "tests/out/build-$FIRMWARE/HackOS.img"
+      - name: Exercise the visible network demo and hardware ABI
+        if: ${{ !cancelled() && steps.build.outcome == 'success' }}
+        env:
+          FIRMWARE: ${{ matrix.firmware }}
+        run: |
+          docker run --rm --network none --user "$(id -u):$(id -g)" \
+            --mount "type=bind,source=$PWD,target=/work,readonly" \
+            --mount "type=bind,source=$PWD/tests/out,target=/work/tests/out" \
+            hackos-tests:toolchain python3 tests/qemu_network_demo.py --firmware "$FIRMWARE" \
+              --image "tests/out/build-$FIRMWARE/HackOS.img"
       - name: Exercise persistent accounts, setup and login
         if: ${{ !cancelled() && steps.build.outcome == 'success' }}
         env:

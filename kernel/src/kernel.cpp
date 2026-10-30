@@ -1,5 +1,6 @@
 #include "kernel.h"
 #include "drivers/serial/serial.h"
+#include "drivers/net/e1000.h"
 
 #include "init/kernelInit.h"
 
@@ -32,6 +33,7 @@ extern "C" int kernel_main(KernelInfo* info)
     while (true)
     {
         ReapExitedProcesses();
+        Net::Poll();
         {
             PreemptionGuard guard;
             KernelWindowManager->Update();

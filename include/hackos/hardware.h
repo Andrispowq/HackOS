@@ -12,6 +12,7 @@ enum HackosHardwareSection : uint64_t
     HACKOS_HW_DISPLAY,
     HACKOS_HW_ACPI,
     HACKOS_HW_MEMORY_MAP,
+    HACKOS_HW_NETWORK,
     HACKOS_HW_COUNT
 };
 
@@ -73,7 +74,26 @@ union HackosHardwareInfo
         uint32_t type, usable;
     } region;
 
+    struct
+    {
+        uint32_t available, linkUp, arpState, attempts;
+        uint8_t mac[6], gatewayMac[6], address[4], gateway[4];
+        uint32_t reserved;
+        uint64_t txFrames, rxFrames, txDropped, rxDropped, arpReplies;
+    } network;
+
     uint8_t bytes[128];
 };
 
 static_assert(sizeof(HackosHardwareInfo) == 128, "hardware ABI");
+
+// network.arpState: waiting includes waiting for link; timeout permits a late reply.
+enum HackosArpState : uint32_t
+{
+    HACKOS_ARP_WAITING,
+    HACKOS_ARP_RESOLVED,
+    HACKOS_ARP_TIMEOUT
+};
+
+static_assert(__builtin_offsetof(HackosHardwareInfo, network.txFrames) == 40, "network counters ABI");
+static_assert(sizeof(((HackosHardwareInfo*)0)->network) == 80, "network snapshot ABI");

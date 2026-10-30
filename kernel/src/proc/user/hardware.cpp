@@ -7,6 +7,7 @@
 #include "drivers/mouse/mouse.h"
 #include "drivers/keyboard/keyboard.h"
 #include "lib/memory.h"
+#include "drivers/net/e1000.h"
 
 extern KernelInfo* kInfo;
 extern MemoryMap* map;
@@ -164,6 +165,9 @@ uint64_t ReadHardware(uint64_t section, uint64_t index, HackosHardwareInfo& info
         info.acpi.oemRevision = table->OEMRevision;
         break;
     }
+    case HACKOS_HW_NETWORK:
+        Net::Snapshot(info);
+        break;
     case HACKOS_HW_MEMORY_MAP:
     {
         if (index >= map->GetEntryCount())

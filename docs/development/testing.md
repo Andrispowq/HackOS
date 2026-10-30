@@ -1261,3 +1261,9 @@ tick counters are in `qemu-windows-*/{draw,maximized,restore}-timings.json` and
 `input-latency.json`. These carry the same debugger-overhead limitation. Coverage
 remains the supported 32-bit BGR framebuffer, including padded pitch and clipped
 edges; other pixel formats and real hardware are not validated by these runs.
+
+## Networking bring-up
+
+See [Ethernet and ARP](../system/networking.md) for the sanitized codec tests and
+`tests/qemu_network.py` packet-capture checks on BIOS and UEFI, including absent
+and unsupported NIC boots. The QEMU runner enables E1000 only with `--network`.

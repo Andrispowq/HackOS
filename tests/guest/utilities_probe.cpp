@@ -48,6 +48,13 @@ int main()
          info.memory.firmwareUsableBytes < 2ULL * 1024 * 1024 * 1024 && info.memory.pageSize == 4096 && ok;
     ok = syscall_hardware(HACKOS_HW_CPU, 0, &info) == 1 && info.cpu.discoveredCpus == 4 && info.cpu.activeCpus == 1 &&
          ok;
+    ok = syscall_hardware(HACKOS_HW_NETWORK, 0, &info) == 1 && info.network.available <= 1 &&
+         info.network.linkUp <= 1 && info.network.arpState <= HACKOS_ARP_TIMEOUT &&
+         info.network.attempts <= 5 && info.network.reserved == 0 && ok;
+    for (unsigned i = sizeof(info.network); i < sizeof(info); ++i)
+    {
+        ok = info.bytes[i] == 0 && ok;
+    }
     HackosClock before = {}, after = {};
     ok = syscall_clock(&before) == 0 && before.year >= 2026 && before.month >= 1 && before.month <= 12 &&
          before.day >= 1 && before.day <= 31 && before.hour <= 23 && before.minute <= 59 && before.second <= 59 && ok;
