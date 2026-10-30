@@ -92,6 +92,12 @@ eight independent kernel terminal endpoints and per-terminal foreground job cont
 failure returns to login; `console` selects a recovery shell. See
 `docs/system/desktop.md` for authority, cleanup and fixed-grid limits.
 
+Window terminals parse a bounded 7-bit ANSI subset for 16 colours, bold/underline/
+reverse, cursor motion/visibility and erasure. Styles survive scrollback/resize;
+clipboard copies remain plain text. Operation 8 adds an atomic styled viewport
+while legacy text records remain unchanged. Recovery-console output is unchanged.
+See `docs/system/desktop.md` for supported sequences and fixed parser limits.
+
 Step 5a adds `/USR/BIN/FILES` (`libs/files`) to the desktop launcher: paged folder
 browsing, bounded read-only text/hex previews, folder creation, file rename/move
 and confirmed deletion with kernel permission errors. Folder rename/delete remain

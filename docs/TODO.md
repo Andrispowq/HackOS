@@ -187,15 +187,20 @@ Milestones 1–4 are implemented; later milestones need a separate request.
    unsaved-change confirmation); [settings](system/settings.md) complete for
    hardware pages, account/group editing, password changes and supported recovery-console
    appearance. Session-wide GUI themes remain a follow-up.
-6. **Integrated hardening — in progress:** 6a adds bounded damaged-region
+6. **Integrated hardening — supported QEMU baseline validated:** 6a adds bounded damaged-region
    composition, clipped drawing and debugger-visible render/input latency counters,
    with full-scene equivalence and timing checks on BIOS/UEFI. 6b adds physical
    surface-allocation failure injection and repeated window-limit
    cleanup cycles. Login uses retained partial frames to reduce typing latency;
    the terminal avoids redundant key-transition repaints. 6c adds sustained multi-application desktop cycles with exact resource-baseline
    checks, repeated endpoint saturation/overflow recovery, scalar-oracle clipping
-   and padded-presentation coverage. Broader framebuffer-format support and terminal
-   polish remain; current graphics coverage is 32-bit BGR.
+   and padded-presentation coverage. Terminal polish now includes scrollback,
+   selection/copy/paste, per-window appearance and bounded ANSI handling. 6d adds
+   retained terminal cell-span painting, full-image equivalence checks and a
+   WebSocket/RFB key-to-pixel probe. BIOS/UEFI pass allocation-failure, window-limit,
+   input-overflow and eight-cycle mixed-desktop cleanup checks. Broader framebuffer
+   formats and real-hardware/browser timing remain follow-ups; current graphics
+   coverage is 32-bit BGR. See the [validation notes](development/testing.md#terminal-damage-and-transport-validation).
 
 ## Boot and memory
 
@@ -342,6 +347,7 @@ Milestones 1–4 are implemented; later milestones need a separate request.
 - [x] Bounded 512-row scrollback, wheel and Shift+PageUp/PageDown/Home/End navigation.
 - [x] Mouse selection and Ctrl+Shift+C session clipboard copy, with explicit size errors.
 - [x] Configurable window-terminal font size and colours.
-- [ ] ANSI escape sequences.
+- [x] Bounded window-terminal ANSI colours/styles, cursor movement and erasure.
+- [ ] Broader VT support (alternate screen, scrolling regions and extended colours).
 - [x] Ctrl+Shift+V paste with bounded input and whitespace normalization.
 - [ ] Drag-selection autoscroll.

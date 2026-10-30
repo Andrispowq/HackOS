@@ -837,3 +837,9 @@ Window terminal controllers can use terminal-session operation 5 to atomically
 copy a live or historical viewport. See [the terminal contract](desktop.md#abi-and-authority)
 for its 9672-byte record, row IDs, epoch, and controller-only authority. Existing
 state and cell reads remain supported unchanged.
+
+Terminal-session operation 8 adds an atomic styled viewport without changing
+operation 5 or the existing text-cell records. See [ANSI output and ABI](desktop.md#ansi-output)
+for supported sequences, attribute encoding and parser bounds. Redirected files
+and pipes retain original bytes; parsing occurs only at a window-terminal output
+endpoint. Recovery-console rendering remains unchanged.

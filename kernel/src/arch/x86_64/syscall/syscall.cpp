@@ -127,6 +127,7 @@ static uint64_t UserTerminalCursor(uint64_t back, uint64_t visible)
     {
         tty->caretBack = back;
         tty->caret = visible;
+        tty->cursorMode = 0;
         ++tty->revision;
     }
     else

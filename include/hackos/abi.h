@@ -265,7 +265,8 @@ constexpr uint64_t HACKOS_TERMINAL_CURSOR_MAX = 255;
 constexpr unsigned HACKOS_PROCESS_LIMIT = 64;
 constexpr unsigned HACKOS_TTY_LIMIT = 8, HACKOS_TTY_CELLS = 160 * 60;
 constexpr uint64_t HACKOS_TTY_CREATE = 0, HACKOS_TTY_STATE = 1, HACKOS_TTY_CELLS_READ = 2, HACKOS_TTY_INPUT = 3,
-                   HACKOS_TTY_RESIZE = 4, HACKOS_TTY_VIEW = 5, HACKOS_TTY_PASTE = 6, HACKOS_TTY_SETTINGS = 7;
+                   HACKOS_TTY_RESIZE = 4, HACKOS_TTY_VIEW = 5, HACKOS_TTY_PASTE = 6, HACKOS_TTY_SETTINGS = 7,
+                   HACKOS_TTY_STYLED_VIEW = 8;
 constexpr unsigned HACKOS_TTY_HISTORY_ROWS = 512;
 constexpr uint64_t HACKOS_TTY_LIVE = ~0ULL;
 
@@ -284,6 +285,17 @@ struct HackosTerminalView
 };
 
 static_assert(sizeof(HackosTerminalView) == 9672, "terminal viewport ABI");
+
+// Five-bit foreground/background indices: 0=appearance default, 1..16=ANSI palette.
+constexpr uint16_t HACKOS_TTY_BOLD = 1 << 10, HACKOS_TTY_UNDERLINE = 1 << 11, HACKOS_TTY_REVERSE = 1 << 12;
+
+struct HackosTerminalStyledView
+{
+    HackosTerminalView view;
+    uint16_t styles[HACKOS_TTY_CELLS];
+};
+
+static_assert(sizeof(HackosTerminalStyledView) == 28872, "styled terminal viewport ABI");
 
 struct HackosDesktopEntry
 {

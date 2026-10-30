@@ -24,6 +24,15 @@ def test(firmware, timeout, stress_cycles=0):
         fixture = directory / 'scrollback.txt'
         fixture.write_text(''.join('SCROLL%04d\n' % i for i in range(600)))
         require_success(command(['mcopy', '-i', filesystem(image), fixture, '::/TMP/SCROLLBACK.TXT']), 'install scrollback fixture')
+        ansi = directory / 'ansi.txt'
+        ansi.write_bytes(b'\x1b[2J\x1b[H\x1b[31mRED \x1b[32mGREEN \x1b[34mBLUE\x1b[0m\n'
+                         b'\x1b[1mBOLD\x1b[22m \x1b[4mUNDER\x1b[24m \x1b[7mREVERSE\x1b[27m\n'
+                         b'xxxxx\x1b[3;1H\x1b[2KCURSOR_OK\nDEFAULT\n'
+                         + b''.join(('\x1b[%dm%02d ' % (30 + i if i < 8 else 90 + i - 8, i)).encode() for i in range(16))
+                         + b'\x1b[0m\nANSI_END\n')
+        require_success(command(['mcopy', '-i', filesystem(image), ansi, '::/TMP/ANSI.TXT']), 'install ANSI fixture')
+        ansi.write_bytes(b''.join(('\x1b[31mROW%04d\x1b[0m\n' % i).encode() for i in range(600)))
+        require_success(command(['mcopy', '-i', filesystem(image), ansi, '::/TMP/ANSISCROLL.TXT']), 'install styled history fixture')
         from session import provision_imports
         provision_imports(image, firmware)
         with boot(directory, image, firmware, 'desktop', timeout) as g:

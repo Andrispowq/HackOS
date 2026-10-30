@@ -39,6 +39,7 @@ int main(int argc, char** argv)
         syscall_terminal_session(HACKOS_TTY_STATE, 0, &state) != HACKOS_DENIED ||
         syscall_terminal_session(HACKOS_TTY_VIEW, HACKOS_TTY_LIVE, nullptr) != HACKOS_DENIED ||
         syscall_terminal_session(HACKOS_TTY_PASTE, 1, (void*)"x") != HACKOS_DENIED ||
+        syscall_terminal_session(HACKOS_TTY_STYLED_VIEW, 0, nullptr) != HACKOS_DENIED ||
         syscall_terminal_session(HACKOS_TTY_SETTINGS, 0, nullptr) != HACKOS_DENIED ||
         syscall_terminal_session(HACKOS_TTY_INPUT, 'x', nullptr) != HACKOS_DENIED ||
         syscall_terminal_session(HACKOS_TTY_CREATE, 0, nullptr) != HACKOS_DENIED ||
@@ -73,6 +74,7 @@ int main(int argc, char** argv)
         syscall_terminal_session(HACKOS_TTY_STATE, 0, (void*)1) != HACKOS_ERROR ||
         syscall_terminal_session(HACKOS_TTY_CELLS_READ, 0, (void*)1) != HACKOS_ERROR ||
         syscall_terminal_session(HACKOS_TTY_VIEW, HACKOS_TTY_LIVE, (void*)1) != HACKOS_ERROR ||
+        syscall_terminal_session(HACKOS_TTY_STYLED_VIEW, 0, (void*)1) != HACKOS_ERROR ||
         syscall_terminal_session(HACKOS_TTY_SETTINGS, 0, (void*)1) != HACKOS_ERROR ||
         syscall_terminal_session(HACKOS_TTY_PASTE, 4097, (void*)1) != HACKOS_ERROR ||
         syscall_terminal_session(HACKOS_TTY_INPUT, 256, nullptr) != HACKOS_ERROR ||

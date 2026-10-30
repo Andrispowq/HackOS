@@ -1189,3 +1189,75 @@ reset. Host sanitizer tests cover all even font heights 8–64, glyph sampling,
 scaled selection coordinates, RGBA alpha, paste control-byte rejection, CRLF/tab
 normalization, exact 4096-byte bounds and buffer wiping. Recovery-console tests
 continue to validate its independent defaults and foreground permissions.
+
+ANSI tests compile the production allocation-free screen/parser into host and native
+sanitizer suites. They cover fragmented sequences, cursor clamping, erase modes,
+SGR resets, extended-colour rejection, ignored strings, 512-row styled-history
+rollover, frozen plain-text copy and 100,000 randomized bytes. BIOS/UEFI desktop
+checks render ANSI fixtures, verify copied cell styles, resize, copy coloured
+text, and overflow/scroll styled history; screenshots show palette and history.
+
+## Terminal damage and transport validation
+
+The terminal damage host tests compare retained updates with a full-image oracle
+over 500 mutations (text, ANSI attributes, caret, selection, scroll position,
+status, font/palette and geometry), plus explicit failed-frame retry and exact
+cell-span checks. The desktop BIOS/UEFI suite waits for `clear` to reach the
+renderer, measures a typed character's upload counters, then invalidates only the
+userspace paint cache and compares the retained client image byte-for-byte with a
+forced full repaint. Results are `qemu-desktop-*/terminal-damage.json`.
+
+`python3 tests/qemu_vnc_latency.py --firmware bios --samples 5` (also `uefi`)
+requires the development container's websockify. It sends real RFB key events
+through a local WebSocket/websockify/QEMU VNC connection and times the first
+changed terminal pixels, excluding the desktop clock and cursor area. It uses
+raw rectangle encoding and reports `qemu-vnc-latency-*/timings.json`. This covers
+the noVNC transport path, but not browser event scheduling, canvas paint, browser
+encoding choices, or host-to-container transit. The normal GDB timing harness
+separately measures dispatch, app commit and presentation. Run guest timing
+suites sequentially, without other test VMs; five samples are exploratory and
+not latency percentiles or hardware guarantees.
+
+### Validation snapshot: 2026-10-29
+
+Fresh BIOS/UEFI images passed their build/asset checks. The full host suite passed
+231 checks with the documented x86 UBSan fallback; native graphics/input tests
+passed 39 checks with ASan and UBSan. Formatting passed for 357 project-owned
+C/C++ files. Both firmware paths passed the desktop/ANSI/damage suite, window
+failure/quota/cleanup suite, GUI input suite and eight measured mixed-desktop
+stress cycles plus warmup. Every stress cycle restored the exact warmed resource
+baseline, including heap/physical memory, surfaces, processes and handles.
+ANSI and final desktop screenshots were visually inspected on both paths.
+
+An isolated typed character uploaded 256 pixels in 16 calls, compared with
+311,040 pixels in 432 calls for the forced full repaint of the 720×432 client.
+Both firmware paths produced identical retained/full image hashes. This is a
+99.92% reduction in client upload pixels for that case, not a whole-system speedup:
+the kernel still copies retained surfaces and scans for changed bounds.
+
+Five-sample medians below are milliseconds. GDB rows measure dispatch through
+commit and presentation, including debugger/host scheduling overhead. Baseline
+and first-after JSON are retained in `tests/out/terminal-damage-baseline/` and
+`terminal-damage-first-after/`; the normal latency directories hold the repeat.
+
+| Measurement | BIOS | UEFI |
+| --- | ---: | ---: |
+| Terminal GDB baseline | 118.8 | 97.2 |
+| Terminal GDB first after | 58.7 | 333.5 |
+| Terminal GDB repeat | 58.6 | 62.8 |
+| Login GDB repeat (unchanged renderer) | 104.6 | 106.2 |
+| WebSocket/RFB key to terminal pixels | 81.3 | 81.5 |
+
+The first UEFI wall-time result was much slower even though its median guest
+dispatch/present ticks fell from 75 to 61; the repeat measured 46 ticks. Preserve
+that outlier rather than treating these exploratory runs as a stable benchmark.
+The raw WebSocket probe excludes actual browser paint and is not a measurement
+of the user's complete noVNC session.
+
+The window profiler also exercised drawing, dragging and resizing. Seven-sample
+small-scene compositor wall-time medians were 26.2/6.7 ms (BIOS/UEFI), versus
+128.0/54.0 ms for forced full composition. Maximize/restore measurements and input
+tick counters are in `qemu-windows-*/{draw,maximized,restore}-timings.json` and
+`input-latency.json`. These carry the same debugger-overhead limitation. Coverage
+remains the supported 32-bit BGR framebuffer, including padded pitch and clipped
+edges; other pixel formats and real hardware are not validated by these runs.

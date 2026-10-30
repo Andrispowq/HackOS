@@ -1,19 +1,18 @@
 #pragma once
 #include "hackos/abi.h"
-#include "hackos/runtime/terminal_history.h"
+#include "hackos/runtime/terminal_screen.h"
 #include "hackos/runtime/terminal_appearance.h"
 #include "hackos/runtime/terminal_paste.h"
 #include "drivers/keyboard/keyboard.h"
 class Process;
 
-struct TerminalSession
+struct TerminalSession : TerminalScreen
 {
     uint64_t controller = 0, shell = 0, owner = 0, revision = 0;
-    uint32_t columns = 80, rows = 25, x = 0, y = 0, caretBack = 0;
+    uint32_t caretBack = 0;
     bool caret = false, overflow = false;
     uint16_t head = 0, count = 0;
-    char input[256] = {}, cells[HACKOS_TTY_CELLS] = {};
-    TerminalHistory history = {};
+    char input[256] = {};
     TerminalAppearance appearance = {};
     TerminalPaste paste = {};
     uint64_t window = 0;

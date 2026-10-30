@@ -35,6 +35,10 @@ void ClearTerminalInput(Process* process)
     if (tty)
     {
         tty->paste.Clear();
+        tty->ResetParser();
+        tty->style = 0;
+        tty->cursorMode = 0;
+        ++tty->revision;
         tty->head = tty->count = 0;
         tty->overflow = false;
     }
@@ -85,9 +89,7 @@ void TerminalClear()
         clrscr();
         return;
     }
-    tty->history.Clear();
-    memset(tty->cells, ' ', sizeof(tty->cells));
-    tty->x = tty->y = 0;
+    tty->Clear();
     ++tty->revision;
 }
 
@@ -101,55 +103,7 @@ void TerminalPut(char ch)
     }
     SerialCharacter(ch);
     asm volatile("outb %0, $0xe9" ::"a"((uint8_t)ch));
-    if (ch == '\n')
-    {
-        tty->x = 0;
-        ++tty->y;
-    }
-    else if (ch == '\r')
-    {
-        tty->x = 0;
-    }
-    else if (ch == '\b')
-    {
-        if (tty->x)
-        {
-            --tty->x;
-        }
-        else if (tty->y)
-        {
-            --tty->y;
-            tty->x = tty->columns - 1;
-        }
-        tty->cells[tty->y * tty->columns + tty->x] = ' ';
-    }
-    else if (ch == '\t')
-    {
-        do
-        {
-            TerminalPut(' ');
-        } while (tty->x % 4);
-        return;
-    }
-    else if ((uint8_t)ch >= 32)
-    {
-        tty->cells[tty->y * tty->columns + tty->x] = ch;
-        if (++tty->x == tty->columns)
-        {
-            tty->x = 0;
-            ++tty->y;
-        }
-    }
-    if (tty->y >= tty->rows)
-    {
-        tty->history.Push(tty->cells, tty->columns);
-        for (unsigned i = 0; i < (tty->rows - 1) * tty->columns; ++i)
-        {
-            tty->cells[i] = tty->cells[i + tty->columns];
-        }
-        memset(tty->cells + (tty->rows - 1) * tty->columns, ' ', tty->columns);
-        tty->y = tty->rows - 1;
-    }
+    tty->Feed((uint8_t)ch);
     ++tty->revision;
 }
 
@@ -242,7 +196,7 @@ uint64_t UserTerminalSession(uint64_t operation, uint64_t value, void* buffer)
             {
                 window->MoveWindow(x, y);
             }
-            memset(item.cells, ' ', sizeof(item.cells));
+            item.Clear();
             auto pid = LoadUserProgramTask("~/USR/BIN/SHELL");
             if (!pid)
             {
@@ -300,8 +254,21 @@ uint64_t UserTerminalSession(uint64_t operation, uint64_t value, void* buffer)
     if (operation == HACKOS_TTY_STATE)
     {
         HackosTerminalState state = {tty->revision, tty->shell, tty->columns,   tty->rows,
-                                     tty->x,        tty->y,     tty->caretBack, tty->caret};
+                                     tty->x,        tty->y,     tty->caretBack, tty->Caret(tty->caret)};
         return caller->userSpace->CopyToUser((uint64_t)buffer, &state, sizeof(state)) ? 0 : HACKOS_ERROR;
+    }
+    if (operation == HACKOS_TTY_STYLED_VIEW)
+    {
+        if (!caller->userSpace->WritableRange((uint64_t)buffer, sizeof(HackosTerminalStyledView)))
+        {
+            return HACKOS_ERROR;
+        }
+        static HackosTerminalStyledView view;
+        HackosTerminalState state = {tty->revision, tty->shell, tty->columns,   tty->rows,
+                                     tty->x,        tty->y,     tty->caretBack, tty->Caret(tty->caret)};
+        tty->history.Snapshot(view.view, state, tty->cells, value);
+        tty->history.SnapshotStyles(view.styles, view.view, tty->styles);
+        return caller->userSpace->CopyToUser((uint64_t)buffer, &view, sizeof(view)) ? 0 : HACKOS_ERROR;
     }
     if (operation == HACKOS_TTY_VIEW)
     {
@@ -312,7 +279,7 @@ uint64_t UserTerminalSession(uint64_t operation, uint64_t value, void* buffer)
         // Protected by the syscall preemption guard; avoid a large kernel-stack copy.
         static HackosTerminalView view;
         HackosTerminalState state = {tty->revision, tty->shell, tty->columns,   tty->rows,
-                                     tty->x,        tty->y,     tty->caretBack, tty->caret};
+                                     tty->x,        tty->y,     tty->caretBack, tty->Caret(tty->caret)};
         tty->history.Snapshot(view, state, tty->cells, value);
         return caller->userSpace->CopyToUser((uint64_t)buffer, &view, sizeof(view)) ? 0 : HACKOS_ERROR;
     }
@@ -368,14 +335,18 @@ uint64_t UserTerminalSession(uint64_t operation, uint64_t value, void* buffer)
             // Keep rows and the cursor aligned when the grid changes width.
             // Static scratch is protected by the syscall preemption guard.
             static char resized[HACKOS_TTY_CELLS];
+            static uint16_t resizedStyles[HACKOS_TTY_CELLS];
+            memset(resizedStyles, 0, sizeof(resizedStyles));
             memset(resized, ' ', sizeof(resized));
             unsigned copyRows = rows < tty->rows ? rows : tty->rows;
             unsigned copyColumns = columns < tty->columns ? columns : tty->columns;
             for (unsigned row = 0; row < copyRows; ++row)
             {
                 memcpy(resized + row * columns, tty->cells + row * tty->columns, copyColumns);
+                memcpy(resizedStyles + row * columns, tty->styles + row * tty->columns, copyColumns * sizeof(uint16_t));
             }
             memcpy(tty->cells, resized, sizeof(resized));
+            memcpy(tty->styles, resizedStyles, sizeof(resizedStyles));
             ++tty->history.epoch;
             tty->columns = columns;
             tty->rows = rows;

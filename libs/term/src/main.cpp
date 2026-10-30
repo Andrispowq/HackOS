@@ -3,14 +3,18 @@
 #include "hackos/stdio.h"
 #include "hackos/runtime/terminal_view.h"
 #include "hackos/runtime/terminal_appearance.h"
+#include "hackos/runtime/terminal_damage.h"
 using namespace User;
 static Gui::Window window;
 static Gui::Font font;
 static TerminalViewport viewport;
-static HackosTerminalView snapshot;
+static HackosTerminalStyledView snapshot;
 static HackosTerminalSettings appearance;
 static char copied[HACKOS_CLIPBOARD_LIMIT], notice[80];
 static uint32_t pixels[1024];
+static TerminalDamage damage;
+volatile uint64_t terminal_paint_frames, terminal_paint_pixels, terminal_paint_uploads;
+volatile uint64_t terminal_paint_skips, terminal_paint_full_frames, terminal_last_pixels;
 
 static unsigned Key(const HackosWindowEvent2& event)
 {
@@ -76,78 +80,123 @@ static unsigned Key(const HackosWindowEvent2& event)
     }
 }
 
-static bool Paint()
+static bool Paint(const HackosWindowState& geometry)
 {
     const auto& state = viewport.image.state;
     unsigned height = appearance.fontSize, width = height / 2;
     uint32_t background = TerminalBlend(appearance.bgColour, 0xff000000);
     uint32_t foreground = TerminalBlend(appearance.fontColour, background);
+    char status[160];
+    if (notice[0])
+    {
+        snprintf(status, sizeof(status), "%s", notice);
+    }
+    else if (viewport.selected)
+    {
+        snprintf(status, sizeof(status), "Selection held | Ctrl+Shift+C copy | Ctrl+Shift+V paste | Esc live");
+    }
+    else
+    {
+        snprintf(status, sizeof(status), "Back %u/%u | Wheel/Shift+PgUp/Dn | Drag select | Ctrl+Shift+C/V copy/paste",
+                 (unsigned)(viewport.image.liveLine - viewport.image.firstLine),
+                 (unsigned)(viewport.image.liveLine - viewport.image.oldestLine));
+    }
+    TerminalDamagePlan plan = {};
+    damage.Plan(plan, viewport, appearance, status, geometry.width, geometry.height);
+    if (!plan.count)
+    {
+        ++terminal_paint_skips;
+        return true;
+    }
     HackosWindowFrame frame = {};
-    if (syscall_window_frame(window.Handle(), HACKOS_WINDOW_BEGIN, &frame))
+    auto operation = plan.full ? HACKOS_WINDOW_BEGIN : HACKOS_WINDOW_BEGIN_RETAIN;
+    if (syscall_window_frame(window.Handle(), operation, &frame))
     {
         return false;
     }
-    for (unsigned y = 0; y < frame.height; y += 1)
+    if (frame.width != geometry.width || frame.height != geometry.height)
     {
-        for (unsigned x = 0; x < frame.width; x += 1024)
+        plan.full = true;
+        plan.count = 1;
+        plan.rectangles[0] = {0, 0, frame.width, frame.height};
+    }
+    uint64_t uploaded = 0, uploads = 0;
+    uint32_t inks[160], papers[160];
+    for (unsigned region = 0; region < plan.count; ++region)
+    {
+        const auto& rect = plan.rectangles[region];
+        for (unsigned y = rect.y; y < rect.y + rect.height; y += 1)
         {
-            unsigned w = frame.width - x < 1024 ? frame.width - x : 1024;
-            Gui::Canvas canvas;
-            canvas.Init(pixels, w, {(int)x, (int)y, (int)w, 1});
-            canvas.Fill({0, 0, (int)frame.width, (int)frame.height}, background);
-            unsigned row = y / height;
-            if (row < state.rows)
+            if ((y == rect.y || y % height == 0) && y / height < state.rows)
             {
-                for (unsigned px = 0; px < w && x + px < state.columns * width; ++px)
+                for (unsigned column = 0; column < state.columns; ++column)
                 {
-                    unsigned column = (x + px) / width;
-                    unsigned position = row * state.columns + column;
-                    bool selected = viewport.Selected(position);
-                    pixels[px] = selected ? 0xff32699a : background;
-                    if (TerminalGlyphPixel(font.glyphs, viewport.image.cells[position], (x + px) % width, y % height,
-                                           height))
+                    unsigned position = (y / height) * state.columns + column;
+                    uint16_t style = viewport.styles[position];
+                    uint32_t ink = TerminalAnsiColour(style & 31, foreground, style & HACKOS_TTY_BOLD);
+                    uint32_t paper = TerminalAnsiColour((style >> 5) & 31, background);
+                    if (style & HACKOS_TTY_REVERSE)
                     {
-                        pixels[px] = selected ? 0xffffffff : foreground;
+                        uint32_t swap = ink;
+                        ink = paper;
+                        paper = swap;
+                    }
+                    bool selected = viewport.Selected(position);
+                    inks[column] = selected ? 0xffffffff : ink;
+                    papers[column] = selected ? 0xff32699a : paper;
+                }
+            }
+            for (unsigned x = rect.x; x < rect.x + rect.width; x += 1024)
+            {
+                unsigned right = rect.x + rect.width;
+                unsigned w = right - x < 1024 ? right - x : 1024;
+                Gui::Canvas canvas;
+                canvas.Init(pixels, w, {(int)x, (int)y, (int)w, 1});
+                canvas.Fill({0, 0, (int)frame.width, (int)frame.height}, background);
+                unsigned row = y / height;
+                if (row < state.rows)
+                {
+                    for (unsigned px = 0; px < w && x + px < state.columns * width; ++px)
+                    {
+                        unsigned column = (x + px) / width;
+                        unsigned position = row * state.columns + column;
+                        uint16_t style = viewport.styles[position];
+                        pixels[px] = papers[column];
+                        unsigned gx = (x + px) % width, gy = y % height;
+                        uint8_t ch = viewport.image.cells[position];
+                        bool lit = TerminalGlyphPixel(font.glyphs, ch, gx, gy, height);
+                        lit |=
+                            (style & HACKOS_TTY_BOLD) && gx && TerminalGlyphPixel(font.glyphs, ch, gx - 1, gy, height);
+                        lit |= (style & HACKOS_TTY_UNDERLINE) && gy == height - 2;
+                        if (lit)
+                        {
+                            pixels[px] = inks[column];
+                        }
                     }
                 }
-            }
-            unsigned position = state.y * state.columns + state.x;
-            if (state.caret && !viewport.selected && viewport.image.firstLine == viewport.image.liveLine &&
-                position >= state.caretBack)
-            {
-                position -= state.caretBack;
-                canvas.Fill(
-                    {(int)(position % state.columns * width), (int)(position / state.columns * height), 2, (int)height},
-                    0xff60cfff);
-            }
-            unsigned statusY = state.rows * height;
-            if (y >= statusY)
-            {
-                canvas.Fill({0, (int)statusY, (int)frame.width, 16}, 0xff243545);
-                char status[160];
-                if (notice[0])
+                unsigned position = state.y * state.columns + state.x;
+                if (state.caret && !viewport.selected && viewport.image.firstLine == viewport.image.liveLine &&
+                    position >= state.caretBack)
                 {
-                    snprintf(status, sizeof(status), "%s", notice);
+                    position -= state.caretBack;
+                    canvas.Fill({(int)(position % state.columns * width), (int)(position / state.columns * height), 2,
+                                 (int)height},
+                                0xff60cfff);
                 }
-                else if (viewport.selected)
+                unsigned statusY = state.rows * height;
+                if (y >= statusY)
                 {
-                    snprintf(status, sizeof(status),
-                             "Selection held | Ctrl+Shift+C copy | Ctrl+Shift+V paste | Esc live");
+                    canvas.Fill({0, (int)statusY, (int)frame.width, 16}, 0xff243545);
+                    canvas.Text(font, 0, statusY, status, 0xffb0c5d8);
                 }
-                else
+                uploaded += w;
+                ++uploads;
+                HackosWindowUpload upload = {frame.generation, x, y, w, 1};
+                if (syscall_window_upload(window.Handle(), &upload, pixels))
                 {
-                    snprintf(status, sizeof(status),
-                             "Back %u/%u | Wheel/Shift+PgUp/Dn | Drag select | Ctrl+Shift+C/V copy/paste",
-                             (unsigned)(viewport.image.liveLine - viewport.image.firstLine),
-                             (unsigned)(viewport.image.liveLine - viewport.image.oldestLine));
+                    syscall_window_frame(window.Handle(), HACKOS_WINDOW_CANCEL, &frame);
+                    return false;
                 }
-                canvas.Text(font, 0, statusY, status, 0xffb0c5d8);
-            }
-            HackosWindowUpload upload = {frame.generation, x, y, w, 1};
-            if (syscall_window_upload(window.Handle(), &upload, pixels))
-            {
-                syscall_window_frame(window.Handle(), HACKOS_WINDOW_CANCEL, &frame);
-                return false;
             }
         }
     }
@@ -156,6 +205,12 @@ static bool Paint()
         syscall_window_frame(window.Handle(), HACKOS_WINDOW_CANCEL, &frame);
         return false;
     }
+    damage.Commit(viewport, appearance, status, frame.width, frame.height);
+    ++terminal_paint_frames;
+    terminal_paint_full_frames += plan.full;
+    terminal_paint_pixels += uploaded;
+    terminal_paint_uploads += uploads;
+    terminal_last_pixels = uploaded;
     return true;
 }
 
@@ -381,21 +436,21 @@ int main()
         if ((dirty || state.revision != revision) &&
             !(syscall_window_mode(window.Handle(), HACKOS_WINDOW_QUERY) & HACKOS_WINDOW_MINIMIZED))
         {
-            if (!syscall_terminal_session(HACKOS_TTY_VIEW, viewport.requested, &snapshot))
+            if (!syscall_terminal_session(HACKOS_TTY_STYLED_VIEW, viewport.requested, &snapshot))
             {
-                if (viewport.ready && viewport.image.epoch != snapshot.epoch)
+                if (viewport.ready && viewport.image.epoch != snapshot.view.epoch)
                 {
                     viewport.Live();
                     notice[0] = 0;
-                    if (syscall_terminal_session(HACKOS_TTY_VIEW, HACKOS_TTY_LIVE, &snapshot))
+                    if (syscall_terminal_session(HACKOS_TTY_STYLED_VIEW, HACKOS_TTY_LIVE, &snapshot))
                     {
                         window.Wait(32);
                         continue;
                     }
                 }
-                revision = snapshot.state.revision;
-                dirty |= viewport.Accept(snapshot);
-                if (dirty && Paint())
+                revision = snapshot.view.state.revision;
+                dirty |= viewport.Accept(snapshot.view, snapshot.styles);
+                if (dirty && Paint(geometry))
                 {
                     dirty = false;
                 }

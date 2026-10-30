@@ -64,3 +64,19 @@ inline bool TerminalGlyphPixel(const uint8_t* glyphs, uint8_t character, unsigne
 {
     return (glyphs[character * 16 + y * 16 / height] & (0x80 >> (x * 8 / (height / 2)))) != 0;
 }
+
+inline uint32_t TerminalAnsiColour(unsigned index, uint32_t fallback, bool bold = false)
+{
+    static constexpr uint32_t palette[16] = {0xff000000, 0xffaa0000, 0xff00aa00, 0xffaa5500, 0xff0000aa, 0xffaa00aa,
+                                             0xff00aaaa, 0xffaaaaaa, 0xff555555, 0xffff5555, 0xff55ff55, 0xffffff55,
+                                             0xff5555ff, 0xffff55ff, 0xff55ffff, 0xffffffff};
+    if (!index || index > 16)
+    {
+        return fallback;
+    }
+    if (bold && index <= 8)
+    {
+        index += 8;
+    }
+    return palette[index - 1];
+}

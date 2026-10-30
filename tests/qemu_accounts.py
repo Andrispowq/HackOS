@@ -76,7 +76,7 @@ class Guest:
 
 @contextmanager
 def boot(directory, image, firmware, name, timeout, *, write_error=False, entropy=True, reboot=False, serial=True, paused=False,
-         qmp_stdio=False, graphical=False):
+         qmp_stdio=False, graphical=False, vnc=False):
     with tempfile.TemporaryDirectory(prefix='hackos-accounts-') as temporary:
         temporary = Path(temporary)
         g = Guest()
@@ -98,6 +98,8 @@ def boot(directory, image, firmware, name, timeout, *, write_error=False, entrop
                 '-usb', '-device', 'usb-ehci,id=ehci', '-device', 'qemu-xhci,id=xhci',
                 '-qmp', 'stdio' if qmp_stdio else f'unix:{qmp_path},server=on,wait=off',
                 '-debugcon', f'file:{g.console}', '-global', 'isa-debugcon.iobase=0xe9']
+        if vnc:
+            args += ['-vnc', '127.0.0.1:2']
         if not qmp_stdio:
             args += ['-gdb', f'unix:{g.gdb},server=on,wait=off']
         if paused:

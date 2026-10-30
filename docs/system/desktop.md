@@ -64,7 +64,7 @@ and clamps the cursor. Each endpoint retains the last 512 scrolled-off rows in a
 bounded ring, captured as output scrolls even when the renderer is busy. Stored
 rows preserve their original columns, padded to 160 cells; resizing does not
 reflow history. `clear` wipes both the visible grid and history. Endpoint teardown
-wipes the ring before reuse. ANSI escape parsing remains a follow-up.
+wipes the ring before reuse. The window terminal accepts the bounded ANSI subset below.
 `terminal get/set/reset` configures each window independently: even font heights
 8–64 (width is half the height) and RGBA background/text colours. The default is
 8×16 PSF text with background `101b25ff` and text `e5eef5ff`. Settings require the
@@ -97,6 +97,48 @@ atomic copied history/grid snapshots using bounded window uploads. It retries
 when a resize invalidates a frame. It polls with a 32 ms timeout for output changes;
 `DESKTOP` polls at 100 ms for task-list changes. Neither continuously yields in
 an idle loop. The terminal caret is steady, rather than blinking.
+
+## ANSI output
+
+Window terminals interpret 7-bit ESC sequences across write boundaries. The
+recovery console is unchanged. This is a bounded subset, not a full VT emulator:
+
+| Sequence | Effect |
+| --- | --- |
+| CSI `m` | SGR reset 0; bold 1/22, underline 4/24, reverse 7/27; normal foreground/background 30–37/40–47, bright 90–97/100–107; defaults 39/49 |
+| CSI `A B C D` | Move up/down/right/left, clamped to the grid |
+| CSI `E F G d H f` | Next/previous line, absolute column/row, or row/column position (one-based; omitted/zero means 1) |
+| CSI `J` / `K` | Erase screen/line from cursor (0), through cursor (1), or entire screen/line (2); cursor does not move |
+| CSI `3J` | Clear scrollback, retaining the live grid |
+| CSI `s` / `u`, ESC `7` / `8` | Save/restore cursor and style; restored coordinates clamp after resize |
+| CSI `?25h` / `?25l` | Show/hide the cursor; an explicit terminal-cursor syscall overrides this |
+| ESC `c` | Reset display, parser, cursor and history; configured appearance remains |
+
+CSI is ESC followed by `[`. Erasure fills spaces using the current style. Styles
+stay attached to cells through scrolling, resize and frozen selection; copy still
+returns plain text. Palette colours are opaque; default-colour cells use the
+configured appearance. Bold brightens the normal foreground palette and thickens
+glyphs. Window chrome/status text remain independent.
+
+The parser uses sixteen parameters, values up to 9999 and at most 128 CSI bytes.
+Oversized or malformed CSI is discarded through its final byte. ESC restarts an
+incomplete sequence; CAN/SUB cancel it. Unsupported OSC/DCS/SOS/PM/APC strings are
+discarded without buffering until BEL or ESC-backslash, so they cannot change
+window titles or clipboard contents. Unsupported extended-colour operands are
+consumed as a unit. There are no terminal-query replies, alternate screen,
+scrolling regions, 256/truecolour, Unicode decoding or application-keypad modes.
+Existing immediate wrap, newline-to-column-zero, destructive backspace and
+four-column tabs retain their shell-compatible behavior. New foreground jobs
+start with reset parser/style/cursor visibility; previously drawn styles remain.
+
+For a quick demonstration (echo itself does not expand escapes):
+
+```sh
+echo 'E[31mRed textE[0m' | tr E '\\033'
+```
+
+Sequence conventions follow the [xterm control-sequence reference](https://invisible-island.net/xterm/ctlseqs/ctlseqs.html),
+with the limitations above.
 
 ## ABI and authority
 
@@ -138,6 +180,13 @@ the individual endpoint controller. Foreground applications use syscalls 81/82;
 set operation 4 (`HACKOS_TERMINAL_DEFAULT`) restores just the key specified by
 value 1–3 using the applicable console/window defaults.
 
+Operation 8 (`HACKOS_TTY_STYLED_VIEW`) returns an atomic 28872-byte record: the
+unchanged 9672-byte text viewport followed by 9600 16-bit style words. Bits 0–4
+and 5–9 select foreground/background (0 is appearance default; 1–16 are the ANSI
+palette), bits 10/11/12 enable bold/underline/reverse. Remaining bits and unused
+cells' styles are zero. Authority, row selection, epoch and copied-buffer rules
+match operation 5. Legacy text-only state/cells/view operations remain supported.
+
 The session ID belongs to the authenticated leader, not each terminal shell.
 Individual terminal exit never ends sibling terminals. Whole-session teardown
 clears the clipboard and reclaims windows, endpoint state, streams and private
@@ -154,3 +203,19 @@ uses two of the sixteen window slots and the normal aggregate surface budget.
 The launcher also opens [Settings](settings.md). The right side displays the RTC
 date and time as YYYY-MM-DD HH:MM:SS UTC, updated once per second. The guest
 assumes the RTC uses UTC; there is no time-zone configuration yet.
+
+## Terminal repainting
+
+`TERM` retains its last successfully presented cell/style/selection image. It
+uploads only changed cell spans (at most one span per row), old/new caret cells,
+and a changed status row using retained frame transactions. Identical visible
+snapshots do not start a transaction. Font/palette/grid/client-size changes use a
+full repaint, including unused margins. Resize during BEGIN falls back to the
+returned frame geometry; upload/present failure leaves the cache unchanged for
+retry. The kernel still copies retained surfaces and compares committed frames;
+this optimizes client rendering/uploads, not every layer's memory traffic.
+
+Debugger-visible `terminal_paint_frames`, `terminal_paint_full_frames`,
+`terminal_paint_pixels`, `terminal_paint_uploads`, `terminal_paint_skips` and
+`terminal_last_pixels` count successful commits/uploads or skipped identical
+images. Counters are per process, diagnostic only, and reset on terminal exit.

@@ -13,7 +13,7 @@ def test():
     sources = ['common/src/memory_ops.cpp', 'kernel/src/drivers/screen/framebuffer.cpp',
                'kernel/src/drivers/screen/console.cpp', 'tests/host/main.cpp',
                'tests/host/graphics_tests.cpp', 'tests/host/console_tests.cpp',
-               'tests/host/event_queue_tests.cpp', 'tests/host/terminal_history_tests.cpp', 'tests/host/runtime.cpp']
+               'tests/host/event_queue_tests.cpp', 'tests/host/terminal_history_tests.cpp', 'tests/host/terminal_ansi_tests.cpp', 'tests/host/terminal_damage_tests.cpp', 'tests/host/runtime.cpp']
     binary = directory / 'graphics-tests'
 
     def build():

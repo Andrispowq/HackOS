@@ -5,6 +5,7 @@
 struct TerminalViewport
 {
     HackosTerminalView image;
+    uint16_t styles[HACKOS_TTY_CELLS];
     uint64_t requested;
     unsigned anchor, cursor, buttons;
     bool ready, selected, dragging;
@@ -16,7 +17,7 @@ struct TerminalViewport
         anchor = cursor = buttons = 0;
     }
 
-    bool Accept(const HackosTerminalView& next)
+    bool Accept(const HackosTerminalView& next, const uint16_t* attributes = nullptr)
     {
         if (ready && image.epoch == next.epoch && selected)
         {
@@ -32,6 +33,10 @@ struct TerminalViewport
         for (unsigned i = 0; i < sizeof(image); ++i)
         {
             destination[i] = source[i];
+        }
+        for (unsigned i = 0; i < HACKOS_TTY_CELLS; ++i)
+        {
+            styles[i] = attributes ? attributes[i] : 0;
         }
         ready = true;
         if (requested != HACKOS_TTY_LIVE)

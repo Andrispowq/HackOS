@@ -139,3 +139,7 @@ test-formatting:
 .PHONY: test-formatting-qemu
 test-formatting-qemu:
 	$(PYTHON) qemu_formatting.py --firmware $(FIRMWARE)
+
+.PHONY: test-vnc-latency
+test-vnc-latency:
+	$(PYTHON) qemu_vnc_latency.py --firmware $(FIRMWARE)
