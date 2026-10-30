@@ -76,7 +76,7 @@ class Guest:
 
 @contextmanager
 def boot(directory, image, firmware, name, timeout, *, write_error=False, entropy=True, reboot=False, serial=True, paused=False,
-         qmp_stdio=False, graphical=False, vnc=False, network=False, capture=None):
+         qmp_stdio=False, graphical=False, vnc=False, network=False, capture=None, network_backend=None):
     with tempfile.TemporaryDirectory(prefix='hackos-accounts-') as temporary:
         temporary = Path(temporary)
         g = Guest()
@@ -100,7 +100,7 @@ def boot(directory, image, firmware, name, timeout, *, write_error=False, entrop
                 '-debugcon', f'file:{g.console}', '-global', 'isa-debugcon.iobase=0xe9']
         if network:
             index = args.index('-net')
-            args[index:index + 2] = ['-netdev', 'user,id=net0,ipv6=off',
+            args[index:index + 2] = ['-netdev', network_backend or 'user,id=net0,ipv6=off',
                                      '-device', 'e1000,netdev=net0,mac=52:54:00:12:34:56']
         if network and capture:
             args += ['-object', f'filter-dump,id=capture,netdev=net0,file={capture}']

@@ -43,7 +43,7 @@ def test(firmware, image, timeout):
         guest.shell('ping --help', 'Usage: ping')
         guest.shell('ping -c 0 10.0.2.2', 'Usage: ping')
         guest.shell('ping -c 11 10.0.2.2', 'Usage: ping')
-        guest.shell('ping 1.1.1.1', 'Usage: ping')
+        guest.shell('ping 1.1.1.999', 'Usage: ping')
         guest.shell('pingprobe', 'PING_ABI_OK')
         guest.shell('runas guest pingprobe', 'PING_ABI_OK')
         guest.shell('clear', '$ ')

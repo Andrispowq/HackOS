@@ -80,6 +80,8 @@ union HackosHardwareInfo
         uint8_t mac[6], gatewayMac[6], address[4], gateway[4];
         uint32_t reserved;
         uint64_t txFrames, rxFrames, txDropped, rxDropped, arpReplies;
+        uint8_t netmask[4];
+        uint32_t neighbors;
     } network;
 
     uint8_t bytes[128];
@@ -96,4 +98,4 @@ enum HackosArpState : uint32_t
 };
 
 static_assert(__builtin_offsetof(HackosHardwareInfo, network.txFrames) == 40, "network counters ABI");
-static_assert(sizeof(((HackosHardwareInfo*)0)->network) == 80, "network snapshot ABI");
+static_assert(sizeof(((HackosHardwareInfo*)0)->network) == 88, "network snapshot ABI");

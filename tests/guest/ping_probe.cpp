@@ -12,7 +12,7 @@ int main(int argc, char**)
     ok = syscall_echo(999, &echo) == HACKOS_ERROR && ok;
     ok = syscall_echo(HACKOS_ECHO_START, (HackosEcho*)0x100000) == HACKOS_ERROR && ok;
     ok = syscall_echo(HACKOS_ECHO_START, (HackosEcho*)0x4000001fffff) == HACKOS_ERROR && ok;
-    echo.address[3] = 99;
+    echo.address[3] = 0;
     ok = syscall_echo(HACKOS_ECHO_START, &echo) == HACKOS_ERROR && ok;
     echo.address[3] = 2;
     ok = syscall_echo(HACKOS_ECHO_START, &echo) == 0 && ok;

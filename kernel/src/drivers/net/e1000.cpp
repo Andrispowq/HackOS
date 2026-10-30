@@ -4,6 +4,7 @@
 #include "drivers/serial/serial.h"
 #include "net/arp.h"
 #include "net/ping.h"
+#include "net/route.h"
 #include "arch/x86_64/interrupts/guard.h"
 
 extern PageTableManager KernelDirectory;
@@ -43,13 +44,12 @@ alignas(4096) volatile TxDescriptor tx[Count];
 alignas(4096) uint8_t receiveBuffers[Count][BufferSize];
 alignas(4096) uint8_t transmitBuffers[Count][BufferSize];
 volatile uint32_t* registers;
-uint32_t nextRx, nextTx, attempts;
-uint64_t lastAttempt;
-bool ready, resolved, announced, linkUp, dropping;
-uint8_t mac[6], gatewayMac[6];
+uint32_t nextRx, nextTx;
+bool ready, announced, linkUp, dropping, gatewayPrimed;
+uint8_t mac[6];
 uint64_t txFrames, rxFrames, txDropped, rxDropped, arpReplies;
-const uint8_t localIp[4] = {10, 0, 2, 15};
-const uint8_t gatewayIp[4] = {10, 0, 2, 2};
+const uint8_t* localIp = LocalAddress;
+const uint8_t* gatewayIp = GatewayAddress;
 
 uint32_t Read(uint32_t offset)
 {
@@ -122,16 +122,16 @@ void Receive(const uint8_t* frame, uint32_t length)
             ++arpReplies;
         }
     }
-    else if (!resolved && attempts && EqualBytes(packet.senderIp, gatewayIp, 4) &&
-             EqualBytes(packet.targetMac, mac, 6) && EqualBytes(frame, mac, 6))
+    else
     {
-        for (unsigned i = 0; i < 6; ++i)
+        auto before = InspectNeighbor(gatewayIp).state;
+        ReceiveNeighbor(frame, packet, mac);
+        auto gateway = InspectNeighbor(gatewayIp);
+        if (before != NeighborState::Resolved && gateway.state == NeighborState::Resolved)
         {
-            gatewayMac[i] = packet.senderMac[i];
+            SerialText("NET: ARP gateway 10.0.2.2 resolved ");
+            PrintMac(gateway.mac);
         }
-        resolved = true;
-        SerialText("NET: ARP gateway 10.0.2.2 resolved ");
-        PrintMac(packet.senderMac);
     }
 }
 }
@@ -243,7 +243,7 @@ void Poll()
     {
         if (!announced) SerialText("NET: no supported NIC\n");
         announced = true;
-        PollEcho(false, false, false, mac, gatewayMac, localIp, gatewayIp);
+        PollEcho(false, false, mac, localIp);
         return;
     }
     bool currentLink = (Read(STATUS) & 2) != 0;
@@ -252,6 +252,8 @@ void Poll()
         SerialText(currentLink ? "NET: link up\n" : "NET: link down\n");
         announced = true;
         linkUp = currentLink;
+        ResetNeighbors();
+        gatewayPrimed = false;
     }
     // Never monopolize idle, even when the host continuously supplies frames.
     for (unsigned work = 0; work < Count; ++work)
@@ -276,25 +278,14 @@ void Poll()
         Write(RDT, nextRx);
         nextRx = (nextRx + 1) % Count;
     }
-    PollEcho(ready, linkUp, resolved, mac, gatewayMac, localIp, gatewayIp);
-    uint64_t now = tick;
-    if (linkUp && !resolved && (!attempts || now - lastAttempt >= TimerTicksForMilliseconds(1000)))
+    if (linkUp && !gatewayPrimed)
     {
-        if (attempts < 5)
-        {
-            uint8_t request[ArpFrameSize];
-            BuildArp(request, 1, mac, localIp, nullptr, gatewayIp);
-            bool sent = Send(request, sizeof(request));
-            ++attempts;
-            lastAttempt = now;
-            SerialText(sent ? "NET: ARP probe 10.0.2.2\n" : "NET: ARP transmit busy\n");
-        }
-        else if (attempts == 5)
-        {
-            ++attempts;
-            SerialText("NET: ARP gateway timeout\n");
-        }
+        uint8_t gatewayMac[6];
+        ResolveNeighbor(gatewayIp, gatewayMac);
+        gatewayPrimed = true;
     }
+    PollEcho(ready, linkUp, mac, localIp);
+    if (linkUp) PollNeighbors(mac);
 }
 
 void Snapshot(HackosHardwareInfo& info)
@@ -303,23 +294,27 @@ void Snapshot(HackosHardwareInfo& info)
     auto& network = info.network;
     network.available = ready;
     network.linkUp = linkUp;
-    network.arpState = resolved ? HACKOS_ARP_RESOLVED : attempts >= 6 ? HACKOS_ARP_TIMEOUT : HACKOS_ARP_WAITING;
-    network.attempts = attempts > 5 ? 5 : attempts;
+    auto gateway = InspectNeighbor(gatewayIp);
+    network.arpState = gateway.state == NeighborState::Resolved ? HACKOS_ARP_RESOLVED :
+                       gateway.state == NeighborState::Failed ? HACKOS_ARP_TIMEOUT : HACKOS_ARP_WAITING;
+    network.attempts = gateway.attempts;
     for (unsigned i = 0; i < 6; ++i)
     {
         network.mac[i] = mac[i];
-        network.gatewayMac[i] = gatewayMac[i];
+        network.gatewayMac[i] = gateway.mac[i];
     }
     for (unsigned i = 0; i < 4; ++i)
     {
         network.address[i] = ready ? localIp[i] : 0;
         network.gateway[i] = ready ? gatewayIp[i] : 0;
+        network.netmask[i] = ready ? SubnetMask[i] : 0;
     }
     network.txFrames = txFrames;
     network.rxFrames = rxFrames;
     network.txDropped = txDropped;
     network.rxDropped = rxDropped;
     network.arpReplies = arpReplies;
+    network.neighbors = NeighborCount();
 }
 
 }

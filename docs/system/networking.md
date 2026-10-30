@@ -17,13 +17,11 @@ python3 tools/run_qemu.py --firmware bios --image out/network/bios/HackOS.img \
 
 Use `--firmware uefi` and the corresponding UEFI image for the other boot path.
 QEMU user networking supplies the test gateway. The guest uses static address
-`10.0.2.15` and resolves `10.0.2.2`. It sends at most five ARP requests, one second
-apart after link-up; serial output reports initialization, MAC, link transitions,
-gateway resolution or timeout. A later valid reply may still resolve the gateway.
-A bounded IPv4/ICMP Echo client supports `ping 10.0.2.2`. General routing,
-DHCP, UDP, TCP, DNS and sockets are not implemented.
-Diagnostics use a section of the existing root-only hardware query; there
-is a separate process-owned Echo API at syscall 97. There is no general routing table or ARP cache yet.
+`10.0.2.15/24` and default gateway `10.0.2.2`. Numeric IPv4 targets on that subnet
+are resolved directly with ARP; other supported targets use the gateway's MAC
+while retaining the destination IP. DHCP, UDP, TCP, DNS, configurable routes and
+sockets are not implemented. Diagnostics use the root-only hardware query;
+process-owned Echo requests use syscall 97.
 
 ## Browser demo
 
@@ -49,7 +47,7 @@ depends on the other. `ping` sends real IPv4/ICMP Echo requests and reports the
 validated reply TTL, elapsed milliseconds and loss. Normal users may run ping;
 `sysinfo network` remains root-only.
 
-The report is a copied 128-byte hardware record (80-byte network member), with
+The report is a copied 128-byte hardware record (88-byte network member), with
 no pointers and unchanged existing section numbers. Reading it does not send
 packets or restart probing. Counters are cumulative since boot: TX counts queued
 frames, RX counts complete error-free frames accepted for protocol inspection,
@@ -88,28 +86,53 @@ transmit FCS. ARP frames are zero padded to 60 bytes.
 
 The ARP decoder checks lengths before access, Ethernet/IPv4 types, address widths,
 operation, destination and matching unicast Ethernet/ARP sender MACs. Only ARP
-requests for the local IP receive replies. Gateway resolution requires a probe
-and a reply addressed to our IP and MAC from the configured gateway IP. ARP
-itself provides no peer authentication. Unknown protocols are discarded.
+requests for the local IP receive replies. A 16-entry neighbor cache accepts
+replies only after probing that IP, addressed to our IP and MAC. Unsolicited
+replies cannot populate or replace resolved entries. ARP itself provides no
+peer authentication. Unknown protocols are discarded.
+
+Resolved neighbors expire after 60 seconds. Resolution has a 2.5-second deadline,
+up to five probes spaced at least 500 ms apart, and a global ten-probe/second
+limit with round-robin service. Failed entries back off for five seconds; a late
+solicited reply may resolve them during that interval. Empty entries are preferred,
+then the oldest non-pending entry; pending resolutions are never evicted. If all
+entries are pending, a new request waits within its existing Echo deadline.
+Link transitions clear the cache. The gateway is probed once on link-up and
+resolved again on demand after expiry. Snapshots report the subnet mask and
+resolved-neighbor count without initiating traffic.
 
 ## IPv4/ICMP and process ownership
 
-`ping [-c 1..10] 10.0.2.2` defaults to four requests. Each carries 32 data bytes
+`ping [-c 1..10] <IPv4-address>` defaults to four requests. Each carries 32 data bytes
 and has a three-second deadline from submission, including any wait for ARP or
 a TX slot. Requests are spaced by one second after each result. Timing uses PIT
 ticks, so displayed milliseconds have timer resolution and include idle polling
-latency; they are not a high-precision network benchmark. No DNS names or other
-targets are accepted yet. This is an Echo client, not an Echo responder.
+latency; they are not a high-precision network benchmark. Addresses must be four decimal octets, without leading zeros, whitespace or
+DNS names. Unsupported destinations include 0/8, loopback, link-local,
+multicast/reserved space, our own address and the local subnet's network and
+broadcast addresses. This is an Echo client, not an Echo responder.
+
+The gateway is the reliable target for the default noVNC demo. External Echo
+replies depend on the host and QEMU backend: [QEMU user networking](https://www.qemu.org/docs/master/system/devices/net.html)
+has ICMP limitations. A silent external target does not prove the guest route
+failed. The controlled-router test below verifies off-subnet traffic without
+requiring public Internet ICMP access.
 
 Packets use a 20-byte IPv4 header, TTL 64 and Don't Fragment. The decoder checks
 Ethernet destination/type, IPv4 version/header length, exact total length,
 nonzero TTL, protocol and checksum, and the ICMP type/code/checksum. IP options,
-fragments (including reserved flag/MF/nonzero offset), other protocols and ICMP
-errors are rejected. Only a pending, transmitted request can accept a reply;
+fragments (including reserved flag/MF/nonzero offset), other protocols and unsupported ICMP types are rejected. Only a pending, transmitted request can accept a reply;
 source/destination addresses, identifier, sequence and all 32 payload bytes must
 match. A 64-bit generation in the payload prevents stale replies from matching
 a later request when the 16-bit wire sequence wraps. This is correlation, not
 cryptographic peer authentication.
+
+Destination-unreachable (type 3, codes 0–15) and time-exceeded (type 11, codes
+0–1) errors are accepted after validating the outer IPv4/ICMP checksums and
+quoted original IP header. The quote must match the local source, target,
+identifier, sequence and original Echo checksum. Any quoted payload bytes must
+also match; a minimal RFC 792 quote contains no payload, so it cannot verify the
+full generation token. Unrelated errors leave the request pending.
 
 Syscall 97 `echo(operation, HackosEcho*)` is available to ordinary users:
 
@@ -117,14 +140,16 @@ Syscall 97 `echo(operation, HackosEcho*)` is available to ordinary users:
   It returns 0, `HACKOS_ERROR` for invalid address/pointer, or `HACKOS_RETRY` for
   a pending request owned by this process or an exhausted eight-entry pool.
 - `HACKOS_ECHO_QUERY` copies the caller's record: address, state, elapsedMs,
-  sequence and TTL. It returns `HACKOS_NOT_FOUND` without a retained request.
+  sequence and TTL (reply) or ICMP error code (error). It returns `HACKOS_NOT_FOUND` without a retained request.
   An invalid output buffer does not consume the result.
 - `HACKOS_ECHO_CANCEL` ignores the pointer and releases only the caller's entry.
 
 The kernel stores no user pointers. Entries belong to PIDs, are not inherited,
 and are released during process reclamation. Completed results expire after ten
 seconds; a later START replaces the caller's completed result. States are
-pending, reply, timeout and unavailable (no NIC/link down). The global send rate
+pending, reply, timeout, unavailable (no NIC/link down before transmission),
+unreachable, time exceeded and next-hop ARP failure. The 24-byte record remains
+unchanged in size; its final 32-bit field is a `ttl`/`errorCode` union. The global send rate
 is capped at ten Echo requests per second, including cancel/restart loops.
 No syscall blocks inside a preemption guard: the command sleeps between copied
 status queries while idle performs bounded packet work.
@@ -139,6 +164,8 @@ python3 tests/qemu_network.py --firmware bios --image out/network/bios/HackOS.im
 python3 tests/qemu_network.py --firmware uefi --image out/network/uefi/HackOS.img
 python3 tests/qemu_network_demo.py --firmware bios --image out/network/bios/HackOS.img
 python3 tests/qemu_network_demo.py --firmware uefi --image out/network/uefi/HackOS.img
+python3 tests/qemu_routing.py --firmware bios --image out/network/bios/HackOS.img
+python3 tests/qemu_routing.py --firmware uefi --image out/network/uefi/HackOS.img
 ```
 
 The host test compiles the real codec and checks truncated/malformed frames under
@@ -156,6 +183,13 @@ checks captured ICMP request/reply checksums and payloads, and saves framebuffer
 screenshots. Distinct sequences catch accidental DMA aliases between ring slots.
 Packet logs and pcaps are saved under `tests/out/network/<firmware>/`; demo logs
 and screenshots are under `tests/out/network-demo-<firmware>/`.
+
+`qemu_routing.py` supplies a loopback-only virtual router with distinct gateway
+and neighbor MACs. It verifies direct and off-subnet Echo traffic, normal-user
+access, matching and unrelated ICMP errors, silent targets, ARP failure, invalid
+addresses and link-down/up cache recovery. Artifacts are saved in
+`tests/out/routing-<firmware>/`. Host tests also check address parsing, route
+selection, cache saturation, unsolicited replies, expiry and backoff.
 
 Register definitions follow Intel's
 [8254x software developer manual](https://www.intel.com/content/dam/doc/manual/pci-pci-x-family-gbe-controllers-software-dev-manual.pdf).

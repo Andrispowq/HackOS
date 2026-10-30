@@ -153,3 +153,7 @@ test-network:
 .PHONY: test-network-demo
 test-network-demo:
 	$(PYTHON) qemu_network_demo.py --firmware $(FIRMWARE) --image $(IMAGE)
+
+.PHONY: test-routing
+test-routing:
+	$(PYTHON) qemu_routing.py --firmware $(FIRMWARE) --image $(IMAGE)

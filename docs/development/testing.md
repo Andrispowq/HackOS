@@ -1267,3 +1267,13 @@ edges; other pixel formats and real hardware are not validated by these runs.
 See [Ethernet and ARP](../system/networking.md) for the sanitized codec tests and
 `tests/qemu_network.py` packet-capture checks on BIOS and UEFI, including absent
 and unsupported NIC boots. The QEMU runner enables E1000 only with `--network`.
+
+### Static routing and ICMP errors
+
+`python3 tests/qemu_routing.py --firmware bios --image out/network/bios/HackOS.img`
+(or `--firmware uefi` with the UEFI image) boots a disposable guest against a
+loopback-only scripted router. It checks direct/routed destination MACs, retained
+IP targets, normal-user ping, correlated ICMP errors, ARP/silent-peer failures,
+address validation and cache reset on link recovery. `make -C tests test-routing`
+is the equivalent target with `FIRMWARE` and `IMAGE`. See
+[networking](../system/networking.md) for the fixed bounds and backend limitations.

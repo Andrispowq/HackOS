@@ -15,7 +15,8 @@ with tempfile.TemporaryDirectory(prefix='hackos-net-host-') as directory:
     subprocess.run([os.environ.get('CXX', 'clang++'), '-std=c++17', '-g',
                     '-fsanitize=' + args.sanitizers, '-fno-sanitize-recover=all', '-fno-omit-frame-pointer',
                     '-I', str(ROOT / 'kernel/src'), '-I', str(ROOT / 'common/include'), '-I', str(ROOT / 'include'),
-                    str(ROOT / 'tests/host/network.cpp'), str(ROOT / 'tests/host/icmp.cpp'),
+                    str(ROOT / 'tests/host/network.cpp'), str(ROOT / 'tests/host/icmp.cpp'), str(ROOT / 'tests/host/route.cpp'),
+                    str(ROOT / 'kernel/src/net/route.cpp'),
                     str(ROOT / 'kernel/src/net/icmp.cpp'), str(ROOT / 'kernel/src/net/ping.cpp'), str(ROOT / 'kernel/src/net/arp.cpp'),
                     '-o', str(binary)], check=True, timeout=120)
     subprocess.run([str(binary)], check=True, timeout=30)

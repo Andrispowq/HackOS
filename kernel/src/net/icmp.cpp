@@ -86,4 +86,40 @@ bool ParseEchoReply(const uint8_t* frame, unsigned length, const uint8_t* mac, c
     packet = {Read16(echo + 4), Read16(echo + 6), header[8], header + 12, echo + 8};
     return true;
 }
+
+bool ParseEchoError(const uint8_t* frame, unsigned length, const uint8_t* mac, const uint8_t* ip,
+                    EchoError& packet)
+{
+    if (!frame || length < 14 + 20 + 8 + 28 || length > 1514) return false;
+    if (!EqualBytes(frame, mac, 6) || frame[12] != 8 || frame[13] != 0) return false;
+    const uint8_t* header = frame + 14;
+    unsigned total = Read16(header + 2);
+    if (header[0] != 0x45 || total < 56 || total > length - 14 ||
+        (Read16(header + 6) & 0xbfff) || !header[8] || header[9] != 1 ||
+        !header[12] || header[12] >= 224 || header[12] == 127 ||
+        InternetChecksum(header, 20) || !EqualBytes(header + 16, ip, 4))
+    {
+        return false;
+    }
+    const uint8_t* error = header + 20;
+    if (!((error[0] == 3 && error[1] <= 15) || (error[0] == 11 && error[1] <= 1)) ||
+        InternetChecksum(error, total - 20))
+    {
+        return false;
+    }
+    // RFC 792 guarantees the original IP header plus at least eight data bytes.
+    const uint8_t* quoted = error + 8;
+    if (quoted[0] != 0x45 || Read16(quoted + 2) != EchoFrameSize - 14 ||
+        (Read16(quoted + 6) & 0xbfff) || quoted[9] != 1 || InternetChecksum(quoted, 20) ||
+        !EqualBytes(quoted + 12, ip, 4) || quoted[20] != 8 || quoted[21] != 0)
+    {
+        return false;
+    }
+    unsigned payload = total - 56;
+    if (payload > EchoDataSize) payload = EchoDataSize;
+    packet = {Read16(quoted + 24), Read16(quoted + 26), Read16(quoted + 22), error[0], error[1],
+              quoted + 16, quoted + 28, payload};
+    return true;
+}
+
 }

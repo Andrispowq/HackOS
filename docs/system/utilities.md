@@ -277,11 +277,13 @@ See [networking](networking.md) for a noVNC demo and counter definitions.
 
 ### ping
 
-`ping [-c 1..10] 10.0.2.2` sends IPv4/ICMP Echo requests as any user. The default
+`ping [-c 1..10] <IPv4-address>` sends IPv4/ICMP Echo requests as any user. The default
 is four probes with 32 data bytes and a three-second deadline each. Replies show
 TTL and elapsed milliseconds at PIT resolution; the summary shows received
 probes and loss. Exit status is 0 when every probe succeeds, 1 for loss,
 unavailable networking, busy request slots or output errors, and 2 for invalid
-arguments. Supports stdout redirection. Only the QEMU gateway is supported;
-DNS, other targets and general routing remain future work. See
+arguments. Supports stdout redirection. Numeric targets use static 10.0.2.15/24
+and gateway 10.0.2.2; DNS is unsupported. ARP failure, destination unreachable
+and time exceeded are reported separately from timeout. External ICMP depends
+on the QEMU backend and host. See
 [networking](networking.md) for the API and limits.

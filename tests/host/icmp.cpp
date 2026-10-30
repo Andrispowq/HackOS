@@ -1,13 +1,19 @@
 #include "net/icmp.h"
 #include "net/arp.h"
 #include "net/ping.h"
+#include "net/route.h"
 #include "hackos/abi.h"
 #include <cassert>
 #include <initializer_list>
 
 volatile uint64_t tick;
-static unsigned sends;
-static uint8_t transmitted[Net::EchoFrameSize];
+unsigned sends;
+unsigned arpSends;
+uint8_t transmitted[Net::EchoFrameSize];
+void SerialText(const char*)
+{
+}
+
 void DisablePreemption()
 {
 }
@@ -26,6 +32,11 @@ namespace Net
 {
 bool Transmit(const uint8_t* frame, uint32_t length)
 {
+    if (length == ArpFrameSize)
+    {
+        ++arpSends;
+        return true;
+    }
     assert(length == EchoFrameSize);
     for (unsigned i = 0; i < length; ++i)
     {
@@ -98,7 +109,14 @@ void TestIcmp()
     {
         Net::CancelEcho(pid);
     }
-    Net::PollEcho(true, true, true, mac, peer, ip, gateway);
+    uint8_t resolvedMac[6], arp[Net::ArpFrameSize];
+    assert(Net::ResolveNeighbor(gateway, resolvedMac) == Net::NeighborState::Pending);
+    Net::PollNeighbors(mac);
+    Net::BuildArp(arp, 2, peer, gateway, mac, ip);
+    Net::ArpPacket neighbor;
+    assert(Net::ParseArp(arp, sizeof(arp), mac, neighbor));
+    Net::ReceiveNeighbor(arp, neighbor, mac);
+    Net::PollEcho(true, true, mac, ip);
     assert(sends == 1);
     auto reply = [&]()
     {
@@ -126,7 +144,7 @@ void TestIcmp()
     assert(record.elapsedMs == 20 && record.ttl == 64);
     // A new request cannot accept an old response; cancellation cannot bypass rate limiting.
     assert(Net::EchoControl(1, HACKOS_ECHO_START, record) == 0);
-    Net::PollEcho(true, true, true, mac, peer, ip, gateway);
+    Net::PollEcho(true, true, mac, ip);
     assert(sends == 1);
     Net::ReceiveEcho(frame, sizeof(frame), mac, ip);
     assert(Net::EchoControl(1, HACKOS_ECHO_QUERY, record) == 0 && record.state == HACKOS_ECHO_PENDING);
@@ -135,11 +153,11 @@ void TestIcmp()
     tick = 1302;
     assert(Net::EchoControl(1, HACKOS_ECHO_QUERY, record) == HACKOS_NOT_FOUND);
     assert(Net::EchoControl(1, HACKOS_ECHO_START, record) == 0);
-    Net::PollEcho(false, false, false, mac, peer, ip, gateway);
+    Net::PollEcho(false, false, mac, ip);
     assert(Net::EchoControl(1, HACKOS_ECHO_QUERY, record) == 0 && record.state == HACKOS_ECHO_UNAVAILABLE);
     Net::CancelEcho(1);
     assert(Net::EchoControl(1, HACKOS_ECHO_QUERY, record) == HACKOS_NOT_FOUND);
-    record.address[3] = 99;
+    record.address[3] = 0;
     assert(Net::EchoControl(1, HACKOS_ECHO_START, record) == HACKOS_ERROR);
     assert(Net::EchoControl(1, 999, record) == HACKOS_ERROR);
 }

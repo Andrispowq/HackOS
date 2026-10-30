@@ -852,4 +852,4 @@ PID, never retains user pointers and does not grant raw packet access. Start,
 query and cancel operations support one request per process, eight globally,
 with three-second deadlines and ten-second completed-result retention. Process
 reclamation cancels outstanding requests. See [networking](networking.md) for
-status values, validation, rate limits and the current gateway-only target.
+status values, validation, rate limits, static routing and the TTL/error-code union.

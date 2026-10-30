@@ -342,6 +342,8 @@ static void Network()
     out.Text(network.linkUp ? "up\n" : "down\n");
     Address("MAC address", network.mac, 6, 16, ":");
     Address("Static IPv4 address", network.address, 4, 10, ".");
+    Address("Subnet mask", network.netmask, 4, 10, ".");
+    Value("Resolved neighbors", network.neighbors);
     Address("Gateway", network.gateway, 4, 10, ".");
     out.Field("Gateway ARP");
     out.Text(network.arpState == HACKOS_ARP_RESOLVED ? "resolved\n" :

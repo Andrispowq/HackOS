@@ -341,7 +341,8 @@ Milestones 1–4 are implemented; later milestones need a separate request.
 - [ ] Add secondary CPU startup and synchronization before claiming SMP support.
 - [x] Add initial QEMU E1000 Ethernet/ARP networking with bounded polling.
 - [x] Add bounded IPv4/ICMP gateway ping and a process-owned Echo API.
-- [ ] Add general IPv4 routing/neighbor discovery, UDP, DHCP/DNS, then TCP and process-owned sockets.
+- [x] Add static IPv4 routing, bounded ARP neighbor discovery and ICMP error reporting.
+- [ ] Add UDP, DHCP/DNS, then TCP and process-owned sockets.
 - [ ] Add network configuration and useful network user programs.
 
 ### Window-terminal polish

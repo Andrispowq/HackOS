@@ -1,6 +1,7 @@
 #include "ping.h"
 #include "icmp.h"
 #include "arp.h"
+#include "route.h"
 #include "drivers/net/e1000.h"
 #include "hackos/abi.h"
 #include "arch/x86_64/interrupts/guard.h"
@@ -14,13 +15,13 @@ struct Request
 {
     uint64_t owner, token, started, sentAt, finished;
     bool sent;
+    uint16_t checksum;
     HackosEcho result;
     uint8_t data[EchoDataSize];
 };
 Request requests[8];
 uint64_t nextToken, lastSend;
 bool hasSent;
-const uint8_t gateway[4] = {10, 0, 2, 2};
 
 void Expire()
 {
@@ -74,7 +75,8 @@ uint64_t EchoControl(uint64_t pid, uint64_t operation, HackosEcho& record)
         record = found->result;
         return 0;
     }
-    if (operation != HACKOS_ECHO_START || !EqualBytes(record.address, gateway, 4)) return HACKOS_ERROR;
+    uint8_t hop[4];
+    if (operation != HACKOS_ECHO_START || !NextHop(record.address, hop)) return HACKOS_ERROR;
     if (found && found->result.state == HACKOS_ECHO_PENDING) return HACKOS_RETRY;
     if (!found) found = free;
     if (!found) return HACKOS_RETRY;
@@ -85,7 +87,7 @@ uint64_t EchoControl(uint64_t pid, uint64_t operation, HackosEcho& record)
     found->result.sequence = (uint16_t)found->token;
     for (unsigned i = 0; i < 4; ++i)
     {
-        found->result.address[i] = gateway[i];
+        found->result.address[i] = record.address[i];
     }
     for (unsigned i = 0; i < EchoDataSize; ++i)
     {
@@ -98,7 +100,27 @@ void ReceiveEcho(const uint8_t* frame, unsigned length, const uint8_t* mac, cons
 {
     Expire();
     EchoPacket packet;
-    if (!ParseEchoReply(frame, length, mac, ip, packet)) return;
+    if (!ParseEchoReply(frame, length, mac, ip, packet))
+    {
+        EchoError error;
+        if (!ParseEchoError(frame, length, mac, ip, error)) return;
+        for (auto& request : requests)
+        {
+            if (!request.owner || !request.sent || request.result.state != HACKOS_ECHO_PENDING ||
+                error.identifier != (uint16_t)(request.token >> 16) || error.sequence != (uint16_t)request.token ||
+                error.checksum != request.checksum || !EqualBytes(error.destination, request.result.address, 4) ||
+                !EqualBytes(error.data, request.data, error.dataSize))
+            {
+                continue;
+            }
+            request.result.state = error.type == 3 ? HACKOS_ECHO_UNREACHABLE : HACKOS_ECHO_TIME_EXCEEDED;
+            request.result.errorCode = error.code;
+            request.result.elapsedMs = (tick - request.sentAt) * 1000 / TimerFrequency();
+            request.finished = tick;
+            return;
+        }
+        return;
+    }
     for (auto& request : requests)
     {
         if (!request.owner || !request.sent || request.result.state != HACKOS_ECHO_PENDING ||
@@ -116,8 +138,7 @@ void ReceiveEcho(const uint8_t* frame, unsigned length, const uint8_t* mac, cons
     }
 }
 
-void PollEcho(bool ready, bool link, bool resolved, const uint8_t* mac, const uint8_t* peerMac,
-              const uint8_t* ip, const uint8_t* peerIp)
+void PollEcho(bool ready, bool link, const uint8_t* mac, const uint8_t* ip)
 {
     Expire();
     for (auto& request : requests)
@@ -129,13 +150,27 @@ void PollEcho(bool ready, bool link, bool resolved, const uint8_t* mac, const ui
             request.finished = tick;
             continue;
         }
+        uint8_t hop[4], peerMac[6];
+        if (!NextHop(request.result.address, hop)) continue;
+        auto neighbor = ResolveNeighbor(hop, peerMac);
+        if (neighbor == NeighborState::Failed)
+        {
+            request.result.state = HACKOS_ECHO_NEIGHBOR_FAILED;
+            request.finished = tick;
+            continue;
+        }
         // Global 10 packets/second ceiling, including cancellation/restart loops.
-        if (!resolved || (hasSent && tick - lastSend < TimerTicksForMilliseconds(100))) continue;
+        if (neighbor != NeighborState::Resolved ||
+            (hasSent && tick - lastSend < TimerTicksForMilliseconds(100)))
+        {
+            continue;
+        }
         uint8_t frame[EchoFrameSize];
-        BuildEcho(frame, mac, peerMac, ip, peerIp, (uint16_t)(request.token >> 16),
+        BuildEcho(frame, mac, peerMac, ip, request.result.address, (uint16_t)(request.token >> 16),
                   (uint16_t)request.token, request.data);
         if (Transmit(frame, sizeof(frame)))
         {
+            request.checksum = ((uint16_t)frame[36] << 8) | frame[37];
             request.sent = true;
             request.sentAt = lastSend = tick;
             hasSent = true;
