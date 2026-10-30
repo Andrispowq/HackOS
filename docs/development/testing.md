@@ -1333,3 +1333,15 @@ Makefile target; the network sanitizer suite includes stream state-machine tests
 
 The existing pipe/descriptor regression suite also accepts `qemu_streams.py --image PATH`
 when the image is beside its `kernel.elf` and `source` build artifacts.
+
+### HTTP client
+
+`python3 tests/http.py` runs the freestanding URL/framing decoder under ASan and
+UBSan; `--sanitizers undefined` is the explicit local fallback. After fresh
+builds, run `tests/qemu_http.py --firmware bios --image out/http/bios/HackOS.img`
+and the UEFI equivalent. Repeat with `--host` for a real loopback server through
+QEMU user networking. The default virtual peer also verifies DNS/Host routing.
+Downloaded binary, chunked and 8 KiB files are copied back from disposable images
+and compared exactly. Tests cover malformed/truncated responses, status failures,
+output preservation, pipelines and terminal escaping without public Internet.
+`test-http-codec` and `test-http` are the corresponding Makefile targets.

@@ -350,7 +350,9 @@ Milestones 1–4 are implemented; later milestones need a separate request.
 - [x] Add bounded active TCP exchanges, retransmission/close handling and a local echo demo.
 - [x] Add active TCP stream handles, incremental I/O, receive backpressure and readiness/poll.
 - [ ] Add inherited socket descriptors, listen/accept, adaptive RTO/congestion control and DNS TCP fallback.
-- [ ] Add HTTP fetching, followed by TLS/HTTPS.
+- [x] Add bounded userspace HTTP GET, chunked/length/EOF decoding, binary downloads and a local demo.
+- [ ] Add TLS/HTTPS with certificate/hostname validation and trusted roots.
+- [ ] Add bounded redirect handling and broader HTTP features.
 - [ ] Add network configuration and useful network user programs.
 
 ### Window-terminal polish

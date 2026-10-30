@@ -177,3 +177,9 @@ test-tcp:
 .PHONY: test-tcp-stream
 test-tcp-stream:
 	$(PYTHON) qemu_tcp_stream.py --firmware $(FIRMWARE) --image $(IMAGE)
+
+.PHONY: test-http-codec test-http
+test-http-codec:
+	$(PYTHON) http.py
+test-http:
+	$(PYTHON) qemu_http.py --firmware $(FIRMWARE) --image $(IMAGE)

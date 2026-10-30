@@ -73,6 +73,13 @@ jobs:
             --mount "type=bind,source=$PWD,target=/work,readonly" \
             --mount "type=bind,source=$PWD/tests/out,target=/work/tests/out" \
             hackos-tests:host python3 tests/network.py
+      - name: Exercise HTTP URL and response decoder with sanitizers
+        if: ${{ !cancelled() && matrix.suite == 'host' }}
+        run: |
+          docker run --rm --network none --user "$(id -u):$(id -g)" \
+            --mount "type=bind,source=$PWD,target=/work,readonly" \
+            --mount "type=bind,source=$PWD/tests/out,target=/work/tests/out" \
+            hackos-tests:host python3 tests/http.py
       - name: Exercise surface allocation with sanitizers
         if: ${{ !cancelled() && matrix.suite == 'host' }}
         run: |
@@ -256,6 +263,18 @@ jobs:
               --mount "type=bind,source=$PWD,target=/work,readonly" \
               --mount "type=bind,source=$PWD/tests/out,target=/work/tests/out" \
               hackos-tests:toolchain python3 tests/qemu_tcp_stream.py --firmware "$FIRMWARE" \
+                --image "tests/out/build-$FIRMWARE/HackOS.img" $MODE
+          done
+      - name: Exercise HTTP framing and downloads
+        if: ${{ !cancelled() && steps.build.outcome == 'success' }}
+        env:
+          FIRMWARE: ${{ matrix.firmware }}
+        run: |
+          for MODE in "" "--host"; do
+            docker run --rm --network none --user "$(id -u):$(id -g)" \
+              --mount "type=bind,source=$PWD,target=/work,readonly" \
+              --mount "type=bind,source=$PWD/tests/out,target=/work/tests/out" \
+              hackos-tests:toolchain python3 tests/qemu_http.py --firmware "$FIRMWARE" \
                 --image "tests/out/build-$FIRMWARE/HackOS.img" $MODE
           done
       - name: Exercise DHCP lease lifecycle

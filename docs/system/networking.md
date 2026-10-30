@@ -1,4 +1,4 @@
-# Experimental networking: Ethernet, routing, DHCP, UDP and TCP
+# Experimental networking: Ethernet, routing, DHCP, UDP, TCP and HTTP
 
 [System index](index.md) · [Devices](devices.md) · [Testing](../development/testing.md)
 
@@ -24,7 +24,8 @@ use the supplied gateway while retaining the destination IP. Connected UDP and
 bounded DNS lookup and bounded active TCP exchanges are available. Active TCP stream handles support incremental I/O and scheduler polling.
 Listening TCP servers and inherited socket descriptors are not implemented.
 Diagnostics use the root-only hardware query; Echo uses syscall 97, DNS lookup
-uses syscall 98, connected UDP uses syscall 99 and TCP exchanges use syscall 100; incremental streams use syscall 101.
+uses syscall 98, connected UDP uses syscall 99 and TCP exchanges use syscall 100; incremental streams use syscall 101. The userspace `http` client builds on those
+streams without adding a kernel ABI.
 
 ## Browser demo
 
@@ -41,6 +42,8 @@ ping -c 2 example.com
 udp 10.0.2.2 7777 "hello from HackOS"
 tcp 10.0.2.2 7778 "hello over TCP"
 tcp --stream 10.0.2.2 7779 256 "hello over TCP"
+http http://10.0.2.2:8080/
+http -o /tmp/download.txt http://10.0.2.2:8080/large
 sysinfo network
 sysinfo network > /tmp/network.txt
 cat /tmp/network.txt
@@ -457,8 +460,8 @@ stack. It has no listen/accept, simultaneous open, inherited stream descriptors,
 interface, adaptive RTT/RTO in the transaction API. A peer that keeps its
 window closed or never sends EOF times out. The conservative one-segment flight
 limit replaces a growing congestion window in this milestone. There is no IP
-fragmentation/reassembly or ICMP/PMTU feedback. DNS TCP fallback, HTTP and TLS are
-still future work. Wire/state handling is based on
+fragmentation/reassembly or ICMP/PMTU feedback. DNS TCP fallback and TLS are still future work. Plain HTTP GET is available
+through the userspace client described below. Wire/state handling is based on
 [RFC 9293](https://www.rfc-editor.org/rfc/rfc9293.html); these explicit limits are
 not a claim of full RFC conformance.
 
@@ -535,7 +538,7 @@ and write-shutdown work fail after 20 seconds without acknowledgement progress;
 a caller separately controls read waits through poll timeouts. The existing
 transaction API retains its whole-exchange deadline. These are bounded active
 client streams, not a claim of full TCP conformance: no adaptive RTO/congestion
-window, out-of-order queue, listen/accept, inherited descriptors, TLS or HTTP yet.
+window, out-of-order queue, listen/accept, inherited descriptors or TLS yet. Plain HTTP GET now uses these streams.
 
 `tests/qemu_tcp_stream.py` checks incremental I/O, failed-copy preservation,
 foreign/stale handles, process cleanup, mixed/timed polling, 8 KiB receive with
@@ -543,3 +546,83 @@ window closure/reopening, EOF/half-close, direct/DNS routing and retransmission.
 Its `--host-echo` mode transfers 3200 bytes through a real host TCP socket with
 73-byte reads, independently splitting application messages. Both boot paths are
 covered; host sanitizers additionally cover persist probes and idle lifetime.
+
+## HTTP GET client
+
+`http [-o FILE] http://host[:port]/path` is a standalone ring-3 HTTP/1.x GET
+client. It uses DNS and the incremental TCP API; the kernel has no HTTP parser
+and no new syscall. The request includes Host, `Accept-Encoding: identity`, and
+`Connection: close`. The default port is 80. IPv4 literals and ASCII DNS names
+are accepted; URLs are bounded to 1024 bytes and fragments are omitted from the
+request. Userinfo, IPv6 literals, raw spaces/control/non-ASCII characters,
+backslashes, invalid percent escapes and invalid ports are rejected before a
+connection is opened. Percent-encoded paths/queries are sent without decoding.
+
+Compose adds a loopback-only HTTP server on port 8080 inside the emulator
+container, with no additional published host port. It serves generated fixtures,
+not host files. Direct runs can opt into `--network --http-demo`. Examples:
+
+```text
+http http://10.0.2.2:8080/
+http http://10.0.2.2:8080/chunked
+http -o /tmp/download.txt http://10.0.2.2:8080/large
+wc -c /tmp/download.txt
+http http://10.0.2.2:8080/binary | wc -c
+```
+
+The demo root is plain text, `/chunked` demonstrates transfer decoding, `/large`
+is 8192 bytes, and `/binary` contains all 256 byte values. This fetches response
+bytes; it does not render HTML. `http://example.com/` can be tried when the host
+allows outbound HTTP, but public servers may redirect to HTTPS or reject HTTP.
+No public Internet service is required for automated tests or the local demo.
+
+Status and byte-count diagnostics go to stderr. The decoded response body goes
+to stdout, or to `-o FILE`. Direct terminal output preserves ASCII text, tabs and
+newlines while rendering control/non-ASCII bytes as `\xNN`, preventing remote
+terminal escape sequences. Pipes, shell redirection and `-o` files receive exact
+binary bytes. Non-2xx responses return exit status 1 without emitting a body;
+redirects print their Location but are never followed automatically. Invalid
+arguments/URLs return 2; successful 2xx responses return 0. HTTPS is explicitly
+rejected until a TLS implementation is available.
+
+The decoder accepts HTTP/1.0 and HTTP/1.1 status lines and supports Content-Length,
+chunked bodies (including bounded extensions/trailers), and EOF-delimited bodies.
+It can consume arbitrary TCP segmentation without buffering an entire response.
+Up to four informational responses precede the final response; 101 upgrades are
+unsupported. 204/304 end at the headers; nonempty 205 bodies are rejected. The
+client requests uncompressed data and rejects content encodings other than
+identity. Chunk syntax is removed from output. A known-length/chunked response
+completes at its framing boundary without needing a server EOF; an EOF-delimited
+response requires EOF. Closure after a complete framed response is best effort.
+
+Bounds are 32 KiB of decoded body, 1024 bytes per status/header/chunk-size line,
+8192 aggregate header/trailer bytes, 64 total fields, and 256 KiB of total wire
+response. The body limit matches the filesystem file limit. Network connection,
+write readiness and read inactivity waits are ten seconds each; there is no
+whole-request wall-clock deadline. Normal output backpressure follows stream
+write behavior. Requests may span multiple 512-byte TCP writes.
+
+Malformed line endings, obsolete folded headers, conflicting/duplicate length
+headers, combined Content-Length and Transfer-Encoding, unsupported transfer
+codings, forbidden framing trailers, over-limit input and premature EOF fail
+explicitly. A failed response is never reported as a complete download. The
+parser follows the supported framing rules in
+[RFC 9112](https://www.rfc-editor.org/rfc/rfc9112.html), with deliberately strict
+ASCII/bounded parsing and no claim of complete HTTP feature support.
+
+`-o` creates/truncates its target only after valid final 2xx headers and known
+length checks, so HTTP status failures and rejected headers leave an existing
+target unchanged. Once body streaming starts, transport, parser, disk or output
+failure may leave a partial file/output and returns a nonzero status. Successful
+`-o` downloads flush before reporting success. Shell `>` still opens/truncates
+before launching the program, following normal shell rules. Downloads are not
+atomic replacements. There are no redirects, cookies, authentication, proxies,
+compression, uploads, connection reuse, HTTP/2, HTTP/3 or TLS yet.
+
+`tests/http.py` sanitizes the real freestanding URL/framing decoder with all
+split points, bytewise input, truncated prefixes, binary/max-sized bodies,
+malformed headers/chunks, metadata limits and mutated responses.
+`tests/qemu_http.py` tests both firmware paths with a deterministic DNS/routed
+HTTP peer; `--host` instead uses a real loopback HTTP server through QEMU user
+networking. Tests verify status failures, terminal escaping, pipes and saved
+files byte-for-byte, including preservation of an existing `-o` target.

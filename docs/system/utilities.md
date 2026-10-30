@@ -325,3 +325,18 @@ each way. Port 7778 remains the original helper that waits for EOF before
 replying, so use it with the original `tcp host port message` command. Stream
 mode waits with poll and reports byte totals; a mismatch, early EOF, socket
 failure or timeout returns a nonzero exit status.
+
+### HTTP downloads
+
+`http [-o FILE] http://host[:port]/path` fetches up to 32 KiB with plain HTTP GET.
+Status/byte counts go to stderr and decoded body bytes go to stdout or FILE.
+Terminal control/non-ASCII bytes are escaped; pipes/files receive exact bytes.
+`http http://10.0.2.2:8080/` uses the Compose demo. Try `/chunked`, or save `/large`
+with `http -o /tmp/download.txt http://10.0.2.2:8080/large` and inspect it with `wc`.
+
+Normal users can fetch and save to writable paths. `-o` opens/truncates only after
+valid successful headers; later failures can leave partial output. Shell `>`
+follows normal pre-launch truncation rules. HTTP errors and redirects return 1,
+invalid URLs/options return 2, and successful 2xx responses return 0. Redirects
+are reported without following them. HTTPS, compression and HTML rendering are
+not supported. See [networking](networking.md#http-get-client) for framing bounds.

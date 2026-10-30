@@ -8,6 +8,7 @@ int main(int argc, char**)
     }
 
     Print("Commands: help, clear, echo [-n] [text], time [--date|--time|--ticks], ps [aux], kill <pid>\n");
+    Print("HTTP: http [-o FILE] http://host[:port]/path (plain HTTP GET).\n");
     Print("TCP: tcp <host> <port> <message> (bounded exchange); tcp --stream <host> <port> <count> <message>.\n");
     Print("UDP: udp <host> <port> <message> (512-byte datagrams).\n");
     Print("Network: ping [-c 1..10] <IPv4-address|hostname>; nslookup <hostname>; sysinfo network (root).\n");

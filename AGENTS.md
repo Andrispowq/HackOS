@@ -137,9 +137,17 @@ peer on port 7778. Incremental TCP uses syscall 101 with process-owned handles, 
 write-side shutdown, and HACKOS_POLL_TCP (64) readiness. It reuses 512-byte send
 and 2048-byte receive storage across unlimited total bytes; handles persist until
 close/exit. Compose immediate stream echo is port 7779 (`tcp --stream`).
-Inherited descriptors, listen/accept, HTTP and TLS remain future work; see
+Inherited descriptors, listen/accept and TLS remain future work; see
 `docs/system/networking.md`. `tests/qemu_tcp.py` covers both firmware paths and
 has a real host socket mode (`--host-echo`).
+
+HTTP adds standalone `http [-o FILE] http://host[:port]/path` over TCP streams,
+without a kernel ABI change. The shared freestanding HTTP decoder supports bounded
+Content-Length, chunked and EOF bodies (32 KiB max), with strict framing validation.
+Status goes to stderr; pipes/files retain raw bytes and terminal controls are
+escaped. Compose serves generated HTTP fixtures at 10.0.2.2:8080. HTTPS and
+redirect following are unsupported. See `docs/system/networking.md` and
+`tests/http.py` / `tests/qemu_http.py` (both firmware paths, plus `--host`).
 
 ## Where to look
 

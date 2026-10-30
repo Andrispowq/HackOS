@@ -54,7 +54,9 @@ fallback after 28 seconds. Compose also starts a container-loopback UDP echo hel
 `udp 10.0.2.2 7777 "hello from HackOS"` for a complete datagram exchange.
 The TCP helpers support `tcp 10.0.2.2 7778 "hello over TCP"` and the incremental
 `tcp --stream 10.0.2.2 7779 256 "hello over TCP"` demo.
-No additional host port is exposed. Direct runs can select `--network --tcp-demo`, or opt in with
+Compose also starts a generated-content HTTP demo: `http http://10.0.2.2:8080/`
+or `http -o /tmp/download.txt http://10.0.2.2:8080/large`. Direct runs can enable it
+with `--network --http-demo`. No additional host port is exposed. Direct runs can select `--network --tcp-demo`, or opt in with
 `--network --udp-demo` on `tools/run_qemu.py`.
 
 The command suite is built from `libs/commands` and packaged as separate ELF

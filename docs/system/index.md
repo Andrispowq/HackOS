@@ -100,4 +100,4 @@ taskbar, independent terminal endpoints and recovery login.
 
 - [Graphical Settings](settings.md): hardware pages, account/group administration and password changes.
 
-- [Experimental networking](networking.md): E1000, IPv4 routing, DHCP, DNS, UDP and bounded TCP exchanges.
+- [Experimental networking](networking.md): E1000, IPv4 routing, DHCP, DNS, UDP, TCP streams and HTTP GET.

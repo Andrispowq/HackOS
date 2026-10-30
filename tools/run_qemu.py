@@ -12,8 +12,8 @@ import time
 
 ROOT = Path(__file__).resolve().parents[1]
 
-def run(firmware, image, web=False, debug=False, snapshot=False, serial_log=None, network=False, udp_demo=False, tcp_demo=False):
-    if (udp_demo or tcp_demo) and not network: raise ValueError('Network demos require --network')
+def run(firmware, image, web=False, debug=False, snapshot=False, serial_log=None, network=False, udp_demo=False, tcp_demo=False, http_demo=False):
+    if (udp_demo or tcp_demo or http_demo) and not network: raise ValueError('Network demos require --network')
     if not image.is_file(): raise FileNotFoundError(f'Build the {firmware} image first: {image}')
     with tempfile.TemporaryDirectory(prefix='hackos-run-') as temporary:
         args = ['qemu-system-x86_64', '-machine', 'q35', '-accel', 'tcg', '-cpu', 'qemu64,+rdrand',
@@ -51,6 +51,10 @@ def run(firmware, image, web=False, debug=False, snapshot=False, serial_log=None
                 processes.append(tcp_echo)
                 tcp_stream_echo = subprocess.Popen([sys.executable, str(ROOT / 'tools/tcp_echo.py'), '--stream', '--port', '7779'])
                 processes.append(tcp_stream_echo)
+            http_server = None
+            if http_demo:
+                http_server = subprocess.Popen([sys.executable, str(ROOT / 'tools/http_demo.py')])
+                processes.append(http_server)
             qemu = subprocess.Popen(args, env=env)
             processes.append(qemu)
             if web:
@@ -61,6 +65,7 @@ def run(firmware, image, web=False, debug=False, snapshot=False, serial_log=None
                 if echo and echo.poll() is not None: raise RuntimeError('UDP demo echo service exited unexpectedly')
                 if tcp_echo and tcp_echo.poll() is not None: raise RuntimeError('TCP demo echo service exited unexpectedly')
                 if tcp_stream_echo and tcp_stream_echo.poll() is not None: raise RuntimeError('TCP streaming echo service exited unexpectedly')
+                if http_server and http_server.poll() is not None: raise RuntimeError('HTTP demo service exited unexpectedly')
                 if web and proxy.poll() is not None: raise RuntimeError('Browser console exited unexpectedly')
                 time.sleep(0.2)
             if qemu.returncode: raise RuntimeError(f'QEMU exited with status {qemu.returncode}')
@@ -85,5 +90,6 @@ if __name__ == '__main__':
     parser.add_argument('--network', action='store_true', help='Enable experimental E1000 Ethernet/ARP')
     parser.add_argument('--udp-demo', action='store_true', help='Start local-only UDP echo on port 7777 (requires --network)')
     parser.add_argument('--tcp-demo', action='store_true', help='Start local-only TCP echo on port 7778 (requires --network)')
+    parser.add_argument('--http-demo', action='store_true', help='Start a loopback HTTP demo on port 8080 (requires --network)')
     args = parser.parse_args()
-    run(args.firmware, args.image, args.web, args.debug, args.snapshot, args.serial_log, args.network, args.udp_demo, args.tcp_demo)
+    run(args.firmware, args.image, args.web, args.debug, args.snapshot, args.serial_log, args.network, args.udp_demo, args.tcp_demo, args.http_demo)
