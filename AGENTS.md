@@ -146,14 +146,16 @@ without a kernel ABI change. The shared freestanding HTTP decoder supports bound
 Content-Length, chunked and EOF bodies (32 KiB max), with strict framing validation.
 Status goes to stderr; pipes/files retain raw bytes and terminal controls are
 escaped. Compose serves generated HTTP fixtures at 10.0.2.2:8080. Up to five HTTP redirects are followed with relative Location resolution and loop
-detection; HTTPS remains unsupported. See `docs/system/networking.md` and
+detection. HTTPS uses pinned BearSSL TLS 1.2 and public roots in `libs/tls`, with
+chain/date/DNS/IP validation, RDRAND entropy and no insecure bypass. HTTPS-to-HTTP
+redirects are rejected; TLS 1.3 and revocation remain unsupported. See `docs/system/networking.md` and
 `tests/http.py` / `tests/qemu_http.py` (both firmware paths, plus `--host`).
 
 `libs/browser` adds a minimal HTTP HTML viewer with a desktop launcher entry,
 address bar, Back/Reload/Stop, clickable relative links and scrolling. The bounded
 parser/layout lives in `common/include/hackos/runtime/html.h`; document storage
 uses the userspace heap. Async DNS/TCP keeps the GUI responsive. No CSS, scripts,
-images, forms or HTTPS. See `docs/system/browser.md` and `tests/html.py` /
+images or forms. HTTPS shares the verified userspace TLS transport. See `docs/system/browser.md` and `tests/html.py` /
 `tests/qemu_browser.py`. `Gui::Kind::Custom` provides borrowed draw/input callbacks;
 text-field Enter emits Activate. Browser supports literal text/plain, fragment
 anchors, Back scroll restoration and a draggable scrollbar. Kernel ABI and image-page limits are unchanged.

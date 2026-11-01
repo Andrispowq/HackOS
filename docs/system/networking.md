@@ -460,7 +460,7 @@ stack. It has no listen/accept, simultaneous open, inherited stream descriptors,
 interface, adaptive RTT/RTO in the transaction API. A peer that keeps its
 window closed or never sends EOF times out. The conservative one-segment flight
 limit replaces a growing congestion window in this milestone. There is no IP
-fragmentation/reassembly or ICMP/PMTU feedback. DNS TCP fallback and TLS are still future work. Plain HTTP GET is available
+fragmentation/reassembly or ICMP/PMTU feedback. DNS TCP fallback is still future work. HTTP and verified HTTPS GET are available
 through the userspace client described below. Wire/state handling is based on
 [RFC 9293](https://www.rfc-editor.org/rfc/rfc9293.html); these explicit limits are
 not a claim of full RFC conformance.
@@ -538,7 +538,7 @@ and write-shutdown work fail after 20 seconds without acknowledgement progress;
 a caller separately controls read waits through poll timeouts. The existing
 transaction API retains its whole-exchange deadline. These are bounded active
 client streams, not a claim of full TCP conformance: no adaptive RTO/congestion
-window, out-of-order queue, listen/accept, inherited descriptors or TLS yet. Plain HTTP GET now uses these streams.
+window, out-of-order queue, listen/accept, inherited descriptors yet. Userspace HTTP and TLS now use these streams.
 
 `tests/qemu_tcp_stream.py` checks incremental I/O, failed-copy preservation,
 foreign/stale handles, process cleanup, mixed/timed polling, 8 KiB receive with
@@ -549,7 +549,7 @@ covered; host sanitizers additionally cover persist probes and idle lifetime.
 
 ## HTTP GET client
 
-`http [-o FILE] http://host[:port]/path` is a standalone ring-3 HTTP/1.x GET
+`http [-o FILE] http[s]://host[:port]/path` is a standalone ring-3 HTTP/1.x GET
 client. It uses DNS and the incremental TCP API; the kernel has no HTTP parser
 and no new syscall. The request includes Host, `Accept-Encoding: identity`, and
 `Connection: close`. The default port is 80. IPv4 literals and ASCII DNS names
@@ -573,7 +573,7 @@ http http://10.0.2.2:8080/binary | wc -c
 The demo root is plain text, `/chunked` demonstrates transfer decoding, `/large`
 is 8192 bytes, and `/binary` contains all 256 byte values. This fetches response
 bytes; it does not render HTML. `http://example.com/` can be tried when the host
-allows outbound HTTP, but public servers may redirect to HTTPS or reject HTTP.
+allows outbound HTTP/HTTPS; supported public servers can redirect HTTP to HTTPS.
 No public Internet service is required for automated tests or the local demo.
 
 Status and byte-count diagnostics go to stderr. The decoded response body goes
@@ -583,12 +583,12 @@ terminal escape sequences. Pipes, shell redirection and `-o` files receive exact
 binary bytes. The client follows 301/302/303/307/308 redirects, up to five hops,
 using shared HTTP reference resolution and host/port/target loop detection.
 Relative Location values are supported; missing/duplicate/invalid Location,
-loops, excess hops and non-HTTP destinations fail. Each hop closes the previous
+loops, excess hops, unsupported schemes and HTTPS-to-HTTP downgrades fail. Each hop closes the previous
 socket after validated headers without emitting its body. Only the final 2xx
 response opens `-o` output. Other non-2xx responses return exit status 1 without
 emitting a body. Invalid
-arguments/URLs return 2; successful 2xx responses return 0. HTTPS is explicitly
-rejected until a TLS implementation is available.
+arguments/URLs return 2; successful 2xx responses return 0. HTTPS requires a
+verified certificate chain and matching server identity; there is no insecure mode.
 
 The decoder accepts HTTP/1.0 and HTTP/1.1 status lines and supports Content-Length,
 chunked bodies (including bounded extensions/trailers), and EOF-delimited bodies.
@@ -603,8 +603,8 @@ response requires EOF. Closure after a complete framed response is best effort.
 Bounds are 32 KiB of decoded body, 1024 bytes per status/header/chunk-size line,
 8192 aggregate header/trailer bytes, 64 total fields, and 256 KiB of total wire
 response. The body limit matches the filesystem file limit. Network connection,
-write readiness and read inactivity waits are ten seconds each; there is no
-whole-request wall-clock deadline. Normal output backpressure follows stream
+write readiness and read inactivity waits are ten seconds each, within a
+30-second request deadline across redirects. Normal output backpressure follows stream
 write behavior. Requests may span multiple 512-byte TCP writes.
 
 Malformed line endings, obsolete folded headers, conflicting/duplicate length
@@ -622,7 +622,7 @@ failure may leave a partial file/output and returns a nonzero status. Successful
 `-o` downloads flush before reporting success. Shell `>` still opens/truncates
 before launching the program, following normal shell rules. Downloads are not
 atomic replacements. There are no cookies, authentication, proxies,
-compression, uploads, connection reuse, HTTP/2, HTTP/3 or TLS yet.
+compression, uploads, connection reuse, HTTP/2 or HTTP/3 yet.
 
 `tests/http.py` sanitizes the real freestanding URL/framing decoder with all
 split points, bytewise input, truncated prefixes, binary/max-sized bodies,
@@ -634,3 +634,48 @@ files byte-for-byte, including preservation of an existing `-o` target.
 
 The [minimal HTML browser](browser.md) reuses this decoder with an asynchronous
 GUI transport. Its linked local demo begins at `http://10.0.2.2:8080/browser/`.
+
+
+## HTTPS / userspace TLS
+
+`http https://example.com/` and the Browser use the same nonblocking userspace
+transport over syscall 101; there is no kernel ABI change. Default HTTPS port is
+443. Relative/scheme-relative URLs preserve their scheme, HTTP-to-HTTPS redirects
+work, and HTTPS-to-HTTP redirects fail. Explicit user navigation to HTTP is still
+allowed. Host headers omit the scheme's default port; DNS names use SNI, while
+numeric IPv4 addresses require an exact iPAddress SAN and do not send SNI.
+
+`libs/tls` pins BearSSL commit `7bea48e5e850ab4cafbe68d3765cdaba13a86d6f`
+and a Mozilla-derived curl trust bundle dated 2026-10-20 (118 roots). Normal builds
+use the checked-in source/bundle; they never download roots or use host trust.
+See [TLS provenance and profile](../../libs/tls/README.md) for hashes, regeneration,
+license and verifier limits. The selected TLS 1.2 profile supports ECDHE_RSA and
+ECDHE_ECDSA with AES-128-GCM or ChaCha20-Poly1305, SHA-256/384/512 signatures and
+RSA modulus lengths of at least 256 bytes. TLS 1.3-only servers are unsupported.
+
+Peer chain signatures, identity, validity dates, basic constraints and key usage
+are checked against bundled roots. Leaf EKU, when present, must permit server
+use. No network-fetched intermediates, revocation checks or intermediate EKU
+constraints are implemented. The peer must supply a usable chain. Each chain is
+bounded to eight certificates of at most 8 KiB each. Explicit RTC UTC validation
+rejects invalid date fields; an incorrect RTC can reject otherwise valid sites.
+CPUID-checked RDRAND provides fresh handshake entropy with bounded retries and
+no fallback to timestamps. Missing entropy, allocation failure and validation
+errors fail closed before any HTTP request or output-file truncation.
+
+The browser pumps at most eight TCP records per iteration, with the existing
+inactivity and whole-load deadlines. Stop/navigation/close dispose of the owned
+socket and wipe/free TLS context storage. Failed navigation preserves the current
+page. TCP EOF without TLS close_notify is a truncation failure when HTTP framing
+has not already completed. Framed responses still complete without waiting for
+EOF. Completed/aborted fetches close their single-use sockets; there is no session
+resumption, cookie handling or client-certificate support.
+
+`tests/tls.py` runs the real adapter under native ASan/UBSan against OpenSSL TLS
+servers, checking RSA/ECDSA, SNI, DNS/IP identities, trust, dates, leaf EKU and
+version rejection. `tests/qemu_https.py --firmware bios --image PATH` (also UEFI)
+uses freshly generated private certificates, links their root only into copied
+test binaries, checks exact downloads and failure preservation, verifies that
+production roots reject that private CA, and runs browser navigation/cancellation
+over HTTPS. `--internet` additionally checks example.com with production roots.
+Private test keys and modified test images remain under ignored `tests/out`.

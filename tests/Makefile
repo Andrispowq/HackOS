@@ -189,3 +189,9 @@ test-html:
 	$(PYTHON) html.py
 test-browser:
 	$(PYTHON) qemu_browser.py --firmware $(FIRMWARE) --image $(IMAGE)
+
+.PHONY: test-tls-codec test-https
+test-tls-codec:
+	$(PYTHON) tls.py
+test-https:
+	$(PYTHON) qemu_https.py --firmware $(FIRMWARE) --image $(IMAGE)

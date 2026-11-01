@@ -5,7 +5,7 @@ import json
 import os
 from pathlib import Path
 import shutil
-import socket
+import ssl
 import socketserver
 import threading
 import time
@@ -15,30 +15,50 @@ from http_demo import Handler, Server
 
 
 class SlowHandler(Handler):
-    def handle(self):
-        if b'/slow ' in self.request.recv(2048, socket.MSG_PEEK):  # MSG_PEEK: normal handler still receives the request.
+    def setup(self):
+        if getattr(self.server, 'context', None):
+            self.request.settimeout(10)
+            self.request = self.server.context.wrap_socket(self.request, server_side=True)
+
+    def response(self, target, headers):
+        if target == '/slow':
+            self.request.sendall(b'HTTP/1.1 200 OK\r\nContent-Length: 100\r\n\r\n')
+            time.sleep(5)
+            return b''
+        return super().response(target, headers)
+
+    def finish(self):
+        if isinstance(self.request, ssl.SSLSocket):
             try:
-                self.request.recv(2048)
-                self.request.sendall(b'HTTP/1.1 200 OK\r\nContent-Length: 100\r\n\r\n')
-                time.sleep(5)
+                self.request.unwrap().close()
             except OSError:
                 pass
-        else:
-            super().handle()
 
 
 class ThreadedServer(socketserver.ThreadingMixIn, Server):
     daemon_threads = True
 
+    def handle_error(self, request, client_address):
+        # Certificate rejection and Stop/Close deliberately abort TLS handshakes.
+        import sys
+        if not isinstance(sys.exc_info()[1], (ssl.SSLError, ConnectionError)):
+            super().handle_error(request, client_address)
 
-def test(firmware, image, timeout):
-    directory = OUT / ('browser-' + firmware)
+
+def test(firmware, image, timeout, tls=None):
+    port = 8443 if tls else 8080
+    base = ("https" if tls else "http") + f"://10.0.2.2:{port}"
+    directory = OUT / ('browser-' + firmware + ('-https' if tls else ''))
     directory.mkdir(parents=True, exist_ok=True)
     disposable = directory / 'HackOS.img'
     shutil.copy2(image, disposable)
     built = image.parent
-    with ThreadedServer(('127.0.0.1', 8080), SlowHandler) as server:
+    with ThreadedServer(('127.0.0.1', port), SlowHandler) as server:
         server.requests = []
+        if tls:
+            server.context = ssl.SSLContext(ssl.PROTOCOL_TLS_SERVER)
+            server.context.minimum_version = server.context.maximum_version = ssl.TLSVersion.TLSv1_2
+            server.context.load_cert_chain(*tls)
         thread = threading.Thread(target=server.serve_forever, daemon=True)
         thread.start()
         try:
@@ -48,7 +68,7 @@ def test(firmware, image, timeout):
                 g.enter('root', 'New password: ')
                 g.password(ADMIN_PASSWORD, 'Action: ')
                 g.login('root', ADMIN_PASSWORD)
-                g.enter('browser', 'BROWSER_LOADED')
+                g.enter('browser ' + base + '/browser/', 'BROWSER_LOADED')
                 sequence = 0
 
                 def inspect(checks=''):
@@ -188,9 +208,9 @@ quit
                 load(lambda: click('Home'))
                 load(lambda: click('Back'))
                 inspect("assert text('current').endswith('/browser/long.html')\nassert u('top') > 40")
-                load(lambda: address('http://10.0.2.2:8080/browser/long.html#section30'))
+                load(lambda: address(base + '/browser/long.html#section30'))
                 before = len(server.requests)
-                load(lambda: address('http://10.0.2.2:8080/browser/long.html#section10'))
+                load(lambda: address(base + '/browser/long.html#section10'))
                 assert len(server.requests) == before, 'fragment navigation fetched the document'
                 inspect("assert u('top') > 0\nassert text('current').endswith('#section10')")
                 key('home')
@@ -203,29 +223,29 @@ quit
                 time.sleep(.1)
                 inspect("assert u('top') > 40")
                 g.screen('dragged')
-                load(lambda: address('http://10.0.2.2:8080/plain'))
+                load(lambda: address(base + '/plain'))
                 inspect("assert '<b>literal</b> &amp;\\n  spaces    end' in page()\nassert u('document.linkCount') == 0")
-                load(lambda: address('http://10.0.2.2:8080/browser/redirect'))
+                load(lambda: address(base + '/browser/redirect'))
                 inspect("assert text('current').endswith('/browser/long.html#section30')\nassert u('top') > 40")
-                for path in ('redirect-loop', 'redirect-https', 'hop/0', 'redirect-bad'):
-                    load(lambda: address('http://10.0.2.2:8080/' + path), 'BROWSER_ERROR')
+                for path in ('redirect-loop', 'redirect-unsupported', 'hop/0', 'redirect-bad'):
+                    load(lambda: address(base + '/' + path), 'BROWSER_ERROR')
                     inspect("assert text('current').endswith('#section30')")
                 load(lambda: click('Home'))
-                load(lambda: address('http://10.0.2.2:8080/missing'), 'BROWSER_ERROR')
+                load(lambda: address(base + '/missing'), 'BROWSER_ERROR')
                 inspect("assert text('current').endswith('/browser/')\nassert '404' in text(field('statusLabel') + '.text')\nassert 'Welcome' in page()")
-                address('https://example.com/')
-                inspect("assert 'HTTPS' in text(field('statusLabel') + '.text')\nassert 'Welcome' in page()")
-                address('http://10.0.2.2:8080/slow')
+                address('ftp://example.com/')
+                inspect("assert 'Invalid' in text(field('statusLabel') + '.text')\nassert 'Welcome' in page()")
+                address(base + '/slow')
                 click('Stop')
                 inspect("assert 'stopped' in text(field('statusLabel') + '.text')\nassert 'Welcome' in page()")
                 load(lambda: click('Home'))
-                address('http://10.0.2.2:8080/slow')
+                address(base + '/slow')
                 offset = len(g.output())
                 key('f4', alt=True)
                 g.wait('$ ', offset)
                 g.shell('echo browser-closed', 'browser-closed')
                 # A second process can immediately allocate a socket and load a page.
-                g.enter('browser', 'BROWSER_LOADED')
+                g.enter('browser ' + base + '/browser/', 'BROWSER_LOADED')
                 inspect("assert 'Welcome' in page()")
                 offset = len(g.output())
                 key('f4', alt=True)

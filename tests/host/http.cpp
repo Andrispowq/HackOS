@@ -81,7 +81,8 @@ int main()
     assert(!redirects.Next("/6"));
     redirects = {};
     assert(redirects.Add("http://x/"));
-    assert(!redirects.Next("https://x/"));
+    assert(redirects.Next("https://x/"));
+    assert(!redirects.Next("http://x/"));
     assert(!redirects.Next(""));
     assert(RedirectStatus(301) && RedirectStatus(302) && RedirectStatus(303) && RedirectStatus(307) &&
            RedirectStatus(308));
@@ -98,11 +99,13 @@ int main()
     Bad("HTTP/1.1 200 OK\r\nContent-Type: text/plain\r\nContent-Type: text/html\r\n\r\n");
     Bad("HTTP/1.1 302 Found\r\nLocation: \r\nLocation: /x\r\n\r\n");
     Url url;
+    assert(ParseUrl("HTTPS://Example.COM/path", url) && url.secure && url.port == 443);
+    assert(ParseUrl("https://example.com:8443/", url) && url.secure && url.port == 8443);
     assert(ParseUrl("http://Example.COM:8080/a%20b?q=one#ignored", url));
     assert(Equal(url.host, "example.com") && url.port == 8080 && Equal(url.target, "/a%20b?q=one"));
     assert(ParseUrl("HTTP://10.0.2.2?x=1", url) && Equal(url.target, "/?x=1") && url.port == 80);
     assert(ParseUrl("http://example.com#fragment", url) && Equal(url.target, "/"));
-    const char* invalid[] = {"", "http://", "https://example.com/", "http://user@example.com/", "http://[::1]/",
+    const char* invalid[] = {"", "http://", "http://user@example.com/", "http://[::1]/",
         "http://example.com:0/", "http://example.com:65536/", "http://example.com:/", "http://bad..host/",
         "http://1.2.3.999/", "http://example.com/hello world", "http://example.com/\r\nInjected:yes",
         "http://example.com/%0", "http://example.com/%zz", "http://example.com\\evil/"};

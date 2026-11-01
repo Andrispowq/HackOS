@@ -2,7 +2,7 @@
 
 [System index](index.md) · [Networking](networking.md) · [GUI library](gui.md)
 
-`browser [http://host[:port]/path]` opens the standalone ring-3 Browser window.
+`browser [http[s]://host[:port]/path]` opens the standalone ring-3 Browser window.
 It is also available in the desktop launcher. With Compose's HTTP demo running,
 the default page is `http://10.0.2.2:8080/browser/`. The linked guide and long page
 provide a local navigation/scrolling demonstration without Internet access.
@@ -43,7 +43,8 @@ markup may omit the remaining text. Unicode and unsupported control bytes render
 as `?`; there is no UTF-8 font support. The parser cannot execute content.
 
 There is no CSS, JavaScript, image loading, form submission, cookie storage,
-authentication, proxy support, download UI or TLS/HTTPS.
+authentication, proxy support, download UI. HTTPS uses verified TLS 1.2 and the bundled public trust store; see
+[networking](networking.md#https--userspace-tls) for profile and validation limits.
 No linked resource is fetched automatically. `Content-Type: text/plain`
 (case-insensitive, optional parameters) renders literal
 markup/entities, preserves spaces and line breaks, and expands tabs to four spaces.
@@ -51,14 +52,14 @@ Missing/other content types retain the HTML tokenizer. HTTP errors keep the old
 page; compressed bodies are rejected by the HTTP decoder.
 
 Relative links resolve against the displayed page, including root-relative,
-scheme-relative, query-only and dot-segment paths. Only `http://` is accepted.
+scheme-relative, query-only and dot-segment paths. `http://` and `https://` are accepted.
 Fragments jump to case-sensitive `id` attributes or legacy `a name` anchors, with
 percent-decoded fragment names. Same-document navigation does not fetch; an empty
 or unknown fragment selects the top. The first matching anchor wins. `base` tags are ignored.
 
 Browser and `http` share redirect handling for 301/302/303/307/308: at most five
 hops, relative Location resolution and loop detection by host/port/request target.
-Missing/duplicate/invalid Location, unsupported schemes and excess hops fail.
+Missing/duplicate/invalid Location, unsupported schemes, HTTPS-to-HTTP downgrades and excess hops fail.
 Redirect bodies are discarded by closing the old socket after validated headers;
 only a successful final response replaces the page. The final URL becomes the
 address and relative-link base. A Location without a fragment inherits the previous
@@ -75,7 +76,7 @@ text without navigation. Layout stores at most 32768 glyphs; expansion beyond
 that limit is labelled in the status bar. Lists number 1–99, then restart at 1.
 
 The document's glyph/layout arrays are allocated once from the private 512 KiB
-userspace heap (about 352 KiB); the HTTP fetch state adds about 46 KiB. History
+userspace heap (about 352 KiB); the HTTP fetch state adds about 46 KiB, plus fixed TLS record and certificate buffers for HTTPS. History
 and GUI state live in the executable's bounded data segment. Kernel executable
 page limits and syscall interfaces are unchanged. The browser replaces document
 contents only after a complete successful HTTP response; Back refetches other

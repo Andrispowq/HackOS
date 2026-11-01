@@ -54,6 +54,7 @@ clean:
 	$(MAKE) -C boot/BIOS/stage_1 clean
 	$(MAKE) -C boot/BIOS/stage_2 clean
 	$(MAKE) -C libs/libc clean
+	$(MAKE) -C libs/tls clean
 	$(MAKE) -C libs/shell clean
 	$(MAKE) -C libs/login clean
 	$(MAKE) -C libs/commands clean

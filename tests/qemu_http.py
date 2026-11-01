@@ -125,7 +125,7 @@ def test(firmware, image, timeout, host):
             guest.shell('cat /tmp/http-keep', 'untouched')
             guest.shell(f'http {url}/redirect-relative', 'Hello from HackOS HTTP!')
             guest.shell(f'http -o /tmp/http-keep {url}/redirect-loop', 'redirect loop')
-            guest.shell(f'http {url}/redirect-https', 'only HTTP is supported')
+            guest.shell(f'http {url}/redirect-unsupported', 'use HTTP or HTTPS')
             guest.shell(f'http {url}/hop/0', 'redirect limit exceeded')
             guest.shell(f'http {url}/redirect-bad', 'duplicate or empty Content-Length')
             guest.shell('cat /tmp/http-keep', 'untouched')
@@ -135,7 +135,7 @@ def test(firmware, image, timeout, host):
             guest.shell(f'http -o /tmp/http-keep {url}/oversize', 'response body too large')
             guest.shell('cat /tmp/http-keep', 'untouched')
             before = len(peer.requests)
-            guest.shell('http https://example.com/', 'HTTPS requires TLS')
+            guest.shell('http ftp://example.com/', 'invalid URL')
             assert len(peer.requests) == before
             if not host:
                 guest.shell('http "http://demo.test:8080/host?x=1#omit"', 'Target: /host?x=1')

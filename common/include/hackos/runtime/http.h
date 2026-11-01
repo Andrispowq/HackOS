@@ -55,6 +55,7 @@ struct Url
 {
     char host[256], target[1025];
     uint16_t port;
+    bool secure;
 };
 
 inline bool ParseUrl(const char* text, Url& url)
@@ -72,15 +73,17 @@ inline bool ParseUrl(const char* text, Url& url)
     {
         return false;
     }
-    const char* scheme = "http://";
-    for (unsigned i = 0; i < 7; ++i)
+    bool secure = length >= 8 && Lower(text[4]) == 's';
+    unsigned prefix = secure ? 8 : 7;
+    const char* scheme = secure ? "https://" : "http://";
+    for (unsigned i = 0; i < prefix; ++i)
     {
         if (Lower(text[i]) != scheme[i])
         {
             return false;
         }
     }
-    for (unsigned i = 7; i < length; ++i)
+    for (unsigned i = prefix; i < length; ++i)
     {
         if ((uint8_t)text[i] <= 32 || (uint8_t)text[i] >= 127 || text[i] == '\\')
         {
@@ -91,7 +94,7 @@ inline bool ParseUrl(const char* text, Url& url)
             return false;
         }
     }
-    unsigned at = 7, hostSize = 0;
+    unsigned at = prefix, hostSize = 0;
     char host[256] = {};
     while (at < length && text[at] != ':' && text[at] != '/' && text[at] != '?' && text[at] != '#')
     {
@@ -118,7 +121,8 @@ inline bool ParseUrl(const char* text, Url& url)
     {
         return false;
     }
-    url.port = 80;
+    url.secure = secure;
+    url.port = secure ? 443 : 80;
     if (at < length && text[at] == ':')
     {
         ++at;
@@ -154,7 +158,7 @@ inline bool ParseUrl(const char* text, Url& url)
     return true;
 }
 
-// Resolve HTTP references without decoding percent escapes. Unsupported schemes
+// Resolve HTTP(S) references without decoding percent escapes. Unsupported schemes
 // are rejected, never handed to the shell or an external application.
 inline bool Resolve(const char* base, const char* reference, char* output, unsigned limit = 1024)
 {
@@ -197,7 +201,9 @@ inline bool Resolve(const char* base, const char* reference, char* output, unsig
     }
     else if (size >= 2 && reference[0] == '/' && reference[1] == '/')
     {
-        if (!append("http:", 5) || !append(reference, size))
+        Url baseUrl;
+        if (!ParseUrl(base, baseUrl)) return false;
+        if (!append(baseUrl.secure ? "https:" : "http:", baseUrl.secure ? 6 : 5) || !append(reference, size))
         {
             return false;
         }
@@ -209,7 +215,7 @@ inline bool Resolve(const char* base, const char* reference, char* output, unsig
         {
             return false;
         }
-        unsigned authority = 7;
+        unsigned authority = parsed.secure ? 8 : 7;
         while (base[authority] && base[authority] != '/' && base[authority] != '?' && base[authority] != '#')
         {
             ++authority;
@@ -255,7 +261,7 @@ inline bool Resolve(const char* base, const char* reference, char* output, unsig
     {
         return false;
     }
-    unsigned authority = 7;
+    unsigned authority = parsed.secure ? 8 : 7;
     while (joined[authority] && joined[authority] != '/' && joined[authority] != '?' && joined[authority] != '#')
     {
         ++authority;
@@ -356,7 +362,7 @@ struct Redirects
         Url parsed;
         if (!ParseUrl(address, parsed))
         {
-            error = "invalid redirect URL (only HTTP is supported)";
+            error = "invalid redirect URL (use HTTP or HTTPS)";
             return false;
         }
         for (unsigned i = 0; i < count; ++i)
@@ -366,7 +372,7 @@ struct Redirects
             {
                 ++j;
             }
-            if (Equal(parsed.host, visited[i].host) && parsed.port == visited[i].port &&
+            if (Equal(parsed.host, visited[i].host) && parsed.port == visited[i].port && parsed.secure == visited[i].secure &&
                 parsed.target[j] == visited[i].target[j])
             {
                 error = "redirect loop";
@@ -392,7 +398,7 @@ struct Redirects
         char next[1025];
         if (!*location || !Resolve(current, location, next))
         {
-            error = "missing or invalid redirect Location (only HTTP is supported)";
+            error = "missing or invalid redirect Location (use HTTP or HTTPS)";
             return false;
         }
         // A redirect without its own fragment inherits the original fragment.
@@ -417,6 +423,13 @@ struct Redirects
                 next[i++] = current[f++];
             }
             next[i] = 0;
+        }
+        Url previous, destination;
+        if (!ParseUrl(current, previous) || !ParseUrl(next, destination)) return false;
+        if (previous.secure && !destination.secure)
+        {
+            error = "HTTPS to HTTP redirect refused";
+            return false;
         }
         return Add(next);
     }

@@ -263,7 +263,7 @@ static void Navigate(const char* url, int target = -1, bool reload = false)
     char resolved[256];
     if (!Hackos::Html::Resolve(*current ? current : "http://10.0.2.2:8080/browser/", url, resolved))
     {
-        Status("Invalid/unsupported URL. Use HTTP, at most 255 bytes; HTTPS is not available.");
+        Status("Invalid/unsupported URL. Use HTTP(S), at most 255 bytes.");
         return;
     }
     unsigned i = 0;
@@ -342,7 +342,7 @@ int main(int argc, char** argv)
 {
     if (argc > 2 || (argc == 2 && (Equal(argv[1], "--help") || Equal(argv[1], "-h"))))
     {
-        Print("Usage: browser [http://host[:port]/path]\n"
+        Print("Usage: browser [http[s]://host[:port]/path]\n"
               "Minimal HTML window with links, Back/Reload and scrolling.\n"
               "Default: http://10.0.2.2:8080/browser/ | 32 KiB pages, 255-byte URLs.\n");
         return argc > 2 ? 2 : 0;

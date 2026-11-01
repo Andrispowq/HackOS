@@ -1,12 +1,13 @@
 #pragma once
 #include "hackos/user.h"
 #include "hackos/stdio.h"
-#include "hackos/runtime/http.h"
+#include "hackos/http_transport.h"
 
 // Incremental HTTP transport. Step never waits; the GUI owns the timed poll.
 class Fetch
 {
     Hackos::Http::Url url;
+    Hackos::Http::Transport transport;
     HackosResolve dns = {};
     Hackos::Http::Decoder decoder;
     char request[1536];
@@ -103,7 +104,7 @@ class Fetch
 
     unsigned Events() const
     {
-        return phase == Sending ? HACKOS_POLL_WRITE : HACKOS_POLL_READ;
+        return transport.Events(phase == Sending ? HACKOS_POLL_WRITE : HACKOS_POLL_READ);
     }
 
     void Cancel()
@@ -117,6 +118,7 @@ class Fetch
             syscall_tcp_stream(HACKOS_TCP_CLOSE, socket, nullptr);
         }
         socket = 0;
+        transport.Reset();
         phase = Idle;
     }
 
@@ -163,11 +165,16 @@ class Fetch
         decoder = Hackos::Http::Decoder(Body, Headers, this);
         if (!Hackos::Http::ParseUrl(redirects.current, url))
         {
-            Fail("Use an http:// URL. HTTPS is not supported yet.");
+            Fail("Use an http:// or https:// URL.");
+            return;
+        }
+        if (!transport.Start(url))
+        {
+            Fail(transport.error);
             return;
         }
         char authority[272];
-        if (url.port == 80)
+        if (url.port == (url.secure ? 443 : 80))
         {
             snprintf(authority, sizeof(authority), "%s", url.host);
         }
@@ -241,6 +248,16 @@ class Fetch
             Connect(peer);
             return;
         }
+        if (socket)
+        {
+            auto before = transport.transferred;
+            if (!transport.Pump(socket))
+            {
+                Fail(transport.error);
+                return;
+            }
+            if (transport.transferred != before) progress = now;
+        }
         if (phase == Sending)
         {
             HackosTcpStream record = {};
@@ -262,7 +279,9 @@ class Fetch
             {
                 record.data[i] = request[sent + i];
             }
-            if (syscall_tcp_stream(HACKOS_TCP_WRITE, socket, &record))
+            auto result = transport.Write(socket, record);
+            if (result == HACKOS_RETRY) return;
+            if (result)
             {
                 Fail("Request write failed.");
                 return;
@@ -281,7 +300,7 @@ class Fetch
             {
                 HackosTcpStream record = {};
                 record.size = sizeof(record.data);
-                auto result = syscall_tcp_stream(HACKOS_TCP_READ, socket, &record);
+                auto result = transport.Read(socket, record);
                 if (result == HACKOS_RETRY)
                 {
                     return;

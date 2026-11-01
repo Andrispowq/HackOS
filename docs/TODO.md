@@ -352,7 +352,8 @@ Milestones 1–4 are implemented; later milestones need a separate request.
 - [ ] Add inherited socket descriptors, listen/accept, adaptive RTO/congestion control and DNS TCP fallback.
 - [x] Add bounded userspace HTTP GET, chunked/length/EOF decoding, binary downloads and a local demo.
 - [x] Add a minimal HTML browser with linked local pages, navigation and scrolling.
-- [ ] Add TLS/HTTPS with certificate/hostname validation and trusted roots.
+- [x] Add bounded TLS 1.2/HTTPS with certificate/hostname/IP validation and pinned public roots.
+- [ ] Add TLS 1.3, revocation and fuller certificate-policy validation.
 - [x] Add bounded shared HTTP redirects, literal browser text/plain, anchors, Back scroll restoration and thumb dragging.
 - [ ] Add broader HTTP features.
 - [ ] Add network configuration and useful network user programs.

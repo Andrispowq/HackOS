@@ -1374,3 +1374,27 @@ Images and source copies are under `out/browser-usability/{bios,uefi}`;
 `source-manifest.json` matches both builds to the changed production sources,
 and `validation.json` records image hashes and guest result logs. This is scoped
 browser/HTTP/GUI validation, not a rerun of every OS regression suite.
+
+
+### HTTPS validation (2026-11-01)
+
+Native `tests/tls.py` passed ASan/UBSan checks of RSA/ECDSA TLS 1.2, SNI, DNS and
+IPv4 identity matching, unknown roots, expired/future dates, leaf EKU, TLS-version
+rejection, and truncated/mutated certificate-extension DER. `tests/http.py` and
+`tests/html.py` passed their updated HTTPS URL and downgrade-policy checks.
+
+Fresh BIOS/UEFI builds and both guest HTTPS suites passed verified downloads,
+normal-user access, failure-before-output preservation, private-CA rejection by
+production binaries, and HTTPS browser navigation/Stop/close/restart. Plain HTTP
+command and browser regressions passed on both paths. The production BIOS
+browser also loaded `https://example.com/` and closed successfully; its screenshot
+was inspected. The production UEFI HTTP command independently fetched that site.
+Public-site checks are optional and excluded from CI's offline test runs.
+
+Final images/debug sources are under `out/https/{bios,uefi}`. The production-source
+manifest matches both final builds; `out/https/validation.json` records image
+hashes and result logs. Browser uses 62 of 64 image/stack pages and HTTP uses 48;
+heap and kernel quotas are unchanged. The tests generate ephemeral private CAs
+under `tests/out`, modifying only copied test binaries. Production images retain
+the pinned public-root bundle. New test targets are `test-tls-codec` and
+`test-https`; the latter takes `FIRMWARE` and `IMAGE` like the HTTP/browser suites.

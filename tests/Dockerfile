@@ -15,12 +15,12 @@ RUN sh /tmp/build_toolchain.sh && rm /tmp/build_toolchain.sh
 ENV PATH=/opt/cross/bin:$PATH
 
 FROM compiler AS toolchain
-RUN apt-get update && apt-get install -y --no-install-recommends gdb-multiarch \
+RUN apt-get update && apt-get install -y --no-install-recommends gdb-multiarch openssl python3-cryptography \
     && rm -rf /var/lib/apt/lists/*
 ENV GDB=gdb-multiarch TEST_LD=x86_64-elf-ld TEST_OBJCOPY=x86_64-elf-objcopy
 
 FROM base AS host
-RUN apt-get update && apt-get install -y --no-install-recommends libclang-rt-18-dev \
+RUN apt-get update && apt-get install -y --no-install-recommends libclang-rt-18-dev openssl python3-cryptography \
     && rm -rf /var/lib/apt/lists/*
 
 # Interactive builds share the exact compiler stage used by CI.

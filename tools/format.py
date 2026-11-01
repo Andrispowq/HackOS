@@ -26,7 +26,8 @@ def main():
     ).decode().split("\0")
     files = sorted({name for name in names if Path(name).suffix in (".c", ".cpp", ".h", ".hpp")
                     and (ROOT / name).is_file()
-                    and (name.startswith(ROOTS) or name == LOADER)})
+                    and (name.startswith(ROOTS) or name == LOADER)
+                    and not name.startswith("libs/tls/vendor/") and name != "libs/tls/src/roots.h"})
     modes = {name: (ROOT / name).stat().st_mode for name in files}
     try:
         flags = ["-i"] if args.write else ["--dry-run", "--Werror"]

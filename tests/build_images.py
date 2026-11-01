@@ -71,6 +71,7 @@ def build(firmware):
     make("desktop_program", "libs/desktop", ["all"])
     make("file_manager", "libs/files", ["all"])
     make("graphical_editor", "libs/editor", ["all"])
+    make("browser_program", "libs/browser", ["all"])
     make("graphical_settings", "libs/settings", ["all"])
     make("terminal_program", "libs/term", ["all"])
     make("ring3_program", "libs/ring3", ["all"])
@@ -84,7 +85,7 @@ def build(firmware):
         validate_elf(kernel)
         # Large-model .lbss/.ldata must remain in their aligned load segments.
         # The kernel rejects shared pages rather than merging R/W/X permissions.
-        for path in [*(work / "libs/commands/bin").iterdir(), work / "libs/login/bin/login", work / "libs/window/bin/window", work / "libs/desktop/bin/desktop", work / "libs/files/bin/files", work / "libs/editor/bin/editor", work / "libs/settings/bin/settings", work / "libs/term/bin/term"]:
+        for path in [*(work / "libs/commands/bin").iterdir(), work / "libs/login/bin/login", work / "libs/window/bin/window", work / "libs/desktop/bin/desktop", work / "libs/files/bin/files", work / "libs/editor/bin/editor", work / "libs/settings/bin/settings", work / "libs/term/bin/term", work / "libs/browser/bin/browser"]:
             data = path.read_bytes()
             validate_elf(data)
             phoff = struct.unpack_from('<Q', data, 32)[0]

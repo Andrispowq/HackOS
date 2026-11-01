@@ -1,5 +1,5 @@
 #include "resolve.h"
-#include "hackos/runtime/http.h"
+#include "hackos/http_transport.h"
 
 namespace
 {
@@ -16,10 +16,22 @@ struct Socket
     }
 };
 
+uint64_t deadline;
+uint64_t Now()
+{
+    HackosClock clock = {};
+    syscall_clock(&clock);
+    return clock.ticks;
+}
+
 bool Wait(uint64_t handle, uint32_t events)
 {
     HackosPollFd item = {handle, HACKOS_POLL_TCP | events, 0};
-    return syscall_poll(&item, 1, 10000) == 1 && (item.revents & events) &&
+    uint64_t now = Now();
+    if (now >= deadline) return false;
+    uint64_t timeout = deadline - now;
+    if (timeout > 10000) timeout = 10000;
+    return syscall_poll(&item, 1, timeout) == 1 && (item.revents & events) &&
            !(item.revents & (HACKOS_POLL_ERROR | HACKOS_POLL_INVALID));
 }
 
@@ -154,10 +166,10 @@ void CloseGracefully(uint64_t handle)
 
 int main(int argc, char** argv)
 {
-    const char* usage = "Usage: http [-o FILE] http://host[:port]/path\n"
-                        "GET plain HTTP, up to 32 KiB. Status goes to stderr; body goes to stdout or FILE.\n"
+    const char* usage = "Usage: http [-o FILE] http[s]://host[:port]/path\n"
+                        "GET HTTP or verified HTTPS, up to 32 KiB. Status goes to stderr; body goes to stdout or FILE.\n"
                         "Terminal control bytes are escaped; files and pipes receive exact bytes.\n"
-                        "Up to five HTTP redirects; HTTPS and compression are unsupported.\n"
+                        "Up to five redirects; HTTPS requires a trusted certificate and valid RTC.\n"
                         "Demo: http http://10.0.2.2:8080/\n";
     if (argc == 2 && (Equal(argv[1], "--help") || Equal(argv[1], "-h")))
     {
@@ -183,19 +195,32 @@ int main(int argc, char** argv)
     static Hackos::Http::Redirects redirects;
     if (!redirects.Add(input))
     {
-        Error("http: invalid URL; use http://. HTTPS requires TLS.\n");
+        Error("http: invalid URL; use http:// or https://.\n");
         return 2;
     }
     output.redirects = &redirects;
+    deadline = Now() + 30000;
     for (;;)
     {
+        if (Now() >= deadline)
+        {
+            Error("http: request deadline exceeded.\n");
+            return 1;
+        }
+        Hackos::Http::Transport transport;
         output.redirect = false;
         output.status = 0;
         Hackos::Http::Url url;
         if (!Hackos::Http::ParseUrl(redirects.current, url))
         {
-            Error("http: invalid URL; use http:// with an IPv4 address or ASCII hostname. HTTPS requires TLS.\n");
+            Error("http: invalid HTTP(S) URL.\n");
             return 2;
+        }
+        if (!transport.Start(url))
+        {
+            Error(transport.error);
+            Error("\n");
+            return 1;
         }
         HackosTcpStream record = {};
         if (!Hackos::ParseIPv4(url.host, record.address))
@@ -213,7 +238,7 @@ int main(int argc, char** argv)
         record.peerPort = url.port;
         Socket socket;
         uint64_t handle = HACKOS_RETRY;
-        for (unsigned attempt = 0; attempt < 500 && handle == HACKOS_RETRY; ++attempt)
+        for (unsigned attempt = 0; attempt < 500 && handle == HACKOS_RETRY && Now() < deadline; ++attempt)
         {
             handle = syscall_tcp_stream(HACKOS_TCP_CONNECT, 0, &record);
             if (handle == HACKOS_RETRY)
@@ -228,7 +253,7 @@ int main(int argc, char** argv)
         }
         socket.handle = handle;
         char authority[272], request[1536];
-        int hostLength = url.port == 80 ? snprintf(authority, sizeof(authority), "%s", url.host)
+        int hostLength = url.port == (url.secure ? 443 : 80) ? snprintf(authority, sizeof(authority), "%s", url.host)
                                         : snprintf(authority, sizeof(authority), "%s:%u", url.host, url.port);
         int length = snprintf(request, sizeof(request),
                               "GET %s HTTP/1.1\r\nHost: %s\r\nUser-Agent: HackOS/0.1\r\nAccept: "
@@ -241,9 +266,10 @@ int main(int argc, char** argv)
         }
         for (unsigned offset = 0; offset < (unsigned)length;)
         {
-            if (!Wait(handle, HACKOS_POLL_WRITE))
+            if (Now() >= deadline || !transport.Pump(handle))
             {
-                Error("http: connection/write failed or timed out.\n");
+                Error(transport.error ? transport.error : "http: request deadline exceeded.");
+                Error("\n");
                 return 1;
             }
             record.size = length - offset;
@@ -255,7 +281,9 @@ int main(int argc, char** argv)
             {
                 record.data[i] = request[offset + i];
             }
-            if (syscall_tcp_stream(HACKOS_TCP_WRITE, handle, &record))
+            auto written = transport.Write(handle, record);
+            if (written == HACKOS_RETRY && Wait(handle, transport.Events(HACKOS_POLL_WRITE))) continue;
+            if (written)
             {
                 Error("http: request write failed.\n");
                 return 1;
@@ -265,11 +293,17 @@ int main(int argc, char** argv)
         Hackos::Http::Decoder decoder(Output::Body, Output::Headers, &output);
         while (!decoder.Done())
         {
+            if (Now() >= deadline || !transport.Pump(handle))
+            {
+                Error(transport.error ? transport.error : "http: request deadline exceeded.");
+                Error("\n");
+                return 1;
+            }
             record.size = sizeof(record.data);
-            uint64_t result = syscall_tcp_stream(HACKOS_TCP_READ, handle, &record);
+            uint64_t result = transport.Read(handle, record);
             if (result == HACKOS_RETRY)
             {
-                if (Wait(handle, HACKOS_POLL_READ))
+                if (Wait(handle, transport.Events(HACKOS_POLL_READ)))
                 {
                     continue;
                 }

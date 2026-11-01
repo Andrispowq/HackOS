@@ -80,6 +80,13 @@ jobs:
             --mount "type=bind,source=$PWD,target=/work,readonly" \
             --mount "type=bind,source=$PWD/tests/out,target=/work/tests/out" \
             hackos-tests:host python3 tests/http.py
+      - name: Exercise TLS certificate validation with sanitizers
+        if: ${{ !cancelled() && matrix.suite == 'host' }}
+        run: |
+          docker run --rm --network none --user "$(id -u):$(id -g)" \
+            --mount "type=bind,source=$PWD,target=/work,readonly" \
+            --mount "type=bind,source=$PWD/tests/out,target=/work/tests/out" \
+            hackos-tests:host python3 tests/tls.py
       - name: Exercise bounded HTML parsing and layout
         if: ${{ !cancelled() && matrix.suite == 'host' }}
         run: |
@@ -132,6 +139,8 @@ jobs:
             tests/out/gui-keyboard/
             tests/out/gui-library/
             tests/out/formatting/
+            tests/out/tls/
+            !tests/out/tls/*.key
             !tests/out/**/*.o
 
   firmware:
@@ -292,6 +301,16 @@ jobs:
             --mount "type=bind,source=$PWD,target=/work,readonly" \
             --mount "type=bind,source=$PWD/tests/out,target=/work/tests/out" \
             hackos-tests:toolchain python3 tests/qemu_browser.py --firmware "$FIRMWARE" \
+              --image "tests/out/build-$FIRMWARE/HackOS.img"
+      - name: Exercise verified HTTPS and browser lifecycle
+        if: ${{ !cancelled() && steps.build.outcome == 'success' }}
+        env:
+          FIRMWARE: ${{ matrix.firmware }}
+        run: |
+          docker run --rm --network none --user "$(id -u):$(id -g)" \
+            --mount "type=bind,source=$PWD,target=/work,readonly" \
+            --mount "type=bind,source=$PWD/tests/out,target=/work/tests/out" \
+            hackos-tests:toolchain python3 tests/qemu_https.py --firmware "$FIRMWARE" \
               --image "tests/out/build-$FIRMWARE/HackOS.img"
       - name: Exercise DHCP lease lifecycle
         if: ${{ !cancelled() && steps.build.outcome == 'success' }}
@@ -529,3 +548,6 @@ jobs:
             tests/out/qemu-editor-${{ matrix.firmware }}/
             tests/out/qemu-settings-${{ matrix.firmware }}/
             tests/out/qemu-formatting-${{ matrix.firmware }}/
+            tests/out/https-${{ matrix.firmware }}/*.log
+            tests/out/browser-${{ matrix.firmware }}-https/*.log
+            tests/out/browser-${{ matrix.firmware }}-https/*.ppm

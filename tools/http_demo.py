@@ -17,7 +17,7 @@ HOME_HTML = b"""<!doctype html><html><head><title>HackOS Web</title>
 <li><a href="guide.html">Read the browser guide</a></li>
 <li><a href="long.html">Open a long page and scroll</a></li>
 <li><a href="../missing">Try a missing page</a></li>
-<li><a href="https://example.com/">Try an unsupported HTTPS link</a></li>
+<li><a href="https://example.com/">Try an external HTTPS link</a></li>
 </ul><h2>Simple HTML, readable text</h2>
 <p>Paragraphs wrap to the window width. <b>Bold text</b>, headings, lists,
 line breaks<br>and entities such as &lt;html&gt; &amp; &quot;quotes&quot; work.</p>
@@ -35,7 +35,7 @@ GUIDE_HTML = b"""<h1>Browser guide</h1><p>You followed a relative link.</p>
 <p><a href="./">Return to the home page</a></p>
 <p><a href="long.html">Read the long page</a></p>
 <h2>Limits</h2><p>Pages are limited to 32 KiB and addresses to 255 bytes.
-This is a text-only HTML viewer. HTTP redirects are followed; HTTPS is not supported.</p>"""
+This is a text-only HTML viewer. HTTP and HTTPS redirects are followed; certificates are verified.</p>"""
 LONG_HTML = (b'<h1>A longer journey</h1><p><a href="./">Back to home</a></p>' +
              b''.join(f'<h2 id="section{i}">Section {i}</h2><p>Scrolling through a real page in HackOS. '
                       f'This is paragraph {i}. Resize the window to see the text wrap.</p>'.encode()
@@ -46,6 +46,7 @@ def response(target, host):
     redirects = {'/redirect-relative': ('307 Temporary Redirect', 'redirect'),
                  '/redirect-loop': ('302 Found', '/redirect-loop'),
                  '/redirect-https': ('308 Permanent Redirect', 'https://example.com/'),
+                 '/redirect-unsupported': ('308 Permanent Redirect', 'ftp://example.com/'),
                  '/browser/redirect': ('303 See Other', 'long.html#section30')}
     if path in redirects:
         status, location = redirects[path]
@@ -96,6 +97,9 @@ def response(target, host):
 
 
 class Handler(socketserver.BaseRequestHandler):
+    def response(self, target, headers):
+        return response(target, headers['host'])
+
     def handle(self):
         self.request.settimeout(10)
         try:
@@ -119,7 +123,7 @@ class Handler(socketserver.BaseRequestHandler):
                 return
             if hasattr(self.server, 'requests'):
                 self.server.requests.append((target, headers))
-            message = response(target, headers['host'])
+            message = self.response(target, headers)
             # Independent writes exercise arbitrary TCP/HTTP segmentation.
             at = 0
             for size in (1, 2, 7, 31, 127):

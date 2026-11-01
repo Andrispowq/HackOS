@@ -39,7 +39,10 @@ int main()
     Url("", "http://demo.test:8080/a/b/page?old=1");
     Url("//other.test/path", "http://other.test/path");
     Url("http://other.test", "http://other.test/");
-    Url("HTTPS://other.test", nullptr);
+    Url("HTTPS://other.test", "HTTPS://other.test/");
+    char secure[256];
+    assert(Resolve("https://demo.test/a", "//other.test/b", secure));
+    assert(!__builtin_strcmp(secure, "https://other.test/b"));
     Url("javascript:alert(1)", nullptr);
     Url("file:///x", nullptr);
     Url("http://user@host/", nullptr);

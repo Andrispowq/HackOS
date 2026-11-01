@@ -31,3 +31,12 @@ clean:
 	rm -rf bin bin-int
 .SECONDARY:
 -include bin-int/*.d
+
+# Only HTTP links the TLS implementation.
+bin/http: bin-int/http.o ../ring3/userspace.ld ../libc/bin/libc.a ../tls/bin/libtls.a Makefile
+	@mkdir -p $(@D)
+	$(LD) --gc-sections -T ../ring3/userspace.ld -static -nostdlib -o $@ $< ../libc/bin/libc.a ../tls/bin/libtls.a
+../tls/bin/libtls.a: force-tls
+	$(MAKE) -C ../tls
+.PHONY: force-tls
+force-tls:

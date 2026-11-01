@@ -295,3 +295,10 @@ resolves a hostname before sending Echo probes. See
 [networking](../system/networking.md) for static test addresses and diagnostics.
 
 `libs/browser` builds `/usr/bin/browser`, linked with `libgui.a` and `libc.a`.
+
+HTTPS is implemented by the freestanding `libs/tls` archive, linked only into
+HTTP and Browser. BearSSL sources and the public CA bundle are pinned in-tree;
+normal builds need no network or extra host libraries. Native TLS tests and trust
+bundle regeneration require Python `cryptography` and OpenSSL (available in the
+development container). Browser uses `-Os` so TLS and the full root bundle fit
+the existing executable-page quota. See `libs/tls/README.md` for provenance.

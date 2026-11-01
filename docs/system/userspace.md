@@ -24,7 +24,7 @@ the same virtual addresses without sharing their private frames.
 
 The loader validates file and virtual ranges, requires readable segments,
 rejects writable executable pages, page-sharing segments, dynamic linking,
-interpreters and TLS, and caps ELF files at 1 MiB. Empty load segments are allowed.
+interpreters and ELF thread-local-storage segments, and caps ELF files at 1 MiB. Empty load segments are allowed.
 BSS and page padding are zeroed. CR0.WP and EFER.NXE enforce permissions; CPUs
 without NX cannot launch user programs. The shared loader permits at most 64 queued tasks,
 including idle and zombies awaiting reclamation. Each parent can also retain up
