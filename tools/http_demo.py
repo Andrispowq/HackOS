@@ -35,14 +35,26 @@ GUIDE_HTML = b"""<h1>Browser guide</h1><p>You followed a relative link.</p>
 <p><a href="./">Return to the home page</a></p>
 <p><a href="long.html">Read the long page</a></p>
 <h2>Limits</h2><p>Pages are limited to 32 KiB and addresses to 255 bytes.
-This is a text-only HTML viewer. HTTPS and automatic redirects are not supported.</p>"""
+This is a text-only HTML viewer. HTTP redirects are followed; HTTPS is not supported.</p>"""
 LONG_HTML = (b'<h1>A longer journey</h1><p><a href="./">Back to home</a></p>' +
-             b''.join(f'<h2>Section {i}</h2><p>Scrolling through a real page in HackOS. '
+             b''.join(f'<h2 id="section{i}">Section {i}</h2><p>Scrolling through a real page in HackOS. '
                       f'This is paragraph {i}. Resize the window to see the text wrap.</p>'.encode()
                       for i in range(1, 41)) + b'<p>END OF LONG PAGE</p>')
 
 def response(target, host):
     path = target.split('?', 1)[0]
+    redirects = {'/redirect-relative': ('307 Temporary Redirect', 'redirect'),
+                 '/redirect-loop': ('302 Found', '/redirect-loop'),
+                 '/redirect-https': ('308 Permanent Redirect', 'https://example.com/'),
+                 '/browser/redirect': ('303 See Other', 'long.html#section30')}
+    if path in redirects:
+        status, location = redirects[path]
+        return f'HTTP/1.1 {status}\r\nLocation: {location}\r\nContent-Length: 0\r\n\r\n'.encode()
+    if path.startswith('/hop/'):
+        number = int(path.rsplit('/', 1)[1])
+        return f'HTTP/1.1 301 Moved\r\nLocation: /hop/{number + 1}\r\nContent-Length: 0\r\n\r\n'.encode()
+    if path == '/redirect-bad':
+        return b'HTTP/1.1 302 Found\r\nLocation: /\r\nContent-Length: 0\r\nContent-Length: 1\r\n\r\n'
     if path == '/chunked':
         return (b'HTTP/1.1 200 OK\r\nTransfer-Encoding: chunked\r\nConnection: close\r\n\r\n'
                 b'6;demo="yes"\r\nHello \r\n8\r\nchunked!\r\n1\r\n\n\r\n0\r\nX-Demo: complete\r\n\r\n')
@@ -63,6 +75,8 @@ def response(target, host):
     html = path in ('/browser/', '/browser/guide.html', '/browser/long.html')
     if html:
         body = {'/browser/': HOME_HTML, '/browser/guide.html': GUIDE_HTML, '/browser/long.html': LONG_HTML}[path]
+    elif path == '/plain':
+        body = b'<b>literal</b> &amp;\n  spaces\tend\n'
     elif path == '/controls':
         body = b'safe\x1b[31m\x00\xff\n'
     elif path == '/large':

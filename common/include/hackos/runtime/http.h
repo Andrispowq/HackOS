@@ -6,31 +6,47 @@
 namespace Hackos::Http
 {
 constexpr unsigned BodyLimit = 32768, HeaderLimit = 8192, WireLimit = 262144;
+
 inline char Lower(char c)
 {
     return c >= 'A' && c <= 'Z' ? c + 'a' - 'A' : c;
 }
+
 inline bool Equal(const char* a, const char* b)
 {
     while (*a && *b)
     {
-        if (Lower(*a++) != Lower(*b++)) return false;
+        if (Lower(*a++) != Lower(*b++))
+        {
+            return false;
+        }
     }
     return *a == *b;
 }
+
 inline int Hex(char c)
 {
-    if (c >= '0' && c <= '9') return c - '0';
+    if (c >= '0' && c <= '9')
+    {
+        return c - '0';
+    }
     c = Lower(c);
     return c >= 'a' && c <= 'f' ? c - 'a' + 10 : -1;
 }
+
 inline bool Token(char c)
 {
-    if ((c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') || (c >= '0' && c <= '9')) return true;
+    if ((c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') || (c >= '0' && c <= '9'))
+    {
+        return true;
+    }
     const char* punctuation = "!#$%&'*+-.^_`|~";
     for (unsigned i = 0; punctuation[i]; ++i)
     {
-        if (c == punctuation[i]) return true;
+        if (c == punctuation[i])
+        {
+            return true;
+        }
     }
     return false;
 }
@@ -43,28 +59,52 @@ struct Url
 
 inline bool ParseUrl(const char* text, Url& url)
 {
-    if (!text) return false;
+    if (!text)
+    {
+        return false;
+    }
     unsigned length = 0;
-    while (length <= 1024 && text[length]) ++length;
-    if (length < 8 || length > 1024) return false;
+    while (length <= 1024 && text[length])
+    {
+        ++length;
+    }
+    if (length < 8 || length > 1024)
+    {
+        return false;
+    }
     const char* scheme = "http://";
     for (unsigned i = 0; i < 7; ++i)
     {
-        if (Lower(text[i]) != scheme[i]) return false;
+        if (Lower(text[i]) != scheme[i])
+        {
+            return false;
+        }
     }
     for (unsigned i = 7; i < length; ++i)
     {
-        if ((uint8_t)text[i] <= 32 || (uint8_t)text[i] >= 127 || text[i] == '\\') return false;
-        if (text[i] == '%' && (i + 2 >= length || Hex(text[i + 1]) < 0 || Hex(text[i + 2]) < 0)) return false;
+        if ((uint8_t)text[i] <= 32 || (uint8_t)text[i] >= 127 || text[i] == '\\')
+        {
+            return false;
+        }
+        if (text[i] == '%' && (i + 2 >= length || Hex(text[i + 1]) < 0 || Hex(text[i + 2]) < 0))
+        {
+            return false;
+        }
     }
     unsigned at = 7, hostSize = 0;
     char host[256] = {};
     while (at < length && text[at] != ':' && text[at] != '/' && text[at] != '?' && text[at] != '#')
     {
-        if (hostSize >= 253) return false;
+        if (hostSize >= 253)
+        {
+            return false;
+        }
         host[hostSize++] = text[at++];
     }
-    if (!hostSize) return false;
+    if (!hostSize)
+    {
+        return false;
+    }
     url = {};
     uint8_t address[4];
     if (ParseIPv4(host, address))
@@ -86,14 +126,26 @@ inline bool ParseUrl(const char* text, Url& url)
         while (at < length && text[at] >= '0' && text[at] <= '9')
         {
             port = port * 10 + text[at++] - '0';
-            if (++digits > 5 || port > 65535) return false;
+            if (++digits > 5 || port > 65535)
+            {
+                return false;
+            }
         }
-        if (!digits || !port) return false;
+        if (!digits || !port)
+        {
+            return false;
+        }
         url.port = port;
     }
-    if (at < length && text[at] != '/' && text[at] != '?' && text[at] != '#') return false;
+    if (at < length && text[at] != '/' && text[at] != '?' && text[at] != '#')
+    {
+        return false;
+    }
     unsigned used = 0;
-    if (at == length || text[at] != '/') url.target[used++] = '/';
+    if (at == length || text[at] != '/')
+    {
+        url.target[used++] = '/';
+    }
     while (at < length && text[at] != '#')
     {
         url.target[used++] = text[at++];
@@ -101,6 +153,274 @@ inline bool ParseUrl(const char* text, Url& url)
     url.target[used] = 0;
     return true;
 }
+
+// Resolve HTTP references without decoding percent escapes. Unsupported schemes
+// are rejected, never handed to the shell or an external application.
+inline bool Resolve(const char* base, const char* reference, char* output, unsigned limit = 1024)
+{
+    char joined[1025] = {};
+    unsigned used = 0;
+    auto append = [&](const char* p, unsigned count)
+    {
+        if (used + count > 1024)
+        {
+            return false;
+        }
+        for (unsigned i = 0; i < count; ++i)
+        {
+            joined[used++] = p[i];
+        }
+        joined[used] = 0;
+        return true;
+    };
+    unsigned size = 0;
+    while (size <= limit && reference[size])
+    {
+        ++size;
+    }
+    if (size > limit)
+    {
+        return false;
+    }
+    unsigned scheme = 0;
+    while (scheme < size && reference[scheme] != ':' && reference[scheme] != '/' && reference[scheme] != '?' &&
+           reference[scheme] != '#')
+    {
+        ++scheme;
+    }
+    if (scheme < size && reference[scheme] == ':')
+    {
+        if (!append(reference, size))
+        {
+            return false;
+        }
+    }
+    else if (size >= 2 && reference[0] == '/' && reference[1] == '/')
+    {
+        if (!append("http:", 5) || !append(reference, size))
+        {
+            return false;
+        }
+    }
+    else
+    {
+        Url parsed;
+        if (!ParseUrl(base, parsed))
+        {
+            return false;
+        }
+        unsigned authority = 7;
+        while (base[authority] && base[authority] != '/' && base[authority] != '?' && base[authority] != '#')
+        {
+            ++authority;
+        }
+        if (!append(base, authority))
+        {
+            return false;
+        }
+        if (size && reference[0] == '/')
+        {
+            if (!append(reference, size))
+            {
+                return false;
+            }
+        }
+        else
+        {
+            unsigned path = 0, last = 0;
+            while (parsed.target[path] && parsed.target[path] != '?')
+            {
+                if (parsed.target[path] == '/')
+                {
+                    last = path + 1;
+                }
+                ++path;
+            }
+            unsigned count = !size || reference[0] == '#' ? 0 : reference[0] == '?' ? path : last;
+            if (!size || reference[0] == '#')
+            {
+                while (parsed.target[count])
+                {
+                    ++count;
+                }
+            }
+            if (!append(parsed.target, count) || !append(reference, size))
+            {
+                return false;
+            }
+        }
+    }
+    Url parsed;
+    if (!ParseUrl(joined, parsed))
+    {
+        return false;
+    }
+    unsigned authority = 7;
+    while (joined[authority] && joined[authority] != '/' && joined[authority] != '?' && joined[authority] != '#')
+    {
+        ++authority;
+    }
+    unsigned at = 0;
+    for (; at < authority && at < limit; ++at)
+    {
+        output[at] = joined[at];
+    }
+    if (at != authority || at == limit)
+    {
+        return false;
+    }
+    unsigned root = at;
+    output[at++] = '/';
+    unsigned p = 1;
+    while (parsed.target[p] && parsed.target[p] != '?')
+    {
+        unsigned start = p;
+        while (parsed.target[p] && parsed.target[p] != '/' && parsed.target[p] != '?')
+        {
+            ++p;
+        }
+        unsigned n = p - start;
+        bool dot = n == 1 && parsed.target[start] == '.';
+        bool parent = n == 2 && parsed.target[start] == '.' && parsed.target[start + 1] == '.';
+        if (parent)
+        {
+            if (at > root + 1)
+            {
+                --at;
+            }
+            while (at > root + 1 && output[at - 1] != '/')
+            {
+                --at;
+            }
+        }
+        else if (!dot)
+        {
+            if (at + n + (parsed.target[p] == '/') > limit)
+            {
+                return false;
+            }
+            for (unsigned i = start; i < p; ++i)
+            {
+                output[at++] = parsed.target[i];
+            }
+            if (parsed.target[p] == '/')
+            {
+                output[at++] = '/';
+            }
+        }
+        if (parsed.target[p] == '/')
+        {
+            ++p;
+        }
+    }
+    while (parsed.target[p])
+    {
+        if (at == limit)
+        {
+            return false;
+        }
+        output[at++] = parsed.target[p++];
+    }
+    unsigned fragment = 0;
+    while (joined[fragment] && joined[fragment] != '#')
+    {
+        ++fragment;
+    }
+    while (joined[fragment])
+    {
+        if (at == limit)
+        {
+            return false;
+        }
+        output[at++] = joined[fragment++];
+    }
+    output[at] = 0;
+    return true;
+}
+
+inline bool RedirectStatus(unsigned status)
+{
+    return status == 301 || status == 302 || status == 303 || status == 307 || status == 308;
+}
+
+// Five redirects, exact transport-tuple loop detection (fragments are not sent).
+struct Redirects
+{
+    char current[1025] = {};
+    Url visited[6] = {};
+    unsigned count = 0;
+    const char* error = nullptr;
+
+    bool Add(const char* address)
+    {
+        Url parsed;
+        if (!ParseUrl(address, parsed))
+        {
+            error = "invalid redirect URL (only HTTP is supported)";
+            return false;
+        }
+        for (unsigned i = 0; i < count; ++i)
+        {
+            unsigned j = 0;
+            while (parsed.target[j] && parsed.target[j] == visited[i].target[j])
+            {
+                ++j;
+            }
+            if (Equal(parsed.host, visited[i].host) && parsed.port == visited[i].port &&
+                parsed.target[j] == visited[i].target[j])
+            {
+                error = "redirect loop";
+                return false;
+            }
+        }
+        if (count == 6)
+        {
+            error = "redirect limit exceeded (five hops)";
+            return false;
+        }
+        visited[count++] = parsed;
+        unsigned i = 0;
+        do
+        {
+            current[i] = address[i];
+        } while (address[i++]);
+        return true;
+    }
+
+    bool Next(const char* location)
+    {
+        char next[1025];
+        if (!*location || !Resolve(current, location, next))
+        {
+            error = "missing or invalid redirect Location (only HTTP is supported)";
+            return false;
+        }
+        // A redirect without its own fragment inherits the original fragment.
+        unsigned i = 0, f = 0;
+        while (next[i] && next[i] != '#')
+        {
+            ++i;
+        }
+        while (current[f] && current[f] != '#')
+        {
+            ++f;
+        }
+        if (!next[i])
+        {
+            while (current[f])
+            {
+                if (i == 1024)
+                {
+                    error = "redirect URL too long";
+                    return false;
+                }
+                next[i++] = current[f++];
+            }
+            next[i] = 0;
+        }
+        return Add(next);
+    }
+};
 
 // Streaming HTTP/1.x response decoder. Callbacks receive only final headers and
 // decoded body bytes. No allocation; arbitrary TCP segmentation is supported.
@@ -112,6 +432,7 @@ class Decoder
     Decoder(Body body, Headers headers, void* context) : body(body), headers(headers), context(context) {}
     unsigned Status() const { return status; }
     unsigned Received() const { return received; }
+    bool PlainText() const { return plainText; }
     bool Done() const { return phase == Complete; }
     const char* Error() const { return error; }
 
@@ -189,6 +510,7 @@ class Decoder
     const char* error = nullptr;
     unsigned status = 0, received = 0, remaining = 0, contentLength = 0;
     unsigned used = 0, headerBytes = 0, fieldCount = 0, interim = 0, wire = 0;
+    bool plainText = false, hasType = false, hasLocation = false;
     bool cr = false, hasLength = false, chunked = false, encoded = false, http10 = false;
     char line[1025] = {}, location[1025] = {};
 
@@ -229,6 +551,7 @@ class Decoder
                 phase = StatusLine;
                 encoded = false;
                 location[0] = 0;
+                plainText = hasType = hasLocation = false;
                 return true;
             }
             if (encoded) return Fail("compressed responses are unsupported");
@@ -280,9 +603,25 @@ class Decoder
         {
             if (!Equal(value, "identity")) encoded = true;
         }
+        else if (Equal(line, "Content-Type"))
+        {
+            if (hasType)
+            {
+                return Fail("duplicate Content-Type");
+            }
+            hasType = true;
+            unsigned i = 0;
+            while (value[i] && value[i] != ';' && value[i] != ' ' && value[i] != '\t')
+            {
+                ++i;
+            }
+            value[i] = 0;
+            plainText = Equal(value, "text/plain");
+        }
         else if (Equal(line, "Location"))
         {
-            if (location[0]) return Fail("duplicate Location");
+            if (hasLocation) return Fail("duplicate Location");
+            hasLocation = true;
             unsigned i = 0;
             while (value[i])
             {

@@ -580,8 +580,13 @@ Status and byte-count diagnostics go to stderr. The decoded response body goes
 to stdout, or to `-o FILE`. Direct terminal output preserves ASCII text, tabs and
 newlines while rendering control/non-ASCII bytes as `\xNN`, preventing remote
 terminal escape sequences. Pipes, shell redirection and `-o` files receive exact
-binary bytes. Non-2xx responses return exit status 1 without emitting a body;
-redirects print their Location but are never followed automatically. Invalid
+binary bytes. The client follows 301/302/303/307/308 redirects, up to five hops,
+using shared HTTP reference resolution and host/port/target loop detection.
+Relative Location values are supported; missing/duplicate/invalid Location,
+loops, excess hops and non-HTTP destinations fail. Each hop closes the previous
+socket after validated headers without emitting its body. Only the final 2xx
+response opens `-o` output. Other non-2xx responses return exit status 1 without
+emitting a body. Invalid
 arguments/URLs return 2; successful 2xx responses return 0. HTTPS is explicitly
 rejected until a TLS implementation is available.
 
@@ -616,7 +621,7 @@ target unchanged. Once body streaming starts, transport, parser, disk or output
 failure may leave a partial file/output and returns a nonzero status. Successful
 `-o` downloads flush before reporting success. Shell `>` still opens/truncates
 before launching the program, following normal shell rules. Downloads are not
-atomic replacements. There are no redirects, cookies, authentication, proxies,
+atomic replacements. There are no cookies, authentication, proxies,
 compression, uploads, connection reuse, HTTP/2, HTTP/3 or TLS yet.
 
 `tests/http.py` sanitizes the real freestanding URL/framing decoder with all

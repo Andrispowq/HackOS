@@ -145,8 +145,8 @@ HTTP adds standalone `http [-o FILE] http://host[:port]/path` over TCP streams,
 without a kernel ABI change. The shared freestanding HTTP decoder supports bounded
 Content-Length, chunked and EOF bodies (32 KiB max), with strict framing validation.
 Status goes to stderr; pipes/files retain raw bytes and terminal controls are
-escaped. Compose serves generated HTTP fixtures at 10.0.2.2:8080. HTTPS and
-redirect following are unsupported. See `docs/system/networking.md` and
+escaped. Compose serves generated HTTP fixtures at 10.0.2.2:8080. Up to five HTTP redirects are followed with relative Location resolution and loop
+detection; HTTPS remains unsupported. See `docs/system/networking.md` and
 `tests/http.py` / `tests/qemu_http.py` (both firmware paths, plus `--host`).
 
 `libs/browser` adds a minimal HTTP HTML viewer with a desktop launcher entry,
@@ -155,7 +155,8 @@ parser/layout lives in `common/include/hackos/runtime/html.h`; document storage
 uses the userspace heap. Async DNS/TCP keeps the GUI responsive. No CSS, scripts,
 images, forms or HTTPS. See `docs/system/browser.md` and `tests/html.py` /
 `tests/qemu_browser.py`. `Gui::Kind::Custom` provides borrowed draw/input callbacks;
-text-field Enter emits Activate. Kernel ABI and image-page limits are unchanged.
+text-field Enter emits Activate. Browser supports literal text/plain, fragment
+anchors, Back scroll restoration and a draggable scrollbar. Kernel ABI and image-page limits are unchanged.
 
 ## Where to look
 

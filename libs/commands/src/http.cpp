@@ -6,9 +6,13 @@ namespace
 struct Socket
 {
     uint64_t handle = 0;
+
     ~Socket()
     {
-        if (handle) syscall_tcp_stream(HACKOS_TCP_CLOSE, handle, nullptr);
+        if (handle)
+        {
+            syscall_tcp_stream(HACKOS_TCP_CLOSE, handle, nullptr);
+        }
     }
 };
 
@@ -26,10 +30,15 @@ struct Output
     uint64_t fd = 1;
     bool terminal = false, opened = false, accepted = false;
     unsigned status = 0;
+    bool redirect = false;
+    Hackos::Http::Redirects* redirects = nullptr;
 
     ~Output()
     {
-        if (opened) syscall_fd_close(fd);
+        if (opened)
+        {
+            syscall_fd_close(fd);
+        }
     }
 
     static bool Headers(void* context, unsigned code, const char* location)
@@ -39,9 +48,18 @@ struct Output
         char text[64];
         snprintf(text, sizeof(text), "HTTP status %u\n", code);
         Error(text);
+        if (Hackos::Http::RedirectStatus(code))
+        {
+            out.redirect = true;
+            if (!out.redirects->Next(location))
+            {
+                out.error = out.redirects->error;
+            }
+            return false;
+        }
         if (code < 200 || code >= 300)
         {
-            Error(code >= 300 && code < 400 ? "http: redirect not followed.\n" : "http: unsuccessful HTTP status.\n");
+            Error("http: unsuccessful HTTP status.\n");
             if (*location)
             {
                 Error("Location: ");
@@ -74,10 +92,16 @@ struct Output
     static bool Body(void* context, const uint8_t* bytes, unsigned size)
     {
         auto& out = *(Output*)context;
-        if (!out.accepted) return true;
+        if (!out.accepted)
+        {
+            return true;
+        }
         if (!out.terminal)
         {
-            if (Write(out.fd, bytes, size)) return true;
+            if (Write(out.fd, bytes, size))
+            {
+                return true;
+            }
             out.error = "output write failed (output may be partial)";
             return false;
         }
@@ -101,7 +125,10 @@ struct Output
             }
             if (used > sizeof(buffer) - 4)
             {
-                if (!Write(out.fd, buffer, used)) return false;
+                if (!Write(out.fd, buffer, used))
+                {
+                    return false;
+                }
                 used = 0;
             }
         }
@@ -115,7 +142,11 @@ void CloseGracefully(uint64_t handle)
     HackosTcpStream status = {};
     for (unsigned i = 0; i < 25; ++i)
     {
-        if (syscall_tcp_stream(HACKOS_TCP_STATUS, handle, &status) || status.state != HACKOS_TCP_PENDING || status.queued) break;
+        if (syscall_tcp_stream(HACKOS_TCP_STATUS, handle, &status) || status.state != HACKOS_TCP_PENDING ||
+            status.queued)
+        {
+            break;
+        }
         syscall_sleep(20);
     }
 }
@@ -126,7 +157,7 @@ int main(int argc, char** argv)
     const char* usage = "Usage: http [-o FILE] http://host[:port]/path\n"
                         "GET plain HTTP, up to 32 KiB. Status goes to stderr; body goes to stdout or FILE.\n"
                         "Terminal control bytes are escaped; files and pipes receive exact bytes.\n"
-                        "HTTPS, compression and automatic redirects are not supported yet.\n"
+                        "Up to five HTTP redirects; HTTPS and compression are unsupported.\n"
                         "Demo: http http://10.0.2.2:8080/\n";
     if (argc == 2 && (Equal(argv[1], "--help") || Equal(argv[1], "-h")))
     {
@@ -149,96 +180,141 @@ int main(int argc, char** argv)
         Error(usage);
         return 2;
     }
-    Hackos::Http::Url url;
-    if (!Hackos::Http::ParseUrl(input, url))
+    static Hackos::Http::Redirects redirects;
+    if (!redirects.Add(input))
     {
-        Error("http: invalid URL; use http:// with an IPv4 address or ASCII hostname. HTTPS requires TLS.\n");
+        Error("http: invalid URL; use http://. HTTPS requires TLS.\n");
         return 2;
     }
-    HackosTcpStream record = {};
-    if (!Hackos::ParseIPv4(url.host, record.address))
+    output.redirects = &redirects;
+    for (;;)
     {
-        HackosResolve resolved = {};
-        if (!ResolveHost(url.host, resolved)) return 1;
-        for (unsigned i = 0; i < 4; ++i)
+        output.redirect = false;
+        output.status = 0;
+        Hackos::Http::Url url;
+        if (!Hackos::Http::ParseUrl(redirects.current, url))
         {
-            record.address[i] = resolved.address[i];
+            Error("http: invalid URL; use http:// with an IPv4 address or ASCII hostname. HTTPS requires TLS.\n");
+            return 2;
         }
-    }
-    record.peerPort = url.port;
-    Socket socket;
-    uint64_t handle = syscall_tcp_stream(HACKOS_TCP_CONNECT, 0, &record);
-    if (!handle || (handle >> 63))
-    {
-        Error("http: cannot open connection (unsupported destination or sockets busy).\n");
-        return 1;
-    }
-    socket.handle = handle;
-    char authority[272], request[1536];
-    int hostLength = url.port == 80 ? snprintf(authority, sizeof(authority), "%s", url.host)
-                                  : snprintf(authority, sizeof(authority), "%s:%u", url.host, url.port);
-    int length = snprintf(request, sizeof(request),
-                          "GET %s HTTP/1.1\r\nHost: %s\r\nUser-Agent: HackOS/0.1\r\nAccept: */*\r\nAccept-Encoding: identity\r\nConnection: close\r\n\r\n",
-                          url.target, authority);
-    if (hostLength < 0 || hostLength >= (int)sizeof(authority) || length < 0 || length >= (int)sizeof(request))
-    {
-        Error("http: request too large.\n");
-        return 1;
-    }
-    for (unsigned offset = 0; offset < (unsigned)length;)
-    {
-        if (!Wait(handle, HACKOS_POLL_WRITE))
+        HackosTcpStream record = {};
+        if (!Hackos::ParseIPv4(url.host, record.address))
         {
-            Error("http: connection/write failed or timed out.\n");
+            HackosResolve resolved = {};
+            if (!ResolveHost(url.host, resolved))
+            {
+                return 1;
+            }
+            for (unsigned i = 0; i < 4; ++i)
+            {
+                record.address[i] = resolved.address[i];
+            }
+        }
+        record.peerPort = url.port;
+        Socket socket;
+        uint64_t handle = HACKOS_RETRY;
+        for (unsigned attempt = 0; attempt < 500 && handle == HACKOS_RETRY; ++attempt)
+        {
+            handle = syscall_tcp_stream(HACKOS_TCP_CONNECT, 0, &record);
+            if (handle == HACKOS_RETRY)
+            {
+                syscall_sleep(20);
+            }
+        }
+        if (!handle || (handle >> 63))
+        {
+            Error("http: cannot open connection (unsupported destination or sockets busy).\n");
             return 1;
         }
-        record.size = length - offset;
-        if (record.size > sizeof(record.data)) record.size = sizeof(record.data);
-        for (unsigned i = 0; i < record.size; ++i)
+        socket.handle = handle;
+        char authority[272], request[1536];
+        int hostLength = url.port == 80 ? snprintf(authority, sizeof(authority), "%s", url.host)
+                                        : snprintf(authority, sizeof(authority), "%s:%u", url.host, url.port);
+        int length = snprintf(request, sizeof(request),
+                              "GET %s HTTP/1.1\r\nHost: %s\r\nUser-Agent: HackOS/0.1\r\nAccept: "
+                              "*/*\r\nAccept-Encoding: identity\r\nConnection: close\r\n\r\n",
+                              url.target, authority);
+        if (hostLength < 0 || hostLength >= (int)sizeof(authority) || length < 0 || length >= (int)sizeof(request))
         {
-            record.data[i] = request[offset + i];
-        }
-        if (syscall_tcp_stream(HACKOS_TCP_WRITE, handle, &record))
-        {
-            Error("http: request write failed.\n");
+            Error("http: request too large.\n");
             return 1;
         }
-        offset += record.size;
+        for (unsigned offset = 0; offset < (unsigned)length;)
+        {
+            if (!Wait(handle, HACKOS_POLL_WRITE))
+            {
+                Error("http: connection/write failed or timed out.\n");
+                return 1;
+            }
+            record.size = length - offset;
+            if (record.size > sizeof(record.data))
+            {
+                record.size = sizeof(record.data);
+            }
+            for (unsigned i = 0; i < record.size; ++i)
+            {
+                record.data[i] = request[offset + i];
+            }
+            if (syscall_tcp_stream(HACKOS_TCP_WRITE, handle, &record))
+            {
+                Error("http: request write failed.\n");
+                return 1;
+            }
+            offset += record.size;
+        }
+        Hackos::Http::Decoder decoder(Output::Body, Output::Headers, &output);
+        while (!decoder.Done())
+        {
+            record.size = sizeof(record.data);
+            uint64_t result = syscall_tcp_stream(HACKOS_TCP_READ, handle, &record);
+            if (result == HACKOS_RETRY)
+            {
+                if (Wait(handle, HACKOS_POLL_READ))
+                {
+                    continue;
+                }
+                Error("http: response failed or timed out; output may be partial.\n");
+                return 1;
+            }
+            if (result)
+            {
+                Error("http: connection lost; output may be partial.\n");
+                return 1;
+            }
+            bool ok = record.size ? decoder.Feed(record.data, record.size) : decoder.End();
+            if (output.redirect)
+            {
+                if (!output.error)
+                {
+                    break;
+                }
+            }
+            if (!ok)
+            {
+                Error("http: ");
+                Error(output.error ? output.error : decoder.Error());
+                Error("; output may be partial.\n");
+                return 1;
+            }
+            if (output.status && !output.accepted)
+            {
+                return 1;
+            }
+        }
+        if (output.redirect)
+        {
+            continue;
+        }
+        CloseGracefully(handle);
+        if (output.opened && syscall_fd_flush(output.fd))
+        {
+            Error("http: output flush failed; file may be partial.\n");
+            return 1;
+        }
+        char message[80];
+        snprintf(message, sizeof(message), output.opened ? "Saved %u bytes.\n" : "Received %u bytes.\n",
+                 decoder.Received());
+        Error(message);
+        return 0;
     }
-    Hackos::Http::Decoder decoder(Output::Body, Output::Headers, &output);
-    while (!decoder.Done())
-    {
-        record.size = sizeof(record.data);
-        uint64_t result = syscall_tcp_stream(HACKOS_TCP_READ, handle, &record);
-        if (result == HACKOS_RETRY)
-        {
-            if (Wait(handle, HACKOS_POLL_READ)) continue;
-            Error("http: response failed or timed out; output may be partial.\n");
-            return 1;
-        }
-        if (result)
-        {
-            Error("http: connection lost; output may be partial.\n");
-            return 1;
-        }
-        bool ok = record.size ? decoder.Feed(record.data, record.size) : decoder.End();
-        if (!ok)
-        {
-            Error("http: ");
-            Error(output.error ? output.error : decoder.Error());
-            Error("; output may be partial.\n");
-            return 1;
-        }
-        if (output.status && !output.accepted) return 1;
-    }
-    CloseGracefully(handle);
-    if (output.opened && syscall_fd_flush(output.fd))
-    {
-        Error("http: output flush failed; file may be partial.\n");
-        return 1;
-    }
-    char message[80];
-    snprintf(message, sizeof(message), output.opened ? "Saved %u bytes.\n" : "Received %u bytes.\n", decoder.Received());
-    Error(message);
-    return 0;
 }

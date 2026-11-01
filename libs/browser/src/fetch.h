@@ -10,14 +10,34 @@ class Fetch
     HackosResolve dns = {};
     Hackos::Http::Decoder decoder;
     char request[1536];
+    bool redirect = false;
+    Hackos::Http::Redirects redirects;
     unsigned requestSize = 0, sent = 0;
     uint64_t started = 0, progress = 0;
-    enum { Idle, Resolving, Sending, Reading } phase = Idle;
+    uint8_t peer[4] = {};
 
-    static bool Headers(void* context, unsigned code, const char*)
+    enum
+    {
+        Idle,
+        Resolving,
+        Connecting,
+        Sending,
+        Reading
+    } phase = Idle;
+
+    static bool Headers(void* context, unsigned code, const char* location)
     {
         auto& self = *(Fetch*)context;
         self.status = code;
+        if (Hackos::Http::RedirectStatus(code))
+        {
+            self.redirect = true;
+            if (!self.redirects.Next(location))
+            {
+                self.error = self.redirects.error;
+            }
+            return false;
+        }
         return code >= 200 && code < 300;
     }
 
@@ -40,10 +60,17 @@ class Fetch
         HackosTcpStream record = {};
         for (unsigned i = 0; i < 4; ++i)
         {
+            peer[i] = address[i];
             record.address[i] = address[i];
         }
         record.peerPort = url.port;
         socket = syscall_tcp_stream(HACKOS_TCP_CONNECT, 0, &record);
+        if (socket == HACKOS_RETRY)
+        {
+            socket = 0;
+            phase = Connecting;
+            return;
+        }
         if (!socket || socket >> 63)
         {
             socket = 0;
@@ -63,6 +90,7 @@ class Fetch
     Fetch() : decoder(Body, Headers, this)
     {
     }
+
     ~Fetch()
     {
         Cancel();
@@ -72,6 +100,7 @@ class Fetch
     {
         return phase != Idle;
     }
+
     unsigned Events() const
     {
         return phase == Sending ? HACKOS_POLL_WRITE : HACKOS_POLL_READ;
@@ -99,15 +128,40 @@ class Fetch
         good = false;
     }
 
+    const char* Address() const
+    {
+        return redirects.current;
+    }
+
+    bool PlainText() const
+    {
+        return decoder.PlainText();
+    }
+
     void Start(const char* address, uint64_t now)
+    {
+        redirects.count = 0;
+        redirects.error = nullptr;
+        redirects.current[0] = 0;
+        started = now;
+        if (!redirects.Add(address))
+        {
+            Fail(redirects.error);
+            return;
+        }
+        Request(now);
+    }
+
+    void Request(uint64_t now)
     {
         Cancel();
         done = good = false;
         error = nullptr;
         size = status = sent = 0;
-        started = progress = now;
+        progress = now;
+        redirect = false;
         decoder = Hackos::Http::Decoder(Body, Headers, this);
-        if (!Hackos::Http::ParseUrl(address, url))
+        if (!Hackos::Http::ParseUrl(redirects.current, url))
         {
             Fail("Use an http:// URL. HTTPS is not supported yet.");
             return;
@@ -122,7 +176,8 @@ class Fetch
             snprintf(authority, sizeof(authority), "%s:%u", url.host, url.port);
         }
         int n = snprintf(request, sizeof(request),
-                         "GET %s HTTP/1.1\r\nHost: %s\r\nUser-Agent: HackOS-Browser/0.1\r\nAccept: text/html,text/plain\r\nAccept-Encoding: identity\r\nConnection: close\r\n\r\n",
+                         "GET %s HTTP/1.1\r\nHost: %s\r\nUser-Agent: HackOS-Browser/0.1\r\nAccept: "
+                         "text/html,text/plain\r\nAccept-Encoding: identity\r\nConnection: close\r\n\r\n",
                          url.target, authority);
         if (n <= 0 || n >= (int)sizeof(request))
         {
@@ -181,6 +236,11 @@ class Fetch
             }
             return;
         }
+        if (phase == Connecting)
+        {
+            Connect(peer);
+            return;
+        }
         if (phase == Sending)
         {
             HackosTcpStream record = {};
@@ -234,7 +294,31 @@ class Fetch
                 progress = now;
                 if (!(record.size ? decoder.Feed(record.data, record.size) : decoder.End()))
                 {
-                    Fail(status && (status < 200 || status >= 300) ? "HTTP error or redirect (redirects are not followed)." : decoder.Error());
+                    if (redirect)
+                    {
+                        if (error)
+                        {
+                            Fail(error);
+                        }
+                        else
+                        {
+                            unsigned length = 0;
+                            while (redirects.current[length])
+                            {
+                                ++length;
+                            }
+                            if (length > 255)
+                            {
+                                Fail("Redirect URL exceeds 255 bytes.");
+                            }
+                            else
+                            {
+                                Request(now);
+                            }
+                        }
+                        return;
+                    }
+                    Fail(status && (status < 200 || status >= 300) ? "Unsuccessful HTTP status." : decoder.Error());
                     return;
                 }
                 if (decoder.Done())

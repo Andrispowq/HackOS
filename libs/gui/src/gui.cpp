@@ -417,7 +417,10 @@ bool View::SetDocument(unsigned id, TextDocument* document)
 
 bool View::SetCustom(unsigned id, CustomWidget custom)
 {
-    if (id >= count || widgets[id].kind != Kind::Custom || !custom.draw || !custom.input) return false;
+    if (id >= count || widgets[id].kind != Kind::Custom || !custom.draw || !custom.input)
+    {
+        return false;
+    }
     widgets[id].custom = custom;
     dirty = true;
     return true;
@@ -849,6 +852,11 @@ Action View::Handle(const HackosWindowEvent2& input, Clipboard clipboard, uint64
     if (event.type == HACKOS_WINDOW_INPUT_RESET || event.type == HACKOS_WINDOW_OVERFLOW ||
         event.type == HACKOS_WINDOW_FOCUS)
     {
+        if (pressed != NoWidget && widgets[pressed].kind == Kind::Custom && widgets[pressed].custom.input)
+        {
+            auto& custom = widgets[pressed];
+            custom.custom.input(custom.custom.context, input, custom.bounds);
+        }
         ResetInput(event.focused);
         return Nothing();
     }
@@ -940,15 +948,25 @@ Action View::Handle(const HackosWindowEvent2& input, Clipboard clipboard, uint64
                 hit = i;
             }
         }
+        if (event.type == HACKOS_WINDOW_MOUSE && pressed != NoWidget && widgets[pressed].kind == Kind::Custom)
+        {
+            hit = pressed;
+        }
         if (hit != NoWidget && widgets[hit].kind == Kind::Custom && widgets[hit].custom.input)
         {
             if (event.type == HACKOS_WINDOW_MOUSE)
             {
                 bool changed = (buttons & 1) != (event.buttons & 1);
                 buttons = event.buttons;
-                pressed = NoWidget;
-                if (!changed) return Nothing();
-                if (event.buttons & 1) focused = hit;
+                if (!changed && pressed != hit)
+                {
+                    return Nothing();
+                }
+                pressed = event.buttons & 1 ? hit : NoWidget;
+                if (event.buttons & 1)
+                {
+                    focused = hit;
+                }
             }
             auto& custom = widgets[hit];
             dirty = true;

@@ -1,5 +1,6 @@
 #include "hackos/runtime/http.h"
 #include <cassert>
+#include <initializer_list>
 
 using namespace Hackos::Http;
 struct Sink
@@ -65,6 +66,37 @@ static void Bad(const char* message)
 
 int main()
 {
+    Redirects redirects;
+    assert(redirects.Add("http://Example.test:80/a/start#part"));
+    assert(redirects.Next("../next"));
+    assert(!__builtin_strcmp(redirects.current, "http://Example.test:80/next#part"));
+    assert(!redirects.Next("http://example.test/next#different"));
+    assert(Equal(redirects.error, "redirect loop"));
+    redirects = {};
+    assert(redirects.Add("http://x/"));
+    for (const char* path : {"/1", "/2", "/3", "/4", "/5"})
+    {
+        assert(redirects.Next(path));
+    }
+    assert(!redirects.Next("/6"));
+    redirects = {};
+    assert(redirects.Add("http://x/"));
+    assert(!redirects.Next("https://x/"));
+    assert(!redirects.Next(""));
+    assert(RedirectStatus(301) && RedirectStatus(302) && RedirectStatus(303) && RedirectStatus(307) &&
+           RedirectStatus(308));
+    assert(!RedirectStatus(304) && !RedirectStatus(305));
+    Sink typeSink;
+    Decoder type(Sink::Body, Sink::Headers, &typeSink);
+    const char* typed = "HTTP/1.1 103 Hints\r\nContent-Type: text/html\r\n\r\nHTTP/1.1 200 OK\r\nContent-Type: "
+                        "TeXt/PlAiN; charset=utf-8\r\nContent-Length: 0\r\n\r\n";
+    for (unsigned i = 0; typed[i]; ++i)
+    {
+        assert(type.Feed((const uint8_t*)typed + i, 1));
+    }
+    assert(type.Done() && type.PlainText());
+    Bad("HTTP/1.1 200 OK\r\nContent-Type: text/plain\r\nContent-Type: text/html\r\n\r\n");
+    Bad("HTTP/1.1 302 Found\r\nLocation: \r\nLocation: /x\r\n\r\n");
     Url url;
     assert(ParseUrl("http://Example.COM:8080/a%20b?q=one#ignored", url));
     assert(Equal(url.host, "example.com") && url.port == 8080 && Equal(url.target, "/a%20b?q=one"));

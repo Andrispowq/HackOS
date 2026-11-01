@@ -10,7 +10,8 @@ provide a local navigation/scrolling demonstration without Internet access.
 ## Controls
 
 Enter an address and press Enter or Go. Back revisits the previous successful
-URL; Reload fetches the current successful page again. Home opens the local demo.
+URL and restores its saved scroll row; Reload fetches the current successful
+page again. Home opens the local demo.
 Stop cancels a pending DNS/TCP request. A failed or cancelled navigation keeps the
 previous document visible and reports the error in the status bar. The address
 field retains the requested URL; Reload returns to the displayed page's URL.
@@ -18,9 +19,10 @@ field retains the requested URL; Reload returns to the displayed page's URL.
 Click an underlined link to navigate. With the page focused, Left/Right select
 links and Enter follows the selected link. Tab/Shift-Tab move among toolbar
 controls and the page. Wheel/Up/Down scroll; Page Up/Page Down/Space scroll a page;
-Home/End jump to the top/bottom. Clicking the upper/lower half of the scrollbar
-pages up/down. Window resizing reflows text; long words and preformatted lines
-wrap at the edge. The scrollbar is an indicator with paging, not a draggable thumb.
+Home/End jump to the top/bottom. Dragging the scrollbar thumb scrolls continuously;
+clicking the track above/below the thumb pages up/down. Window resizing reflows
+text; long words and preformatted lines
+wrap at the edge. Mouse release or input/focus reset ends a drag.
 
 ## Supported document subset
 
@@ -41,30 +43,44 @@ markup may omit the remaining text. Unicode and unsupported control bytes render
 as `?`; there is no UTF-8 font support. The parser cannot execute content.
 
 There is no CSS, JavaScript, image loading, form submission, cookie storage,
-authentication, proxy support, download UI, TLS/HTTPS or automatic redirects.
-No linked resource is fetched automatically. Plain-text responses pass through
-the same HTML tokenizer, so literal markup may be interpreted. HTTP errors and
-redirects keep the old page; compressed bodies are rejected by the HTTP decoder.
+authentication, proxy support, download UI or TLS/HTTPS.
+No linked resource is fetched automatically. `Content-Type: text/plain`
+(case-insensitive, optional parameters) renders literal
+markup/entities, preserves spaces and line breaks, and expands tabs to four spaces.
+Missing/other content types retain the HTML tokenizer. HTTP errors keep the old
+page; compressed bodies are rejected by the HTTP decoder.
 
 Relative links resolve against the displayed page, including root-relative,
 scheme-relative, query-only and dot-segment paths. Only `http://` is accepted.
-Fragments are stripped; following a fragment reloads the page at the top rather
-than jumping to an element. `base` tags are ignored. No URL is passed to a shell.
+Fragments jump to case-sensitive `id` attributes or legacy `a name` anchors, with
+percent-decoded fragment names. Same-document navigation does not fetch; an empty
+or unknown fragment selects the top. The first matching anchor wins. `base` tags are ignored.
+
+Browser and `http` share redirect handling for 301/302/303/307/308: at most five
+hops, relative Location resolution and loop detection by host/port/request target.
+Missing/duplicate/invalid Location, unsupported schemes and excess hops fail.
+Redirect bodies are discarded by closing the old socket after validated headers;
+only a successful final response replaces the page. The final URL becomes the
+address and relative-link base. A Location without a fragment inherits the previous
+fragment. Browser's 30-second whole-load deadline covers all hops. No URL is
+passed to a shell.
 
 ## Bounds and lifecycle
 
 Pages use the existing HTTP decoder's 32 KiB decoded-body limit, strict framing,
 header and wire-byte bounds. The browser additionally limits URLs to 255 bytes,
-links to 64 and history to 16 previous successful URLs. Excess links retain their
+links to 64, anchors to 64 (255 bytes each), and history to 16 previous successful
+URLs with scroll rows. Excess anchors are ignored. Excess links retain their
 text without navigation. Layout stores at most 32768 glyphs; expansion beyond
 that limit is labelled in the status bar. Lists number 1–99, then restart at 1.
 
 The document's glyph/layout arrays are allocated once from the private 512 KiB
-userspace heap (about 336 KiB); the HTTP fetch buffer adds about 36 KiB. History
+userspace heap (about 352 KiB); the HTTP fetch state adds about 46 KiB. History
 and GUI state live in the executable's bounded data segment. Kernel executable
 page limits and syscall interfaces are unchanged. The browser replaces document
-contents only after a complete successful HTTP response; Back refetches, rather
-than caching documents or restoring scroll position.
+contents only after a complete successful HTTP response; Back refetches other
+documents and restores the saved scroll row, clamped to the new layout.
+Same-document history entries jump without a fetch; pages are not cached.
 
 DNS and TCP advance without blocking the GUI. A single active request has a
 10-second inactivity limit and a 30-second whole-load limit. Each GUI iteration
@@ -84,5 +100,7 @@ After building, run `python3 tests/qemu_browser.py --firmware bios --image
 out/browser/bios/HackOS.img` and the UEFI equivalent in the test container (GDB is
 required). The test serves generated HTML over loopback HTTP and exercises actual
 mouse/keyboard navigation, Back/Reload/Home, address entry, scrolling, resize,
-errors, Stop, close during a slow response, and restart. It inspects document and
+errors, redirect chains/loops/limits, literal plain text, fragment jumps without
+requests, Back scroll restoration, thumb dragging, Stop, close during a slow
+response, and restart. It inspects document and
 window state and captures screenshots under `tests/out/browser-*`.

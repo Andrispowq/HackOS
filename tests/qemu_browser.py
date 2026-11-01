@@ -38,6 +38,7 @@ def test(firmware, image, timeout):
     shutil.copy2(image, disposable)
     built = image.parent
     with ThreadedServer(('127.0.0.1', 8080), SlowHandler) as server:
+        server.requests = []
         thread = threading.Thread(target=server.serve_forever, daemon=True)
         thread.start()
         try:
@@ -102,6 +103,14 @@ glyphs = read('document.glyphs', count * 4)
 columns = read('document.columns', count * 2)
 rows = read('document.rows', count * 2)
 top = u('top')
+track = u(r + '.height') - 8
+visible = (u(r + '.height') - 16) // 20
+maximum = max(0, u('document.lineCount') - visible)
+thumb = max(8, track * visible // u('document.lineCount')) if maximum else track
+offset = (track - thumb) * top // maximum if maximum else 0
+positions['thumb'] = [int(w['startX']) + u(r + '.x') + u(r + '.width') - 8,
+                      int(w['startY']) + 30 + u(r + '.y') + 4 + offset + thumb // 2]
+positions['track-bottom'] = [positions['thumb'][0], int(w['startY']) + 30 + u(r + '.y') + u(r + '.height') - 5]
 for i in range(count):
     link = struct.unpack_from('<H', glyphs, i * 4 + 2)[0]
     row = struct.unpack_from('<H', rows, i * 2)[0]
@@ -130,8 +139,7 @@ quit
                 g.qmp.key = key
                 mouse = [0, 0]
 
-                def click(name):
-                    x, y = inspect()[name]
+                def move(x, y):
                     while mouse != [x, y]:
                         dx, dy = max(-100, min(100, x-mouse[0])), max(-100, min(100, y-mouse[1]))
                         g.qmp.call('input-send-event', {'events': [
@@ -140,6 +148,8 @@ quit
                         mouse[0] += dx
                         mouse[1] += dy
                         time.sleep(.04)
+                def click(name):
+                    move(*inspect()[name])
                     for down in (True, False):
                         g.qmp.call('input-send-event', {'events': [{'type': 'btn', 'data': {'down': down, 'button': 'left'}}]})
                         time.sleep(.1)
@@ -175,6 +185,31 @@ quit
                 inspect("assert u('view.width') > 1080")
                 key('f10', alt=True)
                 inspect("assert u('view.width') == 1080")
+                load(lambda: click('Home'))
+                load(lambda: click('Back'))
+                inspect("assert text('current').endswith('/browser/long.html')\nassert u('top') > 40")
+                load(lambda: address('http://10.0.2.2:8080/browser/long.html#section30'))
+                before = len(server.requests)
+                load(lambda: address('http://10.0.2.2:8080/browser/long.html#section10'))
+                assert len(server.requests) == before, 'fragment navigation fetched the document'
+                inspect("assert u('top') > 0\nassert text('current').endswith('#section10')")
+                key('home')
+                positions = inspect("assert u('top') == 0")
+                move(*positions['thumb'])
+                g.qmp.call('input-send-event', {'events': [{'type': 'btn', 'data': {'down': True, 'button': 'left'}}]})
+                time.sleep(.1)
+                move(*positions['track-bottom'])
+                g.qmp.call('input-send-event', {'events': [{'type': 'btn', 'data': {'down': False, 'button': 'left'}}]})
+                time.sleep(.1)
+                inspect("assert u('top') > 40")
+                g.screen('dragged')
+                load(lambda: address('http://10.0.2.2:8080/plain'))
+                inspect("assert '<b>literal</b> &amp;\\n  spaces    end' in page()\nassert u('document.linkCount') == 0")
+                load(lambda: address('http://10.0.2.2:8080/browser/redirect'))
+                inspect("assert text('current').endswith('/browser/long.html#section30')\nassert u('top') > 40")
+                for path in ('redirect-loop', 'redirect-https', 'hop/0', 'redirect-bad'):
+                    load(lambda: address('http://10.0.2.2:8080/' + path), 'BROWSER_ERROR')
+                    inspect("assert text('current').endswith('#section30')")
                 load(lambda: click('Home'))
                 load(lambda: address('http://10.0.2.2:8080/missing'), 'BROWSER_ERROR')
                 inspect("assert text('current').endswith('/browser/')\nassert '404' in text(field('statusLabel') + '.text')\nassert 'Welcome' in page()")

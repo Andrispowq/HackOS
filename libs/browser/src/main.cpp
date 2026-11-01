@@ -12,7 +12,25 @@ static unsigned addressField, pageWidget, statusLabel, backButton, stopButton;
 static unsigned top, selectedLink, historyCount;
 static char current[256], pending[256], history[16][256];
 static int historyTarget;
-static bool hasPage;
+static bool hasPage, dragging, mouseDown;
+static int dragOffset;
+static unsigned historyTop[16];
+
+static void Scrollbar(Gui::Rect bounds, unsigned visible, int& track, int& thumb, int& offset)
+{
+    track = bounds.height > 8 ? bounds.height - 8 : 0;
+    unsigned maximum = document->lineCount > visible ? document->lineCount - visible : 0;
+    thumb = maximum ? track * visible / document->lineCount : track;
+    if (thumb < 8)
+    {
+        thumb = 8;
+    }
+    if (thumb > track)
+    {
+        thumb = track;
+    }
+    offset = maximum ? (track - thumb) * top / maximum : 0;
+}
 
 static uint64_t Now()
 {
@@ -89,20 +107,11 @@ static void Draw(void*, Gui::Canvas& canvas, const Gui::Font& font, Gui::Rect bo
         }
     }
     canvas.SetClip(Gui::Intersect(original, {bounds.x + bounds.width - 12, bounds.y + 4, 8, bounds.height - 8}));
-    int track = bounds.height - 8;
+    int track, thumb, offset;
+    Scrollbar(bounds, visible, track, thumb, offset);
     if (track > 0)
     {
         canvas.Fill({bounds.x + bounds.width - 12, bounds.y + 4, 8, track}, 0xffe2e3de);
-        int thumb = document->lineCount > visible ? track * visible / document->lineCount : track;
-        if (thumb < 8)
-        {
-            thumb = 8;
-        }
-        if (thumb > track)
-        {
-            thumb = track;
-        }
-        int offset = maximum ? (track - thumb) * top / maximum : 0;
         canvas.Fill({bounds.x + bounds.width - 12, bounds.y + 4 + offset, 8, thumb}, 0xff7f919d);
     }
 }
@@ -111,17 +120,56 @@ static Gui::Action Input(void*, const HackosWindowEvent2& input, Gui::Rect bound
 {
     const auto& event = input.event;
     unsigned visible = bounds.height > 16 ? (bounds.height - 16) / 20 : 1;
-    if (event.type == HACKOS_WINDOW_WHEEL)
+    if (event.type == HACKOS_WINDOW_INPUT_RESET || event.type == HACKOS_WINDOW_OVERFLOW ||
+        event.type == HACKOS_WINDOW_FOCUS)
+    {
+        dragging = mouseDown = false;
+    }
+    else if (event.type == HACKOS_WINDOW_WHEEL)
     {
         Scroll((int32_t)event.key * 3, visible);
     }
-    else if (event.type == HACKOS_WINDOW_MOUSE && (event.buttons & 1))
+    else if (event.type == HACKOS_WINDOW_MOUSE)
     {
-        if (event.x >= bounds.x + bounds.width - 16)
+        bool down = (event.buttons & 1) && !mouseDown;
+        mouseDown = event.buttons & 1;
+        if (!mouseDown)
         {
-            Scroll(event.y < bounds.y + bounds.height / 2 ? -(int)visible : (int)visible, visible);
+            dragging = false;
+            return {Gui::ActionKind::None, Gui::NoWidget, 0};
         }
-        else if (event.x >= bounds.x + 8 && event.y >= bounds.y + 8)
+        int track, thumb, offset;
+        Scrollbar(bounds, visible, track, thumb, offset);
+        int y = event.y - bounds.y - 4;
+        if (dragging)
+        {
+            int travel = track - thumb;
+            int position = y - dragOffset;
+            if (position < 0)
+            {
+                position = 0;
+            }
+            if (position > travel)
+            {
+                position = travel;
+            }
+            unsigned maximum = document->lineCount > visible ? document->lineCount - visible : 0;
+            top = travel > 0 ? (uint64_t)position * maximum / travel : 0;
+            view.Invalidate();
+        }
+        else if (down && event.x >= bounds.x + bounds.width - 16)
+        {
+            if (y >= offset && y < offset + thumb)
+            {
+                dragging = true;
+                dragOffset = y - offset;
+            }
+            else
+            {
+                Scroll(y < offset ? -(int)visible : (int)visible, visible);
+            }
+        }
+        else if (down && event.x >= bounds.x + 8 && event.y >= bounds.y + 8)
         {
             unsigned row = top + (event.y - bounds.y - 8) / 20;
             unsigned col = (event.x - bounds.x - 8) / 8;
@@ -165,8 +213,9 @@ static Gui::Action Input(void*, const HackosWindowEvent2& input, Gui::Rect bound
         }
         else if ((event.key == 0xcd || event.key == 0xcb) && document->linkCount)
         {
-            selectedLink = event.key == 0xcd ? selectedLink % document->linkCount + 1
-                                          : selectedLink > 1 ? selectedLink - 1 : document->linkCount;
+            selectedLink = event.key == 0xcd  ? selectedLink % document->linkCount + 1
+                           : selectedLink > 1 ? selectedLink - 1
+                                              : document->linkCount;
             for (unsigned i = 0; i < document->count; ++i)
             {
                 if (document->glyphs[i].link == selectedLink)
@@ -185,12 +234,63 @@ static Gui::Action Input(void*, const HackosWindowEvent2& input, Gui::Rect bound
     return {Gui::ActionKind::None, Gui::NoWidget, 0};
 }
 
-static void Navigate(const char* url, int target = -1)
+static void Remember()
+{
+    if (historyCount == 16)
+    {
+        for (unsigned i = 1; i < 16; ++i)
+        {
+            Copy(history[i - 1], history[i]);
+            historyTop[i - 1] = historyTop[i];
+        }
+        --historyCount;
+    }
+    Copy(history[historyCount], current);
+    historyTop[historyCount++] = top;
+}
+
+static void Position(const char* url, int target)
+{
+    auto bounds = view.Get(pageWidget)->bounds;
+    document->Layout(bounds.width > 32 ? (bounds.width - 32) / 8 : 1);
+    top = target >= 0 ? historyTop[target] : document->Anchor(url);
+    selectedLink = 0;
+    Scroll(0, bounds.height > 16 ? (bounds.height - 16) / 20 : 1);
+}
+
+static void Navigate(const char* url, int target = -1, bool reload = false)
 {
     char resolved[256];
     if (!Hackos::Html::Resolve(*current ? current : "http://10.0.2.2:8080/browser/", url, resolved))
     {
         Status("Invalid/unsupported URL. Use HTTP, at most 255 bytes; HTTPS is not available.");
+        return;
+    }
+    unsigned i = 0;
+    while (current[i] && current[i] != '#' && current[i] == resolved[i])
+    {
+        ++i;
+    }
+    if (hasPage && !reload && (!current[i] || current[i] == '#') && (!resolved[i] || resolved[i] == '#'))
+    {
+        fetch->Cancel();
+        fetch->done = false;
+        view.SetEnabled(stopButton, false);
+        if (target >= 0)
+        {
+            historyCount = target;
+        }
+        else if (!Equal(current, resolved))
+        {
+            Remember();
+        }
+        Copy(current, resolved);
+        view.SetText(addressField, current);
+        Position(current, target);
+        view.SetEnabled(backButton, historyCount != 0);
+        view.SetFocus(pageWidget);
+        Status("In-page navigation");
+        Print("BROWSER_LOADED\n");
         return;
     }
     Copy(pending, resolved);
@@ -213,30 +313,27 @@ static void Finish()
         Print("BROWSER_ERROR\n");
         return;
     }
+    Copy(pending, fetch->Address());
     if (historyTarget >= 0)
     {
         historyCount = historyTarget;
     }
     else if (hasPage && !Equal(current, pending))
     {
-        if (historyCount == 16)
-        {
-            for (unsigned i = 1; i < 16; ++i)
-            {
-                Copy(history[i - 1], history[i]);
-            }
-            --historyCount;
-        }
-        Copy(history[historyCount++], current);
+        Remember();
     }
     Copy(current, pending);
+    view.SetText(addressField, current);
     hasPage = true;
-    document->Load(fetch->body, fetch->size);
-    top = selectedLink = 0;
+    document->Load(fetch->body, fetch->size, fetch->PlainText());
+    Position(current, historyTarget);
     view.SetEnabled(backButton, historyCount != 0);
     view.SetFocus(pageWidget);
     snprintf(message, sizeof(message), "HTTP %u | %u bytes | %u links%s", fetch->status, fetch->size,
-             document->linkCount, document->limited ? " | Display limit reached" : " | HTML text only");
+             document->linkCount,
+             document->limited    ? " | Display limit reached"
+             : fetch->PlainText() ? " | Plain text"
+                                  : " | HTML text only");
     Status(message);
     Print("BROWSER_LOADED\n");
 }
@@ -251,7 +348,10 @@ int main(int argc, char** argv)
         return argc > 2 ? 2 : 0;
     }
     document = (Hackos::Html::Document*)calloc(1, sizeof(Hackos::Html::Document));
-    if (!document) return 1;
+    if (!document)
+    {
+        return 1;
+    }
     fetch = new Fetch();
     if (!fetch)
     {
@@ -270,7 +370,8 @@ int main(int argc, char** argv)
     pageWidget = view.Add(Gui::Kind::Custom, 0);
     view.SetLayout(pageWidget, 0, 0, 1, 0, 0);
     view.SetCustom(pageWidget, {nullptr, Draw, Input});
-    view.Add(Gui::Kind::Label, 0, "Scroll: wheel / PgUp / PgDn | Links: click, or Left/Right then Enter | Tab: toolbar");
+    view.Add(Gui::Kind::Label, 0,
+             "Scroll: wheel / PgUp / PgDn | Links: click, or Left/Right then Enter | Tab: toolbar");
     statusLabel = view.Add(Gui::Kind::Label, 0, "Ready");
     view.SetEnabled(backButton, false);
     view.SetEnabled(stopButton, false);
@@ -317,7 +418,7 @@ int main(int argc, char** argv)
             }
             else if (action.widget == reload)
             {
-                Navigate(*current ? current : view.Get(addressField)->text);
+                Navigate(*current ? current : view.Get(addressField)->text, -1, true);
             }
             else if (action.widget == backButton && historyCount)
             {
@@ -350,7 +451,7 @@ int main(int argc, char** argv)
             continue;
         }
         HackosPollFd poll[2] = {{window.Handle(), HACKOS_POLL_WINDOW | HACKOS_POLL_READ, 0},
-                               {fetch->socket, HACKOS_POLL_TCP | fetch->Events(), 0}};
+                                {fetch->socket, HACKOS_POLL_TCP | fetch->Events(), 0}};
         syscall_poll(poll, fetch->socket ? 2 : 1, fetch->Busy() ? 20 : HACKOS_WAIT_FOREVER);
     }
     delete fetch;

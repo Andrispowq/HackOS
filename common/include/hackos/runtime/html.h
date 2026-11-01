@@ -4,7 +4,13 @@
 namespace Hackos::Html
 {
 constexpr unsigned Limit = 32768, LinkLimit = 64, UrlLimit = 255;
-enum : uint8_t { Bold = 1, Heading = 2, Pre = 4 };
+
+enum : uint8_t
+{
+    Bold = 1,
+    Heading = 2,
+    Pre = 4
+};
 
 inline bool Space(char c)
 {
@@ -27,175 +33,9 @@ inline bool Copy(char* out, const char* in, unsigned capacity)
     return true;
 }
 
-// Resolve HTTP references without decoding percent escapes. Unsupported schemes
-// are rejected, never handed to the shell or an external application.
 inline bool Resolve(const char* base, const char* reference, char* output)
 {
-    char joined[1025] = {};
-    unsigned used = 0;
-    auto append = [&](const char* p, unsigned count)
-    {
-        if (used + count > 1024)
-        {
-            return false;
-        }
-        for (unsigned i = 0; i < count; ++i)
-        {
-            joined[used++] = p[i];
-        }
-        joined[used] = 0;
-        return true;
-    };
-    unsigned size = 0;
-    while (size <= UrlLimit && reference[size])
-    {
-        ++size;
-    }
-    if (size > UrlLimit)
-    {
-        return false;
-    }
-    unsigned scheme = 0;
-    while (scheme < size && reference[scheme] != ':' && reference[scheme] != '/' &&
-           reference[scheme] != '?' && reference[scheme] != '#')
-    {
-        ++scheme;
-    }
-    if (scheme < size && reference[scheme] == ':')
-    {
-        if (!append(reference, size))
-        {
-            return false;
-        }
-    }
-    else if (size >= 2 && reference[0] == '/' && reference[1] == '/')
-    {
-        if (!append("http:", 5) || !append(reference, size))
-        {
-            return false;
-        }
-    }
-    else
-    {
-        Http::Url parsed;
-        if (!Http::ParseUrl(base, parsed))
-        {
-            return false;
-        }
-        unsigned authority = 7;
-        while (base[authority] && base[authority] != '/' && base[authority] != '?' && base[authority] != '#')
-        {
-            ++authority;
-        }
-        if (!append(base, authority))
-        {
-            return false;
-        }
-        if (size && reference[0] == '/')
-        {
-            if (!append(reference, size))
-            {
-                return false;
-            }
-        }
-        else
-        {
-            unsigned path = 0, last = 0;
-            while (parsed.target[path] && parsed.target[path] != '?')
-            {
-                if (parsed.target[path] == '/')
-                {
-                    last = path + 1;
-                }
-                ++path;
-            }
-            unsigned count = !size || reference[0] == '#' ? 0 : reference[0] == '?' ? path : last;
-            if (!size || reference[0] == '#')
-            {
-                while (parsed.target[count])
-                {
-                    ++count;
-                }
-            }
-            if (!append(parsed.target, count) || !append(reference, size))
-            {
-                return false;
-            }
-        }
-    }
-    Http::Url parsed;
-    if (!Http::ParseUrl(joined, parsed))
-    {
-        return false;
-    }
-    unsigned authority = 7;
-    while (joined[authority] && joined[authority] != '/' && joined[authority] != '?' && joined[authority] != '#')
-    {
-        ++authority;
-    }
-    unsigned at = 0;
-    for (; at < authority && at < UrlLimit; ++at)
-    {
-        output[at] = joined[at];
-    }
-    if (at != authority || at == UrlLimit)
-    {
-        return false;
-    }
-    unsigned root = at;
-    output[at++] = '/';
-    unsigned p = 1;
-    while (parsed.target[p] && parsed.target[p] != '?')
-    {
-        unsigned start = p;
-        while (parsed.target[p] && parsed.target[p] != '/' && parsed.target[p] != '?')
-        {
-            ++p;
-        }
-        unsigned n = p - start;
-        bool dot = n == 1 && parsed.target[start] == '.';
-        bool parent = n == 2 && parsed.target[start] == '.' && parsed.target[start + 1] == '.';
-        if (parent)
-        {
-            if (at > root + 1)
-            {
-                --at;
-            }
-            while (at > root + 1 && output[at - 1] != '/')
-            {
-                --at;
-            }
-        }
-        else if (!dot)
-        {
-            if (at + n + (parsed.target[p] == '/') > UrlLimit)
-            {
-                return false;
-            }
-            for (unsigned i = start; i < p; ++i)
-            {
-                output[at++] = parsed.target[i];
-            }
-            if (parsed.target[p] == '/')
-            {
-                output[at++] = '/';
-            }
-        }
-        if (parsed.target[p] == '/')
-        {
-            ++p;
-        }
-    }
-    while (parsed.target[p])
-    {
-        if (at == UrlLimit)
-        {
-            return false;
-        }
-        output[at++] = parsed.target[p++];
-    }
-    output[at] = 0;
-    return true;
+    return Http::Resolve(base, reference, output, UrlLimit);
 }
 
 struct Glyph
@@ -210,6 +50,8 @@ struct Document
     Glyph glyphs[Limit];
     uint16_t columns[Limit], rows[Limit], first[Limit + 2];
     char links[LinkLimit][UrlLimit + 1];
+    char anchors[64][UrlLimit + 1];
+    unsigned anchorGlyph[64], anchorCount;
     unsigned count, linkCount, lineCount, width;
     bool limited;
 
@@ -225,13 +67,40 @@ struct Document
 
     // A small forgiving tokenizer, not an HTML5 DOM. Every scan is bounded by
     // the supplied byte length, including comments, attributes and raw text.
-    void Load(const char* data, unsigned length)
+    void Load(const char* data, unsigned length, bool plain = false)
     {
-        count = linkCount = width = 0;
+        count = linkCount = width = anchorCount = 0;
         limited = length > Limit;
         if (length > Limit)
         {
             length = Limit;
+        }
+        if (plain)
+        {
+            for (unsigned i = 0; i < length; ++i)
+            {
+                char c = data[i];
+                if (c == '\r')
+                {
+                    if (i + 1 < length && data[i + 1] == '\n')
+                    {
+                        ++i;
+                    }
+                    Emit('\n', Pre, 0);
+                }
+                else if (c == '\t')
+                {
+                    for (unsigned n = 0; n < 4; ++n)
+                    {
+                        Emit(' ', Pre, 0);
+                    }
+                }
+                else
+                {
+                    Emit(c == '\n' || (c >= 32 && c < 127) ? c : '?', Pre, 0);
+                }
+            }
+            return;
         }
         unsigned bold = 0, heading = 0, pre = 0, link = 0, ordered = 0;
         bool whitespace = false;
@@ -309,7 +178,8 @@ struct Document
                     }
                     continue;
                 }
-                if (Http::Equal(tag, "script") || Http::Equal(tag, "style") || Http::Equal(tag, "head") || Http::Equal(tag, "title"))
+                if (Http::Equal(tag, "script") || Http::Equal(tag, "style") || Http::Equal(tag, "head") ||
+                    Http::Equal(tag, "title"))
                 {
                     if (!closing)
                     {
@@ -323,7 +193,8 @@ struct Document
                 }
                 bool h = tag[0] == 'h' && tag[1] >= '1' && tag[1] <= '6' && !tag[2];
                 if (h || Http::Equal(tag, "p") || Http::Equal(tag, "div") || Http::Equal(tag, "ul") ||
-                    Http::Equal(tag, "ol") || Http::Equal(tag, "li") || Http::Equal(tag, "pre") || Http::Equal(tag, "hr"))
+                    Http::Equal(tag, "ol") || Http::Equal(tag, "li") || Http::Equal(tag, "pre") ||
+                    Http::Equal(tag, "hr"))
                 {
                     block();
                     if (count && (count < 2 || glyphs[count - 2].text != '\n') &&
@@ -377,6 +248,8 @@ struct Document
                 if (Http::Equal(tag, "a"))
                 {
                     link = 0;
+                }
+                {
                     if (!closing)
                     {
                         while (p < end)
@@ -415,7 +288,8 @@ struct Document
                                 ++p;
                             }
                             unsigned size = p - start;
-                            if (Http::Equal(name, "href") && size <= UrlLimit && linkCount < LinkLimit)
+                            if (Http::Equal(tag, "a") && Http::Equal(name, "href") && size <= UrlLimit &&
+                                linkCount < LinkLimit)
                             {
                                 unsigned used = 0;
                                 for (unsigned i = start; i < p;)
@@ -424,6 +298,17 @@ struct Document
                                 }
                                 links[linkCount][used] = 0;
                                 link = ++linkCount;
+                            }
+                            if ((Http::Equal(name, "id") || (Http::Equal(tag, "a") && Http::Equal(name, "name"))) &&
+                                size && size <= UrlLimit && anchorCount < 64)
+                            {
+                                unsigned used = 0;
+                                for (unsigned i = start; i < p;)
+                                {
+                                    anchors[anchorCount][used++] = Entity(data, p, i);
+                                }
+                                anchors[anchorCount][used] = 0;
+                                anchorGlyph[anchorCount++] = count;
                             }
                             if (delimiter && p < end)
                             {
@@ -473,6 +358,46 @@ struct Document
                 Emit(c >= 32 && c < 127 ? c : '?', style, link);
             }
         }
+    }
+
+    unsigned Anchor(const char* url) const
+    {
+        while (*url && *url != '#')
+        {
+            ++url;
+        }
+        if (!*url || !*++url)
+        {
+            return 0;
+        }
+        char name[256];
+        unsigned used = 0;
+        while (*url && used < 255)
+        {
+            if (*url == '%' && url[1] && url[2] && Http::Hex(url[1]) >= 0 && Http::Hex(url[2]) >= 0)
+            {
+                name[used++] = (Http::Hex(url[1]) << 4) | Http::Hex(url[2]);
+                url += 3;
+            }
+            else
+            {
+                name[used++] = *url++;
+            }
+        }
+        name[used] = 0;
+        for (unsigned i = 0; i < anchorCount; ++i)
+        {
+            unsigned n = 0;
+            while (n < used && name[n] == anchors[i][n])
+            {
+                ++n;
+            }
+            if (n == used && !anchors[i][n])
+            {
+                return anchorGlyph[i] < count ? rows[anchorGlyph[i]] : lineCount - 1;
+            }
+        }
+        return 0;
     }
 
     static char Entity(const char* data, unsigned end, unsigned& at)

@@ -163,8 +163,11 @@ on every physical key transition before the shell has echoed the input.
 through `SetCustom`. The caller keeps that context alive for the view lifetime.
 Draw receives the clipped tile canvas, font, widget bounds and focus state; it
 must respect the canvas clip and avoid blocking or modifying widget structure.
-Input receives mouse-button transitions, wheel events or focused keyboard events;
-held mouse motion does not reactivate a link. The view assigns the widget ID to
+Input receives mouse-button transitions, wheel events or focused keyboard events.
+A left press captures subsequent held motion and release for that custom widget,
+even outside its bounds. Callbacks must distinguish a fresh press from held motion
+when activating links. Input/focus reset is delivered to the captured widget before
+view capture is cleared. The view assigns the widget ID to
 the returned action. Tab remains view-level focus traversal, and modal dialogs
 intercept input. Input/focus reset clears view button state. Applications should
 keep callback state independent of held keys/buttons. No new kernel ABI is used.

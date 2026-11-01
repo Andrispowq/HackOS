@@ -353,7 +353,8 @@ Milestones 1–4 are implemented; later milestones need a separate request.
 - [x] Add bounded userspace HTTP GET, chunked/length/EOF decoding, binary downloads and a local demo.
 - [x] Add a minimal HTML browser with linked local pages, navigation and scrolling.
 - [ ] Add TLS/HTTPS with certificate/hostname validation and trusted roots.
-- [ ] Add bounded redirect handling and broader HTTP features.
+- [x] Add bounded shared HTTP redirects, literal browser text/plain, anchors, Back scroll restoration and thumb dragging.
+- [ ] Add broader HTTP features.
 - [ ] Add network configuration and useful network user programs.
 
 ### Window-terminal polish

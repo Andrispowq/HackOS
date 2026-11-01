@@ -35,7 +35,7 @@ int main()
     Url("/x/./y/../z", "http://demo.test:8080/x/z");
     Url("../../../z", "http://demo.test:8080/z");
     Url("?x=1&y=2", "http://demo.test:8080/a/b/page?x=1&y=2");
-    Url("#anchor", "http://demo.test:8080/a/b/page?old=1");
+    Url("#anchor", "http://demo.test:8080/a/b/page?old=1#anchor");
     Url("", "http://demo.test:8080/a/b/page?old=1");
     Url("//other.test/path", "http://other.test/path");
     Url("http://other.test", "http://other.test/");
@@ -71,6 +71,19 @@ int main()
     {
         assert(document.columns[i] == 0);
     }
+    Load("<p id='Top'>first</p><div id='a&amp;b'>second</div><a name=legacy>third</a><p id=Top>duplicate</p>");
+    document.Layout(80);
+    assert(document.anchorCount == 4);
+    assert(document.Anchor("http://x/#Top") == 0);
+    assert(document.Anchor("http://x/#a%26b") > 0);
+    assert(document.Anchor("http://x/#legacy") > document.Anchor("http://x/#a%26b"));
+    assert(document.Anchor("http://x/#missing") == 0);
+    document.Layout(1);
+    assert(document.Anchor("http://x/#legacy") > document.Anchor("http://x/#a%26b"));
+    const char* plain = "<b>literal</b> &amp;\r\n  tabs\t!";
+    document.Load(plain, __builtin_strlen(plain), true);
+    Text("<b>literal</b> &amp;\n  tabs    !");
+    assert(!document.linkCount && !document.anchorCount);
     // Exact-sized buffers exercise every truncation and mutated tokenizer state.
     const char* fixture = "<p>a&amp;b <a href=\"../x?y=1&amp;z=2\">link</a></p><pre>a\nb</pre><script>hidden</script>";
     unsigned size = __builtin_strlen(fixture);

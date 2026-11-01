@@ -513,6 +513,7 @@ static int Documents()
 }
 
 static unsigned customInputs, customDraws;
+
 static void CustomDraw(void*, Canvas& canvas, const Font&, Rect bounds, bool)
 {
     ++customDraws;
@@ -537,17 +538,25 @@ static int CustomControls()
     auto action = view.Handle(Mouse(bounds.x + 4, bounds.y + 4, 1));
     CHECK(action.widget == custom && action.value == 7 && customInputs == 1);
     view.Handle(Mouse(bounds.x + 5, bounds.y + 5, 1));
-    CHECK(customInputs == 1); // Held mouse motion must not reactivate a link.
-    view.Handle(Mouse(bounds.x + 4, bounds.y + 4, 0));
-    CHECK(customInputs == 2);
+    CHECK(customInputs == 2); // Custom widgets receive held motion for dragging.
+    view.Handle(Mouse(199, 119, 0));
+    CHECK(customInputs == 3); // Release remains routed to the captured widget.
     CHECK(view.Handle(Key(HACKOS_PHYSICAL_ENTER)).widget == custom);
     Canvas canvas;
     canvas.Init(buffer + 1, 32, {0, 0, 32, 32});
     view.Draw(canvas, font);
     CHECK(customDraws == 1);
+    view.Handle(Mouse(bounds.x + 4, bounds.y + 4, 1));
+    HackosWindowEvent2 reset = {};
+    reset.event.type = HACKOS_WINDOW_INPUT_RESET;
+    reset.event.focused = true;
+    view.Handle(reset);
+    CHECK(customInputs == 6); // Captured widget is told to discard drag state.
+    view.Handle(Mouse(199, 119, 1));
+    CHECK(customInputs == 6); // Reset releases capture.
     view.SetEnabled(custom, false);
     view.Handle(Mouse(bounds.x + 4, bounds.y + 4, 1));
-    CHECK(customInputs == 3);
+    CHECK(customInputs == 6);
     view.SetFocus(field);
     action = view.Handle(Key(HACKOS_PHYSICAL_ENTER));
     CHECK(action.kind == ActionKind::Activate && action.widget == field);

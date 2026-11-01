@@ -1356,3 +1356,21 @@ containers; each binds port 8080 internally. Screenshots and inspections go to
 `tests/out/browser-*`. The suite covers links, history, address entry, scroll,
 resize, errors and cancellation/close during slow loads. The GUI sanitizer suite
 also checks custom-widget routing and text-field Enter activation.
+
+
+### Browser/HTTP usability validation (2026-11-01)
+
+Fresh BIOS and UEFI images passed the expanded browser GUI suite and the HTTP
+real-loopback-server suite (`qemu_http.py --host`). Coverage includes shared
+relative redirects, loops and the five-hop limit, unsupported destinations and
+malformed headers, literal plain-text markup, no-fetch fragment navigation,
+Back scroll restoration, thumb dragging, cancellation/close/restart, exact binary
+downloads and output preservation. Browser screenshots were inspected on both
+firmware paths. HTML, HTTP and GUI host checks passed native GCC ASan+UBSan,
+including custom-widget capture, release outside bounds and input-reset cleanup.
+The guest redirect test exposed TCP's 100 ms connection-start throttle; both
+clients now retry transient connection failures within their bounded waits.
+Images and source copies are under `out/browser-usability/{bios,uefi}`;
+`source-manifest.json` matches both builds to the changed production sources,
+and `validation.json` records image hashes and guest result logs. This is scoped
+browser/HTTP/GUI validation, not a rerun of every OS regression suite.
