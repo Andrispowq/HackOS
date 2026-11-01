@@ -600,9 +600,11 @@ identity. Chunk syntax is removed from output. A known-length/chunked response
 completes at its framing boundary without needing a server EOF; an EOF-delimited
 response requires EOF. Closure after a complete framed response is best effort.
 
-Bounds are 32 KiB of decoded body, 1024 bytes per status/header/chunk-size line,
+Bounds are 32 KiB of decoded body, 2048 bytes per status/header/chunk-size line,
 8192 aggregate header/trailer bytes, 64 total fields, and 256 KiB of total wire
-response. The body limit matches the filesystem file limit. Network connection,
+response. The command body limit matches the filesystem file limit. Browser opts into a
+4 MiB streaming body limit and an additional 256 KiB wire framing allowance; it
+retains only a bounded text preview. Redirect URLs remain bounded to 1024 bytes. Network connection,
 write readiness and read inactivity waits are ten seconds each, within a
 30-second request deadline across redirects. Normal output backpressure follows stream
 write behavior. Requests may span multiple 512-byte TCP writes.
@@ -650,8 +652,10 @@ and a Mozilla-derived curl trust bundle dated 2026-10-20 (118 roots). Normal bui
 use the checked-in source/bundle; they never download roots or use host trust.
 See [TLS provenance and profile](../../libs/tls/README.md) for hashes, regeneration,
 license and verifier limits. The selected TLS 1.2 profile supports ECDHE_RSA and
-ECDHE_ECDSA with AES-128-GCM or ChaCha20-Poly1305, SHA-256/384/512 signatures and
-RSA modulus lengths of at least 256 bytes. TLS 1.3-only servers are unsupported.
+ECDHE_ECDSA with AES-128/256-GCM or ChaCha20-Poly1305, SHA-256/384/512 signatures and
+RSA modulus lengths of at least 256 bytes. ALPN advertises HTTP/1.1 only;
+renegotiation is disabled. Certificate date, hostname and trust failures have
+distinct diagnostics. TLS 1.3-only servers are unsupported.
 
 Peer chain signatures, identity, validity dates, basic constraints and key usage
 are checked against bundled roots. Leaf EKU, when present, must permit server

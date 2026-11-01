@@ -63,20 +63,26 @@ Missing/duplicate/invalid Location, unsupported schemes, HTTPS-to-HTTP downgrade
 Redirect bodies are discarded by closing the old socket after validated headers;
 only a successful final response replaces the page. The final URL becomes the
 address and relative-link base. A Location without a fragment inherits the previous
-fragment. Browser's 30-second whole-load deadline covers all hops. No URL is
+fragment. Browser's 120-second whole-load deadline covers all hops. No URL is
 passed to a shell.
 
 ## Bounds and lifecycle
 
-Pages use the existing HTTP decoder's 32 KiB decoded-body limit, strict framing,
-header and wire-byte bounds. The browser additionally limits URLs to 255 bytes,
+Pages stream up to 4 MiB through the HTTP decoder with strict framing and a
+4 MiB + 256 KiB wire bound. A streaming tokenizer discards head, script, style,
+title and comment content, decorative tags and unused attributes before retaining
+a 32 KiB HTML text preview. Plain text retains its first 32 KiB literally.
+Overlong tags (above 1024 bytes) are skipped; skipped tags or exhausted preview
+storage display a limit notice. Downloads continue to their framing boundary, so
+a truncated or malformed response still fails and preserves the previous page.
+This is a bounded text preview, not a full DOM or JavaScript renderer. The browser additionally limits URLs to 255 bytes,
 links to 64, anchors to 64 (255 bytes each), and history to 16 previous successful
 URLs with scroll rows. Excess anchors are ignored. Excess links retain their
 text without navigation. Layout stores at most 32768 glyphs; expansion beyond
 that limit is labelled in the status bar. Lists number 1–99, then restart at 1.
 
 The document's glyph/layout arrays are allocated once from the private 512 KiB
-userspace heap (about 352 KiB); the HTTP fetch state adds about 46 KiB, plus fixed TLS record and certificate buffers for HTTPS. History
+userspace heap (about 352 KiB); the HTTP fetch state adds about 49 KiB, plus fixed TLS record and certificate buffers for HTTPS. History
 and GUI state live in the executable's bounded data segment. Kernel executable
 page limits and syscall interfaces are unchanged. The browser replaces document
 contents only after a complete successful HTTP response; Back refetches other
@@ -84,7 +90,7 @@ documents and restores the saved scroll row, clamped to the new layout.
 Same-document history entries jump without a fetch; pages are not cached.
 
 DNS and TCP advance without blocking the GUI. A single active request has a
-10-second inactivity limit and a 30-second whole-load limit. Each GUI iteration
+10-second inactivity limit and a 120-second whole-load limit. Each GUI iteration
 reads at most eight 512-byte TCP records, then handles input and rendering again.
 Timed poll combines window and socket readiness; DNS uses a 20 ms query interval.
 Navigation cancels the prior request; Stop/close/exit release the owned socket

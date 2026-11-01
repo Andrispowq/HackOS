@@ -1398,3 +1398,33 @@ heap and kernel quotas are unchanged. The tests generate ephemeral private CAs
 under `tests/out`, modifying only copied test binaries. Production images retain
 the pinned public-root bundle. New test targets are `test-tls-codec` and
 `test-https`; the latter takes `FIRMWARE` and `IMAGE` like the HTTP/browser suites.
+
+### Browser compatibility validation (2026-11-01)
+
+Fresh images under `out/compat/{bios,uefi}` passed the HTTP host-server,
+HTTP browser and HTTPS certificate/browser suites on both firmware paths.
+The browser fixtures now include a 900 KiB hidden script followed by visible
+text and a link, delivered with Content-Length or as one large HTTP chunk.
+ASan/UBSan checks cover streaming preview segmentation/mutations, exact 4 MiB
+body bounds, chunk integer overflow, long headers and bounded Location copies.
+TLS tests additionally force ECDSA/RSA AES-256-GCM-SHA384 and verify HTTP/1.1 ALPN.
+Guest rejection checks assert the specific certificate diagnostics and unchanged
+output files; production roots still reject the isolated test CA.
+
+Production Browser loaded `https://google.com/` and `https://kormany.hu/` on both
+boot paths, with visible screenshots inspected and successful close afterward.
+The latter transferred 851379 bytes and retained 48 links without a display-limit
+warning. These optional live checks can be repeated with `tests/qemu_https.py
+--public-browser-only --public-url https://google.com/ --public-url https://kormany.hu/`
+plus the usual firmware/image arguments. The public-page harness waits for visible
+presentation after serial completion and sends ordered GUI key events.
+Public DNS queries to both 1.1.1.1 and 8.8.8.8 returned NXDOMAIN for the reported
+`admin.dev.mptrdev.com`; the browser now distinguishes that from timeouts,
+truncated DNS replies and missing IPv4 answers.
+
+`out/compat/source-manifest.json` matches the changed production sources to both
+image snapshots; `validation.json` records image hashes and passed result logs.
+Browser uses 64 of 64 image/stack pages and HTTP uses 49. Heap, kernel quotas and
+syscall ABI are unchanged. Rendering remains a bounded text preview; compression,
+JavaScript/forms and TLS 1.3 are still unsupported. This validation is scoped to
+HTTP, HTML and TLS, rather than the entire OS regression suite.

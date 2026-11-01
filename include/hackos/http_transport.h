@@ -153,7 +153,7 @@ class Transport
                 tlsError = hackos_tls_error(tls);
                 if (tlsError)
                 {
-                    return Failure("TLS: handshake/certificate or record verification failed.");
+                    return Failure(hackos_tls_error_message(tlsError));
                 }
                 eof = true;
                 return true;

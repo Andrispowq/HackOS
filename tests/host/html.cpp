@@ -1,4 +1,5 @@
 #include "hackos/runtime/html.h"
+#include "hackos/runtime/html_preview.h"
 #include <cassert>
 using namespace Hackos::Html;
 static Document document;
@@ -30,6 +31,46 @@ static void Url(const char* reference, const char* expected)
 
 int main()
 {
+    const char* page = "<head><script>const x='</head>';</script></head><p class='noise'>Hello</p>"
+                       "<script>if (a < b) { garbage; }</script><style>ignored</style><!-- hidden -->"
+                       "<span id='target'>world</span><a href='/next'>Next</a>";
+    for (unsigned split = 0; split <= __builtin_strlen(page); ++split)
+    {
+        Preview preview;
+        char output[32768];
+        unsigned size = 0;
+        preview.Feed((const uint8_t*)page, split, output, sizeof(output), size);
+        preview.Feed((const uint8_t*)page + split, __builtin_strlen(page) - split, output, sizeof(output), size);
+        document.Load(output, size);
+        assert(!preview.limited && document.linkCount == 1 && document.anchorCount == 1);
+        Text("Hello\n\nworldNext");
+    }
+    {
+        Preview preview;
+        char output[32768];
+        unsigned size = 0;
+        const char* start = "<script>";
+        preview.Feed((const uint8_t*)start, 8, output, sizeof(output), size);
+        const uint8_t byte = 'x';
+        for (unsigned n = 0; n < 900000; ++n)
+        {
+            preview.Feed(&byte, 1, output, sizeof(output), size);
+        }
+        const char* end = "</script><p>After huge script</p>";
+        for (unsigned n = 0; n < __builtin_strlen(end); ++n)
+        {
+            preview.Feed((const uint8_t*)end + n, 1, output, sizeof(output), size);
+        }
+        document.Load(output, size);
+        Text("After huge script\n\n");
+        assert(!preview.limited);
+        for (unsigned n = 0; n < 40000; ++n)
+        {
+            preview.Feed(&byte, 1, output, sizeof(output), size, true);
+        }
+        assert(preview.limited && size == sizeof(output));
+    }
+
     Url("../guide.html", "http://demo.test:8080/a/guide.html");
     Url("./", "http://demo.test:8080/a/b/");
     Url("/x/./y/../z", "http://demo.test:8080/x/z");
@@ -106,6 +147,16 @@ int main()
             __builtin_memcpy(buffer, fixture, size);
             buffer[i] = byte;
             document.Load(buffer, size);
+            document.Layout(17);
+            assert(document.count <= Limit && document.linkCount <= LinkLimit);
+            Preview preview;
+            char compact[256];
+            unsigned retained = 0;
+            for (unsigned at = 0; at < size; ++at)
+            {
+                preview.Feed((const uint8_t*)buffer + at, 1, compact, sizeof(compact), retained);
+            }
+            document.Load(compact, retained);
             document.Layout(17);
             assert(document.count <= Limit && document.linkCount <= LinkLimit);
         }

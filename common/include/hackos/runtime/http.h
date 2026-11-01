@@ -5,7 +5,7 @@
 
 namespace Hackos::Http
 {
-constexpr unsigned BodyLimit = 32768, HeaderLimit = 8192, WireLimit = 262144;
+constexpr unsigned BodyLimit = 32768, HeaderLimit = 8192, WireLimit = 262144, StreamingLimit = 4 * 1024 * 1024;
 
 inline char Lower(char c)
 {
@@ -442,7 +442,8 @@ class Decoder
   public:
     using Body = bool (*)(void*, const uint8_t*, unsigned);
     using Headers = bool (*)(void*, unsigned, const char*);
-    Decoder(Body body, Headers headers, void* context) : body(body), headers(headers), context(context) {}
+    Decoder(Body body, Headers headers, void* context, unsigned limit = BodyLimit)
+        : body(body), headers(headers), context(context), bodyLimit(limit > StreamingLimit ? StreamingLimit : limit) {}
     unsigned Status() const { return status; }
     unsigned Received() const { return received; }
     bool PlainText() const { return plainText; }
@@ -452,7 +453,8 @@ class Decoder
     bool Feed(const uint8_t* bytes, unsigned size)
     {
         if (error || (size && !bytes)) return false;
-        if (size > WireLimit - wire) return Fail("response wire limit exceeded");
+        unsigned wireLimit = bodyLimit > BodyLimit ? bodyLimit + WireLimit : WireLimit;
+        if (size > wireLimit - wire) return Fail("response wire limit exceeded");
         wire += size;
         unsigned at = 0;
         while (at < size)
@@ -462,7 +464,7 @@ class Decoder
             {
                 unsigned count = size - at;
                 if (phase != Close && count > remaining) count = remaining;
-                if (count > BodyLimit - received || (status == 205 && count)) return Fail("response body limit or status violated");
+                if (count > bodyLimit - received || (status == 205 && count)) return Fail("response body limit or status violated");
                 if (count && body && !body(context, bytes + at, count)) return Fail("output failed");
                 received += count;
                 at += count;
@@ -520,12 +522,13 @@ class Decoder
     Body body;
     Headers headers;
     void* context;
+    unsigned bodyLimit;
     const char* error = nullptr;
     unsigned status = 0, received = 0, remaining = 0, contentLength = 0;
     unsigned used = 0, headerBytes = 0, fieldCount = 0, interim = 0, wire = 0;
     bool plainText = false, hasType = false, hasLocation = false;
     bool cr = false, hasLength = false, chunked = false, encoded = false, http10 = false;
-    char line[1025] = {}, location[1025] = {};
+    char line[2049] = {}, location[1025] = {};
 
     bool Fail(const char* message)
     {
@@ -570,7 +573,7 @@ class Decoder
             if (encoded) return Fail("compressed responses are unsupported");
             if ((status == 204 && (hasLength || chunked)) || (chunked && http10)) return Fail("invalid body framing for status/version");
             bool empty = status == 204 || status == 304;
-            if (!empty && hasLength && (contentLength > BodyLimit || (status == 205 && contentLength))) return Fail("response body too large");
+            if (!empty && hasLength && (contentLength > bodyLimit || (status == 205 && contentLength))) return Fail("response body too large");
             if (headers && !headers(context, status, location)) return Fail("output could not be opened");
             remaining = contentLength;
             phase = empty ? Complete : chunked ? ChunkSize : hasLength ? (remaining ? Fixed : Complete) : Close;
@@ -638,6 +641,7 @@ class Decoder
             unsigned i = 0;
             while (value[i])
             {
+                if (i == sizeof(location) - 1) return Fail("redirect URL too long");
                 location[i] = value[i];
                 ++i;
             }
@@ -652,10 +656,10 @@ class Decoder
         while (Hex(line[at]) >= 0)
         {
             unsigned digit = Hex(line[at++]);
-            if (number > (BodyLimit - digit) / 16) return Fail("chunk too large");
+            if (number > (0xffffffffu - digit) / 16) return Fail("chunk too large");
             number = number * 16 + digit;
         }
-        if (!at || number > BodyLimit - received) return Fail("invalid chunk size");
+        if (!at || number > bodyLimit - received) return Fail("invalid chunk size");
         // Ignore syntactically valid bounded chunk extensions.
         while (line[at])
         {

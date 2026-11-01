@@ -23,10 +23,13 @@ updating `sources.json`, reviewing the anchor changes and rerunning TLS tests.
 Test private keys/CA roots are generated under ignored `tests/out`; test roots are
 linked only into copied test binaries and never into production images.
 
-The profile requires TLS 1.2 with ECDHE_RSA/ECDHE_ECDSA and AES-128-GCM or
+ALPN advertises only HTTP/1.1, and renegotiation is explicitly disabled.
+Certificate date/name/trust failures have distinct user-facing diagnostics.
+
+The profile requires TLS 1.2 with ECDHE_RSA/ECDHE_ECDSA and AES-128/256-GCM or
 ChaCha20-Poly1305. SHA-256/384/512 certificate signatures are supported; RSA moduli
 must be at least 256 bytes, using BearSSL's byte-length minimum. There is no TLS 1.0/1.1/1.3, CBC, static RSA key
-exchange, SHA-1/MD5 certificate signatures, resumption, renegotiation API,
+exchange, SHA-1/MD5 certificate signatures, resumption, renegotiation,
 client certificates, OCSP/CRL or certificate fetching/path building. The peer
 must send a chain to a bundled trust anchor. Upstream's minimal X.509 verifier
 checks signatures, names, dates, basic constraints and key usage. The adapter
@@ -41,5 +44,5 @@ clock and CPU crypto autodetection are disabled in the library. The userspace
 adapter provides bounded CPUID-checked RDRAND entropy and explicit RTC UTC dates.
 Entropy/time/allocation errors fail closed. Sessions are wiped before release.
 The browser pumps at most eight TCP records per turn and preserves its existing
-10-second inactivity/30-second total-load limits. HTTP also has a 30-second
+10-second inactivity/120-second total-load limits. HTTP also has a 30-second
 request deadline across redirect hops. No insecure override exists.

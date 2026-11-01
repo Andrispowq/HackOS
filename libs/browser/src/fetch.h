@@ -2,6 +2,7 @@
 #include "hackos/user.h"
 #include "hackos/stdio.h"
 #include "hackos/http_transport.h"
+#include "hackos/runtime/html_preview.h"
 
 // Incremental HTTP transport. Step never waits; the GUI owns the timed poll.
 class Fetch
@@ -45,14 +46,7 @@ class Fetch
     static bool Body(void* context, const uint8_t* bytes, unsigned size)
     {
         auto& self = *(Fetch*)context;
-        if (size > sizeof(self.body) - self.size)
-        {
-            return false;
-        }
-        for (unsigned i = 0; i < size; ++i)
-        {
-            self.body[self.size++] = bytes[i];
-        }
+        self.preview.Feed(bytes, size, self.body, sizeof(self.body), self.size, self.decoder.PlainText());
         return true;
     }
 
@@ -84,7 +78,14 @@ class Fetch
   public:
     uint64_t socket = 0;
     char body[Hackos::Http::BodyLimit];
+    Hackos::Html::Preview preview;
     unsigned size = 0, status = 0;
+
+    unsigned Received() const
+    {
+        return decoder.Received();
+    }
+
     bool done = false, good = false;
     const char* error = nullptr;
 
@@ -162,7 +163,8 @@ class Fetch
         size = status = sent = 0;
         progress = now;
         redirect = false;
-        decoder = Hackos::Http::Decoder(Body, Headers, this);
+        decoder = Hackos::Http::Decoder(Body, Headers, this, Hackos::Http::StreamingLimit);
+        preview = {};
         if (!Hackos::Http::ParseUrl(redirects.current, url))
         {
             Fail("Use an http:// or https:// URL.");
@@ -218,7 +220,7 @@ class Fetch
         {
             return;
         }
-        if (now - started >= 30000 || now - progress >= 10000)
+        if (now - started >= 120000 || now - progress >= 10000)
         {
             Fail("Page load timed out. Check the address or try Reload.");
             return;
@@ -234,7 +236,11 @@ class Fetch
             phase = Idle;
             if (result || dns.state != HACKOS_RESOLVE_REPLY)
             {
-                Fail("DNS lookup failed.");
+                Fail(dns.state == HACKOS_RESOLVE_NOT_FOUND    ? "DNS: hostname does not exist (NXDOMAIN)."
+                     : dns.state == HACKOS_RESOLVE_NO_ADDRESS ? "DNS: no IPv4 address found."
+                     : dns.state == HACKOS_RESOLVE_TRUNCATED  ? "DNS: reply too large for this resolver."
+                     : dns.state == HACKOS_RESOLVE_TIMEOUT    ? "DNS: lookup timed out."
+                                                              : "DNS: server or network unavailable.");
             }
             else
             {
@@ -256,7 +262,10 @@ class Fetch
                 Fail(transport.error);
                 return;
             }
-            if (transport.transferred != before) progress = now;
+            if (transport.transferred != before)
+            {
+                progress = now;
+            }
         }
         if (phase == Sending)
         {
@@ -280,7 +289,10 @@ class Fetch
                 record.data[i] = request[sent + i];
             }
             auto result = transport.Write(socket, record);
-            if (result == HACKOS_RETRY) return;
+            if (result == HACKOS_RETRY)
+            {
+                return;
+            }
             if (result)
             {
                 Fail("Request write failed.");

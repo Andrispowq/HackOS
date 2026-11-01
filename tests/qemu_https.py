@@ -63,7 +63,13 @@ def test(firmware,image,timeout,internet=False):
             g.shell('echo untouched > /tmp/tls-keep','$ ')
             for name in ('wrong-name','expired','future','untrusted','client-only','dns-ip'):
                 before=len(servers[name].requests)
-                g.shell('http -o /tmp/tls-keep '+url(name),'TLS: handshake/certificate or record verification failed')
+                expected = {'wrong-name': 'TLS: certificate does not match this hostname.',
+                            'expired': 'TLS: certificate expired or not yet valid;',
+                            'future': 'TLS: certificate expired or not yet valid;',
+                            'untrusted': 'TLS: certificate chain is not trusted.',
+                            'dns-ip': 'TLS: certificate does not match this hostname.'}.get(
+                                name, 'TLS: handshake/certificate or record verification failed')
+                g.shell('http -o /tmp/tls-keep '+url(name), expected)
                 assert len(servers[name].requests)==before,'HTTP sent before certificate acceptance'
                 g.shell('cat /tmp/tls-keep','untouched')
             g.shell('http '+url('valid','/redirect-relative'),'Hello from HackOS HTTP!')
@@ -76,7 +82,7 @@ def test(firmware,image,timeout,internet=False):
         production=directory/'production.img';shutil.copy2(image,production)
         with boot(directory,production,firmware,'untrusted-production',timeout,network=True) as g:
             g.fresh=True;g.setup();g.enter('root','New password: ');g.password(ADMIN_PASSWORD,'Action: ');g.login('root',ADMIN_PASSWORD)
-            g.shell('http '+url('valid'),'TLS: handshake/certificate or record verification failed')
+            g.shell('http '+url('valid'),'TLS: certificate chain is not trusted.')
             if internet:
                 g.shell('http https://example.com/', 'HTTP status 200')
     # Home intentionally remains the local plain-HTTP demo. HTTPS navigation uses
@@ -87,17 +93,30 @@ def test(firmware,image,timeout,internet=False):
         finally: plain.shutdown();thread.join(2)
     print('PASS',firmware,'HTTPS: verified chains/IP identities, rejection before HTTP/output, binary bytes, production-root isolation and browser',flush=True)
 
-def public_browser(firmware, image, timeout):
+def public_browser(firmware, image, timeout, urls=None):
     directory=OUT/('https-public-'+firmware);directory.mkdir(parents=True,exist_ok=True)
     disposable=directory/'HackOS.img';shutil.copy2(image,disposable)
     with boot(directory,disposable,firmware,'public-browser',timeout,network=True) as g:
         g.fresh=True;g.setup();g.enter('root','New password: ');g.password(ADMIN_PASSWORD,'Action: ');g.login('root',ADMIN_PASSWORD)
-        g.enter('browser https://example.com/','BROWSER_LOADED')
-        g.screen('example-com')
-        offset=len(g.output())
-        g.qmp.key('f4',alt=True)
-        g.wait('$ ',offset)
-    print('PASS',firmware,'production Browser https://example.com/ and close',flush=True)
+        for i, url in enumerate(urls or ['https://example.com/']):
+            g.enter('browser ' + url,'BROWSER_LOADED')
+            # Serial completion can precede the idle compositor under TCG.
+            # Wait for a nonblank presentation rather than saving a stale screen.
+            for attempt in range(20):
+                g.screen('public-' + str(i))
+                pixels=(directory / ('public-' + str(i) + '.ppm')).read_bytes()
+                if len(pixels) - pixels.count(b'\0') > 50000:
+                    break
+            else:
+                raise AssertionError('Public browser did not present its window')
+            offset=len(g.output())
+            # Deliver ordered make/break events as in the GUI suite; a one-ms
+            # send-key pulse can be lost under concurrent TCG load.
+            g.qmp.call('input-send-event', {'events': [
+                {'type': 'key', 'data': {'down': down, 'key': {'type': 'qcode', 'data': key}}}
+                for down, keys in [(True, ['alt', 'f4']), (False, ['f4', 'alt'])] for key in keys]})
+            g.wait('$ ',offset)
+            print('PASS',firmware,'production Browser',url,'and close',flush=True)
 
 if __name__=='__main__':
     p=argparse.ArgumentParser(description=__doc__)
@@ -106,6 +125,7 @@ if __name__=='__main__':
     p.add_argument('--timeout',type=int,default=180)
     p.add_argument('--internet',action='store_true',help='Also test example.com using production trust roots')
     p.add_argument('--public-browser-only',action='store_true',help='Only smoke-test production Browser against example.com (Internet required)')
+    p.add_argument("--public-url", action="append", help="Public browser target (repeatable; requires --public-browser-only)")
     a=p.parse_args()
-    if a.public_browser_only: public_browser(a.firmware,a.image.resolve(),a.timeout)
+    if a.public_browser_only: public_browser(a.firmware,a.image.resolve(),a.timeout,a.public_url)
     else: test(a.firmware,a.image.resolve(),a.timeout,a.internet)

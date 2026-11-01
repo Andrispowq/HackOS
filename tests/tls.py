@@ -38,17 +38,20 @@ def build(root):
     subprocess.run([str(der),str(OUT/'leaf.der')],check=True,timeout=30)
     return binary
 
-def check(binary,cert,key,host,valid,version=ssl.TLSVersion.TLSv1_2):
+def check(binary,cert,key,host,valid,version=ssl.TLSVersion.TLSv1_2,cipher=None):
     server=socket.socket();server.bind(('127.0.0.1',0));server.listen()
     context=ssl.SSLContext(ssl.PROTOCOL_TLS_SERVER)
     context.minimum_version=context.maximum_version=version
     context.load_cert_chain(cert,key)
+    context.set_alpn_protocols(["http/1.1"])
+    if cipher: context.set_ciphers(cipher)
     sni=[]
     context.set_servername_callback(lambda sock,name,ctx:sni.append(name))
     def serve():
         try:
             peer,_=server.accept();peer.settimeout(5)
             with context.wrap_socket(peer,server_side=True) as secure:
+                assert secure.selected_alpn_protocol()=="http/1.1"
                 secure.recv(2048)
                 secure.sendall(b'HTTP/1.1 200 OK\r\nContent-Length: 2\r\n\r\nok')
                 secure.unwrap().close()
@@ -71,3 +74,6 @@ if __name__=='__main__':
     check(binary,*cases['valid'],'demo.test',True)
     check(binary,*cases['valid'],'wrong.test',False)
     check(binary,*cases['valid'],'demo.test',False,ssl.TLSVersion.TLSv1_3)
+
+    check(binary,*cases["valid"],"demo.test",True,cipher="ECDHE-ECDSA-AES256-GCM-SHA384")
+    check(binary,*cases["rsa"],"demo.test",True,cipher="ECDHE-RSA-AES256-GCM-SHA384")

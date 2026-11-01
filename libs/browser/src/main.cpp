@@ -326,10 +326,11 @@ static void Finish()
     view.SetText(addressField, current);
     hasPage = true;
     document->Load(fetch->body, fetch->size, fetch->PlainText());
+    document->limited = document->limited || fetch->preview.limited;
     Position(current, historyTarget);
     view.SetEnabled(backButton, historyCount != 0);
     view.SetFocus(pageWidget);
-    snprintf(message, sizeof(message), "HTTP %u | %u bytes | %u links%s", fetch->status, fetch->size,
+    snprintf(message, sizeof(message), "HTTP %u | %u bytes | %u links%s", fetch->status, fetch->Received(),
              document->linkCount,
              document->limited    ? " | Display limit reached"
              : fetch->PlainText() ? " | Plain text"

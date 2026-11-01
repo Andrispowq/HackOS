@@ -66,6 +66,51 @@ static void Bad(const char* message)
 
 int main()
 {
+    char headerLine[1600];
+    const char* prefixLong = "HTTP/1.1 200 OK\r\nX-Policy: ";
+    unsigned h = __builtin_strlen(prefixLong);
+    __builtin_memcpy(headerLine, prefixLong, h);
+    while (h < 1400) headerLine[h++] = 'a';
+    const char* suffixLong = "\r\nContent-Length: 0\r\n\r\n";
+    __builtin_memcpy(headerLine + h, suffixLong, __builtin_strlen(suffixLong) + 1);
+    Good(headerLine, "");
+    __builtin_memcpy(headerLine + 17, "Location:", 9);
+    Bad(headerLine);
+    // Large chunks are delivered incrementally; retained output need not equal body size.
+    for (bool chunked : {false, true})
+    {
+        Decoder stream(nullptr, nullptr, nullptr, StreamingLimit);
+        const char* header = chunked ? "HTTP/1.1 200 OK\r\nTransfer-Encoding: chunked\r\n\r\n100000\r\n"
+                                     : "HTTP/1.1 200 OK\r\nContent-Length: 1048576\r\n\r\n";
+        assert(stream.Feed((const uint8_t*)header, __builtin_strlen(header)));
+        uint8_t bytes[512] = {};
+        for (unsigned i = 0; i < 2048; ++i)
+        {
+            assert(stream.Feed(bytes, sizeof(bytes)));
+        }
+        if (chunked)
+        {
+            assert(stream.Feed((const uint8_t*)"\r\n0\r\n\r\n", 7));
+        }
+        assert(stream.Done() && stream.End() && stream.Received() == 1048576);
+    }
+    Decoder eof(nullptr, nullptr, nullptr, StreamingLimit);
+    const char* eofHeader = "HTTP/1.1 200 OK\r\n\r\n";
+    assert(eof.Feed((const uint8_t*)eofHeader, __builtin_strlen(eofHeader)));
+    uint8_t boundaryBlock[512] = {};
+    for (unsigned i = 0; i < StreamingLimit / sizeof(boundaryBlock); ++i)
+    {
+        assert(eof.Feed(boundaryBlock, sizeof(boundaryBlock)));
+    }
+    assert(eof.Received() == StreamingLimit);
+    assert(!eof.Feed(boundaryBlock, 1));
+    Decoder overflowingChunk(nullptr, nullptr, nullptr, StreamingLimit);
+    const char* overflowChunk = "HTTP/1.1 200 OK\r\nTransfer-Encoding: chunked\r\n\r\n100000000\r\n";
+    assert(!overflowingChunk.Feed((const uint8_t*)overflowChunk, __builtin_strlen(overflowChunk)));
+    Decoder bounded(nullptr, nullptr, nullptr, StreamingLimit);
+    const char* oversized = "HTTP/1.1 200 OK\r\nContent-Length: 4194305\r\n\r\n";
+    assert(!bounded.Feed((const uint8_t*)oversized, __builtin_strlen(oversized)));
+
     Redirects redirects;
     assert(redirects.Add("http://Example.test:80/a/start#part"));
     assert(redirects.Next("../next"));
@@ -174,7 +219,7 @@ int main()
     Decoder failure(Sink::Body, Sink::Headers, &rejected);
     const char* msg = "HTTP/1.1 200 OK\r\n\r\nx";
     assert(!failure.Feed((const uint8_t*)msg, __builtin_strlen(msg)) && failure.Error());
-    char longLine[1100];
+    char longLine[2200];
     const char* prefix = "HTTP/1.1 200 OK\r\nX: ";
     unsigned pos = __builtin_strlen(prefix);
     __builtin_memcpy(longLine, prefix, pos);

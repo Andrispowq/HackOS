@@ -34,7 +34,7 @@ GUIDE_HTML = b"""<h1>Browser guide</h1><p>You followed a relative link.</p>
 <li>Use Back to return, Reload to fetch again, or Stop to cancel.</li></ol>
 <p><a href="./">Return to the home page</a></p>
 <p><a href="long.html">Read the long page</a></p>
-<h2>Limits</h2><p>Pages are limited to 32 KiB and addresses to 255 bytes.
+<h2>Limits</h2><p>Downloads are limited to 4 MiB with a bounded text preview and addresses to 255 bytes.
 This is a text-only HTML viewer. HTTP and HTTPS redirects are followed; certificates are verified.</p>"""
 LONG_HTML = (b'<h1>A longer journey</h1><p><a href="./">Back to home</a></p>' +
              b''.join(f'<h2 id="section{i}">Section {i}</h2><p>Scrolling through a real page in HackOS. '
@@ -56,6 +56,12 @@ def response(target, host):
         return f'HTTP/1.1 301 Moved\r\nLocation: /hop/{number + 1}\r\nContent-Length: 0\r\n\r\n'.encode()
     if path == '/redirect-bad':
         return b'HTTP/1.1 302 Found\r\nLocation: /\r\nContent-Length: 0\r\nContent-Length: 1\r\n\r\n'
+    if path in ('/browser/large-fixed', '/browser/large-chunk'):
+        body = b'<head><script>' + b'x' * 900000 + b'</script></head><h1>Large page loaded</h1><a href="/browser/">Home</a>'
+        if path.endswith('chunk'):
+            return (b'HTTP/1.1 200 OK\r\nContent-Type: text/html\r\nTransfer-Encoding: chunked\r\n\r\n' +
+                    f'{len(body):x}\r\n'.encode() + body + b'\r\n0\r\n\r\n')
+        return b'HTTP/1.1 200 OK\r\nContent-Type: text/html\r\nContent-Length: ' + str(len(body)).encode() + b'\r\n\r\n' + body
     if path == '/chunked':
         return (b'HTTP/1.1 200 OK\r\nTransfer-Encoding: chunked\r\nConnection: close\r\n\r\n'
                 b'6;demo="yes"\r\nHello \r\n8\r\nchunked!\r\n1\r\n\n\r\n0\r\nX-Demo: complete\r\n\r\n')

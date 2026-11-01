@@ -223,6 +223,9 @@ quit
                 time.sleep(.1)
                 inspect("assert u('top') > 40")
                 g.screen('dragged')
+                for path in ('large-fixed', 'large-chunk'):
+                    load(lambda: address(base + '/browser/' + path))
+                    inspect("assert 'Large page loaded' in page()\nassert u('document.linkCount') == 1\nassert u('document.limited') == 0")
                 load(lambda: address(base + '/plain'))
                 inspect("assert '<b>literal</b> &amp;\\n  spaces    end' in page()\nassert u('document.linkCount') == 0")
                 load(lambda: address(base + '/browser/redirect'))

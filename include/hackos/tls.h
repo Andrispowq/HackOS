@@ -7,6 +7,7 @@ extern "C"
                          const uint8_t* seed);
     unsigned hackos_tls_state(void* context);
     int hackos_tls_error(void* context);
+    const char* hackos_tls_error_message(int error);
     unsigned char* hackos_tls_buffer(void* context, unsigned operation, size_t* size);
     void hackos_tls_ack(void* context, unsigned operation, size_t size);
     void hackos_tls_flush(void* context);

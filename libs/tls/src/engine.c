@@ -252,7 +252,8 @@ int hackos_tls_start(void* context, const char* host, const unsigned char* ip, u
     Engine* e = context;
     memset(e, 0, sizeof(*e));
     static const uint16_t suites[] = {
-        BR_TLS_ECDHE_ECDSA_WITH_AES_128_GCM_SHA256, BR_TLS_ECDHE_RSA_WITH_AES_128_GCM_SHA256,
+        BR_TLS_ECDHE_ECDSA_WITH_AES_128_GCM_SHA256,       BR_TLS_ECDHE_RSA_WITH_AES_128_GCM_SHA256,
+        BR_TLS_ECDHE_ECDSA_WITH_AES_256_GCM_SHA384,       BR_TLS_ECDHE_RSA_WITH_AES_256_GCM_SHA384,
         BR_TLS_ECDHE_ECDSA_WITH_CHACHA20_POLY1305_SHA256, BR_TLS_ECDHE_RSA_WITH_CHACHA20_POLY1305_SHA256};
     br_ssl_client_zero(&e->client);
     br_ssl_engine_set_versions(&e->client.eng, BR_TLS12, BR_TLS12);
@@ -264,6 +265,10 @@ int hackos_tls_start(void* context, const char* host, const unsigned char* ip, u
     br_ssl_engine_set_hash(&e->client.eng, br_sha384_ID, &br_sha384_vtable);
     br_ssl_engine_set_hash(&e->client.eng, br_sha512_ID, &br_sha512_vtable);
     br_ssl_engine_set_prf_sha256(&e->client.eng, br_tls12_sha256_prf);
+    br_ssl_engine_set_prf_sha384(&e->client.eng, br_tls12_sha384_prf);
+    br_ssl_engine_add_flags(&e->client.eng, BR_OPT_NO_RENEGOTIATION);
+    static const char* protocols[] = {"http/1.1"};
+    br_ssl_engine_set_protocol_names(&e->client.eng, protocols, 1);
     br_ssl_engine_set_default_aes_gcm(&e->client.eng);
     br_ssl_engine_set_default_chapol(&e->client.eng);
     Validator* v = &e->validator;
@@ -345,4 +350,21 @@ void hackos_tls_flush(void* context)
 void hackos_tls_close(void* context)
 {
     br_ssl_engine_close(&((Engine*)context)->client.eng);
+}
+
+const char* hackos_tls_error_message(int error)
+{
+    switch (error)
+    {
+    case BR_ERR_X509_EXPIRED:
+        return "TLS: certificate expired or not yet valid; check the clock.";
+    case BR_ERR_X509_BAD_SERVER_NAME:
+        return "TLS: certificate does not match this hostname.";
+    case BR_ERR_X509_NOT_TRUSTED:
+        return "TLS: certificate chain is not trusted.";
+    case BR_ERR_BAD_VERSION:
+        return "TLS: server requires an unsupported protocol version.";
+    default:
+        return "TLS: handshake/certificate or record verification failed.";
+    }
 }

@@ -158,7 +158,10 @@ uses the userspace heap. Async DNS/TCP keeps the GUI responsive. No CSS, scripts
 images or forms. HTTPS shares the verified userspace TLS transport. See `docs/system/browser.md` and `tests/html.py` /
 `tests/qemu_browser.py`. `Gui::Kind::Custom` provides borrowed draw/input callbacks;
 text-field Enter emits Activate. Browser supports literal text/plain, fragment
-anchors, Back scroll restoration and a draggable scrollbar. Kernel ABI and image-page limits are unchanged.
+anchors, Back scroll restoration and a draggable scrollbar. Browser downloads stream up to 4 MiB
+through a bounded 32 KiB text preview, skipping hidden scripts/styles/head content
+and unused markup. TLS supports AES-128/256-GCM and ChaCha20-Poly1305, HTTP/1.1 ALPN
+and distinct date/name/trust errors; renegotiation is disabled. Kernel ABI and image-page limits are unchanged.
 
 ## Where to look
 
